@@ -26,6 +26,20 @@ function AuthCallbackContent() {
       const type = searchParams.get("type");
 
       try {
+        if (typeof window !== "undefined" && window.location.hash) {
+          const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+          const accessToken = hashParams.get("access_token");
+          const refreshToken = hashParams.get("refresh_token");
+
+          if (accessToken && refreshToken) {
+            const { error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            if (error) throw error;
+          }
+        }
+
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
@@ -36,6 +50,17 @@ function AuthCallbackContent() {
           });
           if (error) throw error;
         } else {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+
+          if (session) {
+            setStatus("success");
+            setMessage("이메일 인증이 완료되었습니다. 잠시 후 대시보드로 이동합니다.");
+            setTimeout(() => router.replace("/dashboard"), 1200);
+            return;
+          }
+
           throw new Error("인증 정보가 올바르지 않습니다.");
         }
 
