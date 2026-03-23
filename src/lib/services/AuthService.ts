@@ -4,13 +4,14 @@ import { supabase } from '../supabase';
  * Service to handle all authentication operations through Supabase.
  */
 
-export const signUp = async (email: string, password: string, fullName: string) => {
+export const signUp = async (email: string, password: string, fullName: string, emailRedirectTo?: string) => {
   if (!supabase) throw new Error('Supabase is not configured.');
   
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
+      emailRedirectTo,
       data: {
         full_name: fullName,
       },

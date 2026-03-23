@@ -8,6 +8,8 @@ import { Mail, Lock, User, ChevronRight, Loader2, Sparkles } from "lucide-react"
 import { m, LazyMotion, domAnimation } from "framer-motion";
 import { getCurrentUser, signUp } from "@/lib/services/AuthService";
 
+const DEFAULT_SITE_URL = "https://swcapstone.vercel.app";
+
 export default function SignupPage() {
     const router = useRouter();
     const [email, setEmail] = useState("");
@@ -35,8 +37,10 @@ export default function SignupPage() {
         setLoading(true);
         setError(null);
         try {
-            await signUp(email, password, fullName);
-            alert("회원가입이 완료되었습니다. 로그인해 주세요.");
+            const emailRedirectTo =
+                `${process.env.NEXT_PUBLIC_SITE_URL || DEFAULT_SITE_URL}/auth/callback`;
+            await signUp(email, password, fullName, emailRedirectTo);
+            alert("회원가입이 완료되었습니다. 이메일 인증 링크를 눌러 가입을 완료해 주세요.");
             router.push("/login");
         } catch (err: any) {
             setError(err.message || "회원가입에 실패했습니다.");
