@@ -24,6 +24,10 @@ const NAV_ITEMS = [
 export function Navbar() {
     const router = useRouter();
     const pathname = usePathname();
+    const isSimulatorPath = pathname === "/" || pathname === "/onboarding" ||
+        pathname === "/settlements" || pathname.startsWith("/settlements/") ||
+        pathname === "/manager" || pathname.startsWith("/manager/") ||
+        pathname === "/accountant";
     const { theme, toggleTheme } = useTheme();
     const [isScrolled, setIsScrolled] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -138,6 +142,8 @@ export function Navbar() {
             console.error("Error marking notifications as read:", error);
         }
     };
+
+    if (isSimulatorPath) return null;
 
     return (
         <>

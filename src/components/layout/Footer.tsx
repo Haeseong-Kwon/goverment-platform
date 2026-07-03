@@ -1,6 +1,16 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export function Footer() {
+    const pathname = usePathname();
+    const isSimulatorPath = pathname === "/" || pathname === "/onboarding" ||
+        pathname === "/settlements" || pathname.startsWith("/settlements/") ||
+        pathname === "/manager" || pathname.startsWith("/manager/") ||
+        pathname === "/accountant";
+    if (isSimulatorPath) return null;
+
     return (
         <footer className="bg-black pt-20 pb-10 text-white sm:pt-24 sm:pb-12">
             <div className="max-w-8xl mx-auto px-5 sm:px-6 lg:px-8">
