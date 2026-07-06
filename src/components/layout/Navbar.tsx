@@ -12,6 +12,20 @@ import { Button } from "@/components/common/Button";
 import { useRouter } from "next/navigation";
 import { SearchModal } from "@/components/common/SearchModal";
 import { NotificationItem } from "@/types";
+import type { User } from "@supabase/supabase-js";
+
+type NotificationRecord = {
+    id: string;
+    recipient_id: string;
+    actor_id: string;
+    actor?: { full_name?: string | null } | null;
+    type: NotificationItem["type"];
+    post_id: string;
+    post?: { title?: string | null } | null;
+    content: string;
+    is_read: boolean;
+    created_at: string;
+};
 
 const NAV_ITEMS = [
     { name: "SW창업캡스톤디자인", href: "/dashboard", desc: "Project & Grade Management" },
@@ -27,11 +41,13 @@ export function Navbar() {
     const isSimulatorPath = pathname === "/" || pathname === "/onboarding" ||
         pathname === "/settlements" || pathname.startsWith("/settlements/") ||
         pathname === "/manager" || pathname.startsWith("/manager/") ||
+        pathname === "/founder" || pathname.startsWith("/founder/") ||
+        pathname === "/workspace" || pathname.startsWith("/workspace/") ||
         pathname === "/accountant";
     const { theme, toggleTheme } = useTheme();
     const [isScrolled, setIsScrolled] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const [user, setUser] = useState<any>(null);
+    const [user, setUser] = useState<User | null>(null);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const [isNotificationOpen, setIsNotificationOpen] = useState(false);
@@ -52,7 +68,7 @@ export function Navbar() {
         try {
             setIsNotificationLoading(true);
             const data = await getNotifications();
-            const mappedNotifications: NotificationItem[] = data.map((item: any) => ({
+            const mappedNotifications: NotificationItem[] = (data as NotificationRecord[]).map((item) => ({
                 id: item.id,
                 recipientId: item.recipient_id,
                 actorId: item.actor_id,

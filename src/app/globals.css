@@ -40,6 +40,17 @@
   --glass-bg: rgba(255, 255, 255, 0.82);
   --glass-border: rgba(0, 0, 0, 0.06);
   --glass-text: #1E293B;
+  --startup-blue-600: #2563EB;
+  --startup-blue-700: #1D4ED8;
+  --startup-blue-50: #EFF6FF;
+  --startup-slate-900: #0F172A;
+  --startup-slate-600: #475569;
+  --startup-slate-400: #94A3B8;
+  --startup-slate-200: #E2E8F0;
+  --startup-slate-50: #F8FAFC;
+  --startup-green-600: #16A34A;
+  --startup-amber-500: #F59E0B;
+  --startup-red-600: #DC2626;
 }
 
 .dark {
@@ -63,6 +74,12 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+.tabular-nums,
+.startup-workspace,
+.startup-workspace * {
+  font-variant-numeric: tabular-nums;
 }
 
 ::selection {

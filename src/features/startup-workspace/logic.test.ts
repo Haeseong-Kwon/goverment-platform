@@ -1,0 +1,56 @@
+import { describe, expect, it } from "vitest";
+import {
+  canManagerSeeReviewItem,
+  getDdayTone,
+  getMonthlyDiagnosticUsage,
+  getSidebarItems,
+  getStartupMilestones,
+} from "./logic";
+
+describe("getDdayTone", () => {
+  it("uses slate, amber, and red thresholds from the design handoff", () => {
+    expect(getDdayTone(8)).toBe("slate");
+    expect(getDdayTone(7)).toBe("amber");
+    expect(getDdayTone(4)).toBe("amber");
+    expect(getDdayTone(3)).toBe("red");
+  });
+});
+
+describe("getStartupMilestones", () => {
+  it("creates automatic milestones without destructive deletion affordance", () => {
+    expect(getStartupMilestones("예창패").map((item) => [item.title, item.dday, item.isAutomatic, item.action])).toEqual([
+      ["예창패 사업계획서 초안 완성", 14, true, "hide"],
+      ["예창패 증빙 서류 준비", 10, true, "hide"],
+      ["예창패 발표 리허설", 7, true, "hide"],
+      ["예창패 최종 검토 요청", 1, true, "hide"],
+    ]);
+  });
+});
+
+describe("getMonthlyDiagnosticUsage", () => {
+  it("limits free diagnostics to twice per calendar month", () => {
+    expect(
+      getMonthlyDiagnosticUsage(
+        ["2026-07-01T09:00:00.000Z", "2026-07-20T09:00:00.000Z", "2026-06-30T09:00:00.000Z"],
+        new Date("2026-07-24T00:00:00.000Z"),
+      ),
+    ).toEqual({ used: 2, remaining: 0, isExhausted: true });
+  });
+});
+
+describe("canManagerSeeReviewItem", () => {
+  it("only exposes founder review requests that passed pre-validation", () => {
+    expect(canManagerSeeReviewItem({ role: "pre_founder", status: "requested", validation: "passed" })).toBe(false);
+    expect(canManagerSeeReviewItem({ role: "founder", status: "draft", validation: "passed" })).toBe(false);
+    expect(canManagerSeeReviewItem({ role: "founder", status: "requested", validation: "failed" })).toBe(false);
+    expect(canManagerSeeReviewItem({ role: "founder", status: "requested", validation: "passed" })).toBe(true);
+  });
+});
+
+describe("getSidebarItems", () => {
+  it("returns role-specific fixed navigation", () => {
+    expect(getSidebarItems("pre_founder")).toContain("AI 진단");
+    expect(getSidebarItems("founder")).toEqual(["홈", "정산 사전검증", "상태 트래커", "서류 보관함", "팀 설정"]);
+    expect(getSidebarItems("manager")).toEqual(["대시보드", "검토 큐", "팀 관리", "리포트", "설정"]);
+  });
+});

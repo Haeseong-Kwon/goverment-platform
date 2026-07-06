@@ -1,2 +1,3 @@
-import { LandingPage } from "@/features/administration-simulator/pages/LandingPage";
-export default LandingPage;
+import { Landing } from "@/features/startup-workspace/components";
+
+export default Landing;

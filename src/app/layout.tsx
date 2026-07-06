@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "@/features/administration-simulator/simulator.css";
-import { Navbar } from "@/components/layout/Navbar";
-import { Footer } from "@/components/layout/Footer";
+import { AppChrome } from "@/components/layout/AppChrome";
 
 import { ThemeProvider } from "@/context/ThemeContext";
 
@@ -19,6 +18,11 @@ export default function RootLayout({
   return (
     <html lang="ko" suppressHydrationWarning>
       <head>
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css"
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `(() => {
@@ -34,11 +38,9 @@ export default function RootLayout({
       </head>
       <body className="antialiased bg-background text-foreground transition-colors duration-300">
         <ThemeProvider>
-          <Navbar />
-          <main className="min-h-screen overflow-x-clip" data-scroll-root>
+          <AppChrome>
             {children}
-          </main>
-          <Footer />
+          </AppChrome>
         </ThemeProvider>
       </body>
     </html>
