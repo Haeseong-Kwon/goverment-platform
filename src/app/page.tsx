@@ -1,3 +1,3 @@
-import { Landing } from "@/features/startup-workspace/components";
+import { FounderLanding } from "@/features/startup-workspace/components";
 
-export default Landing;
+export default FounderLanding;

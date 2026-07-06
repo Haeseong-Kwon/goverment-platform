@@ -17,6 +17,7 @@ function isStandaloneAppPath(pathname: string | null) {
     pathname.startsWith("/founder/") ||
     pathname === "/workspace" ||
     pathname.startsWith("/workspace/") ||
+    pathname === "/workspace-entry" ||
     pathname === "/accountant"
   );
 }

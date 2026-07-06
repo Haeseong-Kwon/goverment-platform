@@ -6,6 +6,34 @@ const sidebarItems: Record<StartupRole, string[]> = {
   manager: ["대시보드", "검토 큐", "팀 관리", "리포트", "설정"],
 };
 
+const sidebarHrefByRole: Record<StartupRole, string[]> = {
+  pre_founder: [
+    "/founder#home",
+    "/founder#todo",
+    "/founder#calendar",
+    "/founder#diagnostics",
+    "/founder#calculator",
+    "/founder#incorporation",
+    "/founder#connect",
+    "/founder#vault",
+    "/founder#settings",
+  ],
+  founder: [
+    "/workspace#home",
+    "/workspace#precheck",
+    "/workspace#tracker",
+    "/workspace#vault",
+    "/workspace#settings",
+  ],
+  manager: [
+    "/manager#dashboard",
+    "/manager#review-queue",
+    "/manager#teams",
+    "/manager#reports",
+    "/manager#settings",
+  ],
+};
+
 export function getDdayTone(dday: number) {
   if (dday <= 3) return "red";
   if (dday <= 7) return "amber";
@@ -14,6 +42,21 @@ export function getDdayTone(dday: number) {
 
 export function getSidebarItems(role: StartupRole) {
   return sidebarItems[role];
+}
+
+export function getSidebarLinks(role: StartupRole) {
+  return sidebarItems[role].map((label, index) => ({
+    label,
+    href: sidebarHrefByRole[role][index],
+  }));
+}
+
+export function getLandingNavigation(role: "founder" | "manager") {
+  return {
+    homeHref: "/",
+    counterpartHref: role === "founder" ? "/manager/landing" : "/",
+    workspaceEntryHref: "/workspace-entry",
+  };
 }
 
 export function getStartupMilestones(program: string): StartupMilestone[] {

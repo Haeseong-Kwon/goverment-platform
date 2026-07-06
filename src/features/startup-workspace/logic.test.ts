@@ -3,6 +3,8 @@ import {
   canManagerSeeReviewItem,
   getDdayTone,
   getMonthlyDiagnosticUsage,
+  getLandingNavigation,
+  getSidebarLinks,
   getSidebarItems,
   getStartupMilestones,
 } from "./logic";
@@ -52,5 +54,49 @@ describe("getSidebarItems", () => {
     expect(getSidebarItems("pre_founder")).toContain("AI 진단");
     expect(getSidebarItems("founder")).toEqual(["홈", "정산 사전검증", "상태 트래커", "서류 보관함", "팀 설정"]);
     expect(getSidebarItems("manager")).toEqual(["대시보드", "검토 큐", "팀 관리", "리포트", "설정"]);
+  });
+});
+
+describe("getSidebarLinks", () => {
+  it("gives every founder preparation menu an addressable target", () => {
+    expect(getSidebarLinks("pre_founder").map((item) => item.href)).toEqual([
+      "/founder#home",
+      "/founder#todo",
+      "/founder#calendar",
+      "/founder#diagnostics",
+      "/founder#calculator",
+      "/founder#incorporation",
+      "/founder#connect",
+      "/founder#vault",
+      "/founder#settings",
+    ]);
+  });
+
+  it("separates manager navigation from founder navigation", () => {
+    expect(getSidebarLinks("manager").map((item) => item.href)).toEqual([
+      "/manager#dashboard",
+      "/manager#review-queue",
+      "/manager#teams",
+      "/manager#reports",
+      "/manager#settings",
+    ]);
+  });
+});
+
+describe("getLandingNavigation", () => {
+  it("starts on the founder landing and sends workspace entry buttons to the role selection screen", () => {
+    expect(getLandingNavigation("founder")).toEqual({
+      homeHref: "/",
+      counterpartHref: "/manager/landing",
+      workspaceEntryHref: "/workspace-entry",
+    });
+  });
+
+  it("lets the manager landing return to the founder landing and share the same workspace entry", () => {
+    expect(getLandingNavigation("manager")).toEqual({
+      homeHref: "/",
+      counterpartHref: "/",
+      workspaceEntryHref: "/workspace-entry",
+    });
   });
 });
