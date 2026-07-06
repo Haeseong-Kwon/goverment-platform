@@ -109,8 +109,39 @@ function TodoCard({ title, dday, owner, comments }: { title: string; dday: numbe
 
 function FounderCore({ founder = false }: { founder?: boolean }) {
   const todos = getStartupMilestones("예창패");
+  return <WorkspaceShell role={founder ? "founder" : "pre_founder"}><HeroHeader role={founder ? "founder" : "pre_founder"} /><section className="grid gap-4 md:grid-cols-4"><div className="rounded-2xl bg-[#2563EB] p-5 text-white md:col-span-2"><p className="text-sm font-semibold opacity-90">D-day 히어로</p><h2 className="mt-2 text-2xl font-bold">예창패 서류 마감 D-12</h2><p className="mt-2 text-sm opacity-90">자동 TODO 4개가 생성되었습니다.</p></div>{[["남은 TODO", "7"], ["진단 요약", "88점"], ["팀 진행률", "64%"], ["빠른 계산기", "641,400원"]].map(([label, value]) => <div key={label} className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><p className="text-sm text-[#475569]">{label}</p><strong className="mt-2 block text-2xl tabular-nums">{value}</strong></div>)}</section><section className="mt-6 grid gap-4 md:grid-cols-3">{todos.slice(0, 3).map((todo) => <TodoCard key={todo.id} {...todo} />)}</section><section className="mt-6 grid gap-4 md:grid-cols-3"><Link href={founder ? "/workspace/precheck" : "/founder/diagnostics"} className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">{founder ? "정산 사전검증" : "AI 진단"}</h2><p className="mt-2 text-sm text-[#475569]">상세 기능 페이지로 이동합니다.</p></Link><Link href={founder ? "/workspace/tracker" : "/founder/calendar"} className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">{founder ? "상태 트래커" : "마감 캘린더"}</h2><p className="mt-2 text-sm text-[#475569]">마감과 검토 흐름을 확인합니다.</p></Link><Link href={founder ? "/workspace/vault" : "/founder/vault"} className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">서류 보관함</h2><p className="mt-2 text-sm text-[#475569]">버전과 코멘트를 관리합니다.</p></Link></section></WorkspaceShell>;
+}
+
+type FounderFeature = "todo" | "calendar" | "diagnostics" | "calculator" | "incorporation" | "connect" | "vault" | "settings" | "precheck" | "tracker";
+
+function FounderFeaturePage({ feature, founder = false }: { feature: FounderFeature; founder?: boolean }) {
+  const todos = getStartupMilestones("예창패");
   const usage = getMonthlyDiagnosticUsage(["2026-07-01T09:00:00.000Z"], new Date("2026-07-06T00:00:00.000Z"));
-  return <WorkspaceShell role={founder ? "founder" : "pre_founder"}><div id="home" className="scroll-mt-6"><HeroHeader role={founder ? "founder" : "pre_founder"} /></div><section className="grid gap-4 md:grid-cols-4"><div className="rounded-2xl bg-[#2563EB] p-5 text-white md:col-span-2"><p className="text-sm font-semibold opacity-90">D-day 히어로</p><h2 className="mt-2 text-2xl font-bold">예창패 서류 마감 D-12</h2><p className="mt-2 text-sm opacity-90">자동 TODO 4개가 생성되었습니다.</p></div>{[["남은 TODO", "7"], ["진단 요약", "88점"], ["팀 진행률", "64%"], ["빠른 계산기", "641,400원"]].map(([label, value]) => <div key={label} className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><p className="text-sm text-[#475569]">{label}</p><strong className="mt-2 block text-2xl tabular-nums">{value}</strong></div>)}</section><section className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_.9fr]"><div className="space-y-6"><div id={founder ? "precheck" : "todo"} className="scroll-mt-6 rounded-2xl border border-[#E2E8F0] bg-white p-5"><div className="mb-4 flex items-center justify-between"><h2 className="text-2xl font-bold">{founder ? "정산 사전검증" : "팀 TODO"}</h2><StatusBadge tone="blue">예창패</StatusBadge></div><div className="grid gap-3 md:grid-cols-2">{todos.map((todo) => <TodoCard key={todo.id} {...todo} />)}</div></div><div id={founder ? "tracker" : "calendar"} className="scroll-mt-6"><CalendarPreview /></div></div><div className="space-y-6"><div id="diagnostics" className="scroll-mt-6"><A1Report kind="eligibility" /></div><div id="calculator" className="scroll-mt-6"><CalculatorCard /></div><div id="vault" className="scroll-mt-6"><VaultCard /></div><BizPlanCard exhausted={usage.isExhausted} /><div id="incorporation" className="scroll-mt-6"><IncorporationCard /></div><div id="connect" className="scroll-mt-6"><ConnectCard /></div><div id="settings" className="rounded-2xl border border-[#E2E8F0] bg-white p-5 scroll-mt-6"><h2 className="text-xl font-bold">팀 설정</h2><p className="mt-2 text-sm text-[#475569]">팀원 초대 링크와 역할 권한을 관리합니다.</p></div></div></section></WorkspaceShell>;
+  const titleByFeature: Record<FounderFeature, string> = {
+    todo: "팀 TODO",
+    calendar: "마감 캘린더",
+    diagnostics: "AI 진단",
+    calculator: "계산기",
+    incorporation: "법인 설립",
+    connect: "커넥트",
+    vault: "서류 보관함",
+    settings: "팀 설정",
+    precheck: "정산 사전검증",
+    tracker: "상태 트래커",
+  };
+  return <WorkspaceShell role={founder ? "founder" : "pre_founder"}><div className="mb-6"><StatusBadge tone={founder ? "green" : "blue"}>{founder ? "선정 팀" : "창업자"}</StatusBadge><h1 className="mt-3 text-[32px] font-bold">{titleByFeature[feature]}</h1><p className="mt-2 text-[#475569]">사이드바 메뉴와 독립된 기능 화면입니다.</p></div>{feature === "todo" && <section className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><div className="grid gap-3 md:grid-cols-2">{todos.map((todo) => <TodoCard key={todo.id} {...todo} />)}</div></section>}{feature === "calendar" && <CalendarPreview />}{feature === "diagnostics" && <div className="space-y-6"><A1Report kind="eligibility" /><BizPlanCard exhausted={usage.isExhausted} /></div>}{feature === "calculator" && <CalculatorCard />}{feature === "incorporation" && <IncorporationCard />}{feature === "connect" && <ConnectCard />}{feature === "vault" && <VaultCard />}{feature === "settings" && <SettingsPanel founder={founder} />}{feature === "precheck" && <PrecheckPanel />}{feature === "tracker" && <TrackerPanel />}</WorkspaceShell>;
+}
+
+function SettingsPanel({ founder }: { founder: boolean }) {
+  return <section className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">{founder ? "협약 팀 설정" : "준비 팀 설정"}</h2><div className="mt-4 grid gap-3 md:grid-cols-2"><div className="rounded-xl bg-[#F8FAFC] p-4"><p className="text-sm font-bold">초대 링크</p><p className="mt-2 text-sm text-[#475569]">team.startupos.kr/invite/inha-2026</p></div><div className="rounded-xl bg-[#F8FAFC] p-4"><p className="text-sm font-bold">권한</p><p className="mt-2 text-sm text-[#475569]">팀원은 TODO, 진행 상황, 보관함만 공유합니다.</p></div></div></section>;
+}
+
+function PrecheckPanel() {
+  return <section className="grid gap-6 xl:grid-cols-[1fr_360px]"><div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">정산 사전검증</h2><ReasonList items={[{ tone: "green", text: "증빙 파일명이 비목과 일치합니다." }, { tone: "amber", text: "세금계산서 발행일과 집행일 간격 확인이 필요합니다." }]} /><div className="mt-5"><NextActions items={["이체확인증 원본 업로드", "거래처 사업자등록번호 확인"]} /></div></div><div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><StatusBadge tone="green">검증 통과 🟢</StatusBadge><p className="mt-3 text-sm text-[#475569]">매니저에게는 점수 없이 이 뱃지만 표시됩니다.</p></div></section>;
+}
+
+function TrackerPanel() {
+  return <section className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">상태 트래커</h2>{["사전검증", "검토 요청", "매니저 검토", "승인", "정산완료"].map((step, index) => <div key={step} className="mt-4 flex items-center gap-3"><span className={cn("grid h-8 w-8 place-items-center rounded-full text-sm font-bold", index < 2 ? "bg-[#2563EB] text-white" : "bg-[#F8FAFC] text-[#94A3B8]")}>{index + 1}</span><span className="font-semibold">{step}</span></div>)}</section>;
 }
 
 function CalendarPreview() {
@@ -149,7 +180,22 @@ function ManagerDashboard() {
     { team: "프리팀 초안", status: "draft", validation: "passed", role: "pre_founder", wait: "0시간", amount: "비공개", evidence: 0 },
   ] as const, []);
   const visibleQueue = queue.filter(canManagerSeeReviewItem);
-  return <WorkspaceShell role="manager"><div id="dashboard" className="scroll-mt-6"><HeroHeader role="manager" /></div><section className="grid gap-4 md:grid-cols-4">{[["검토 요청률", "85%"], ["반려율", "23%"], ["평균 검토", "2.4일"], ["지연", "3팀"]].map(([label, value], i) => <div key={label} className={cn("rounded-2xl border border-[#E2E8F0] bg-white p-5", i === 3 && "border-l-4 border-l-[#DC2626]")}><p className="text-sm text-[#475569]">{label}</p><strong className="mt-2 block text-2xl tabular-nums">{value}</strong></div>)}</section><section id="review-queue" className="mt-6 grid scroll-mt-6 gap-6 xl:grid-cols-[1fr_420px]"><div className="rounded-2xl border border-[#E2E8F0] bg-white"><div className="grid grid-cols-[1.4fr_.8fr_.8fr_.8fr] border-b border-[#E2E8F0] px-5 py-3 text-xs font-bold text-[#475569]"><span>팀</span><span>상태</span><span>대기</span><span className="text-right">증빙</span></div>{visibleQueue.map((row, i) => <div key={row.team} className={cn("grid min-h-14 grid-cols-[1.4fr_.8fr_.8fr_.8fr] items-center border-b border-[#F1F5F9] px-5 py-3 text-sm", i === 0 && "border-l-4 border-l-[#DC2626]")}><strong>{row.team}</strong><span>검토 요청</span><span className={i === 0 ? "font-bold text-[#DC2626]" : ""}>{row.wait}</span><span className="text-right tabular-nums">{row.evidence}건</span></div>)}</div><ReviewPanel /></section><section id="teams" className="mt-6 scroll-mt-6 rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">팀 관리</h2><p className="mt-2 text-sm text-[#475569]">선정 팀의 협약 상태와 담당자만 표시합니다. 준비 데이터는 표시하지 않습니다.</p></section><section id="reports" className="mt-6 scroll-mt-6 rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">리포트</h2><p className="mt-2 text-sm text-[#475569]">반려 사유와 평균 검토 시간을 집계합니다.</p></section><section id="settings" className="mt-6 scroll-mt-6 rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">설정</h2><p className="mt-2 text-sm text-[#475569]">기관 코드와 매니저 권한을 관리합니다.</p></section></WorkspaceShell>;
+  return <WorkspaceShell role="manager"><HeroHeader role="manager" /><section className="grid gap-4 md:grid-cols-4">{[["검토 요청률", "85%"], ["반려율", "23%"], ["평균 검토", "2.4일"], ["지연", "3팀"]].map(([label, value], i) => <div key={label} className={cn("rounded-2xl border border-[#E2E8F0] bg-white p-5", i === 3 && "border-l-4 border-l-[#DC2626]")}><p className="text-sm text-[#475569]">{label}</p><strong className="mt-2 block text-2xl tabular-nums">{value}</strong></div>)}</section><section className="mt-6 grid gap-4 md:grid-cols-3"><Link href="/manager/review" className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">검토 큐</h2><p className="mt-2 text-sm text-[#475569]">검증 통과 요청 {visibleQueue.length}건을 확인합니다.</p></Link><Link href="/manager/teams" className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">팀 관리</h2><p className="mt-2 text-sm text-[#475569]">선정 팀의 협약 상태만 봅니다.</p></Link><Link href="/manager/reports" className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">리포트</h2><p className="mt-2 text-sm text-[#475569]">반려 사유와 검토 시간을 집계합니다.</p></Link></section></WorkspaceShell>;
+}
+
+function ManagerReviewQueuePage() {
+  const queue = [
+    { team: "인벤티", wait: "52시간", evidence: 3 },
+    { team: "그린루프", wait: "8시간", evidence: 4 },
+  ];
+  return <WorkspaceShell role="manager"><div className="mb-6"><StatusBadge tone="blue">주관기관 매니저</StatusBadge><h1 className="mt-3 text-[32px] font-bold">검토 큐</h1><p className="mt-2 text-[#475569]">founder의 검증 통과 후 검토 요청 건만 표시합니다.</p></div><section className="grid gap-6 xl:grid-cols-[1fr_420px]"><div className="rounded-2xl border border-[#E2E8F0] bg-white"><div className="grid grid-cols-[1.4fr_.8fr_.8fr] border-b border-[#E2E8F0] px-5 py-3 text-xs font-bold text-[#475569]"><span>팀</span><span>대기</span><span className="text-right">증빙</span></div>{queue.map((row, i) => <div key={row.team} className={cn("grid min-h-14 grid-cols-[1.4fr_.8fr_.8fr] items-center border-b border-[#F1F5F9] px-5 py-3 text-sm", i === 0 && "border-l-4 border-l-[#DC2626]")}><strong>{row.team}</strong><span className={i === 0 ? "font-bold text-[#DC2626]" : ""}>{row.wait}</span><span className="text-right tabular-nums">{row.evidence}건</span></div>)}</div><ReviewPanel /></section></WorkspaceShell>;
+}
+
+type ManagerFeature = "teams" | "reports" | "settings";
+
+function ManagerFeaturePage({ feature }: { feature: ManagerFeature }) {
+  const title = feature === "teams" ? "팀 관리" : feature === "reports" ? "리포트" : "설정";
+  return <WorkspaceShell role="manager"><div className="mb-6"><StatusBadge tone="blue">주관기관 매니저</StatusBadge><h1 className="mt-3 text-[32px] font-bold">{title}</h1><p className="mt-2 text-[#475569]">매니저 세계의 독립 기능 화면입니다.</p></div>{feature === "teams" && <section className="rounded-2xl border border-[#E2E8F0] bg-white"><div className="grid grid-cols-[1.2fr_1fr_1fr_.8fr] border-b border-[#E2E8F0] px-5 py-3 text-xs font-bold text-[#475569]"><span>팀</span><span>협약</span><span>담당</span><span className="text-right">상태</span></div>{[["인벤티", "2026 예창패", "김매니저", "진행"], ["그린루프", "2026 예창패", "이매니저", "검토"], ["로지스원", "2026 예창패", "김매니저", "지연"]].map(([team, program, owner, state]) => <div key={team} className="grid min-h-14 grid-cols-[1.2fr_1fr_1fr_.8fr] items-center border-b border-[#F1F5F9] px-5 py-3 text-sm"><strong>{team}</strong><span>{program}</span><span>{owner}</span><span className="text-right"><StatusBadge tone={state === "지연" ? "red" : state === "검토" ? "amber" : "green"}>{state}</StatusBadge></span></div>)}</section>}{feature === "reports" && <section className="grid gap-4 md:grid-cols-3"><div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-lg font-bold">반려 사유</h2><ContributionBars items={[{ label: "증빙 누락", value: 42, max: 100 }, { label: "한도 초과", value: 28, max: 100 }, { label: "서명 누락", value: 18, max: 100 }]} /></div><div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-lg font-bold">주간 추이</h2><p className="mt-3 text-3xl font-bold tabular-nums">2.4일</p><p className="mt-2 text-sm text-[#475569]">평균 검토 소요</p></div><div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-lg font-bold">지연 팀</h2><p className="mt-3 text-3xl font-bold tabular-nums text-[#DC2626]">3팀</p></div></section>}{feature === "settings" && <section className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">기관 설정</h2><div className="mt-4 grid gap-3 md:grid-cols-2"><div className="rounded-xl bg-[#F8FAFC] p-4"><p className="text-sm font-bold">기관 코드</p><p className="mt-2 text-sm text-[#475569]">INHA-2026-YEP</p></div><div className="rounded-xl bg-[#F8FAFC] p-4"><p className="text-sm font-bold">권한 규칙</p><p className="mt-2 text-sm text-[#475569]">준비 데이터와 진단 점수는 접근하지 않습니다.</p></div></div></section>}</WorkspaceShell>;
 }
 
 function ReviewPanel() {
@@ -180,4 +226,14 @@ function ConvertPage() {
   return <WorkspaceShell role="pre_founder"><div className="mx-auto max-w-3xl rounded-2xl border border-[#E2E8F0] bg-white p-8"><StatusBadge tone="green">합격 전환</StatusBadge><h1 className="mt-4 text-[32px] font-bold">축하합니다. 기관 연결을 시작합니다.</h1><p className="mt-2 text-[#475569]">기관 코드를 확인하면 role이 pre_founder에서 founder로 단방향 전환됩니다.</p><input className="mt-6 w-full rounded-[10px] border border-[#E2E8F0] px-4 py-3" defaultValue="INHA-2026-YEP" /><div className="mt-5 rounded-xl bg-[#EFF6FF] p-4 text-sm text-[#2563EB]">이관 항목: 서류 보관함 파일, 팀원. TODO, 진단 점수, 초안은 준비 팀 내부에 남습니다.</div><Link href="/workspace?role=founder" className="mt-6 inline-flex rounded-[10px] bg-[#2563EB] px-5 py-3 font-bold text-white">연결 확인</Link></div></WorkspaceShell>;
 }
 
-export { FounderCore, FounderLanding, ManagerDashboard, ManagerLanding, ConvertPage, WorkspaceEntry };
+export {
+  FounderCore,
+  FounderFeaturePage,
+  FounderLanding,
+  ManagerDashboard,
+  ManagerFeaturePage,
+  ManagerLanding,
+  ManagerReviewQueuePage,
+  ConvertPage,
+  WorkspaceEntry,
+};

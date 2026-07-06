@@ -43,6 +43,7 @@ export function Navbar() {
         pathname === "/manager" || pathname.startsWith("/manager/") ||
         pathname === "/founder" || pathname.startsWith("/founder/") ||
         pathname === "/workspace" || pathname.startsWith("/workspace/") ||
+        pathname === "/workspace-entry" ||
         pathname === "/accountant";
     const { theme, toggleTheme } = useTheme();
     const [isScrolled, setIsScrolled] = useState(false);

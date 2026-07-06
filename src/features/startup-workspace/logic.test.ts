@@ -60,25 +60,35 @@ describe("getSidebarItems", () => {
 describe("getSidebarLinks", () => {
   it("gives every founder preparation menu an addressable target", () => {
     expect(getSidebarLinks("pre_founder").map((item) => item.href)).toEqual([
-      "/founder#home",
-      "/founder#todo",
-      "/founder#calendar",
-      "/founder#diagnostics",
-      "/founder#calculator",
-      "/founder#incorporation",
-      "/founder#connect",
-      "/founder#vault",
-      "/founder#settings",
+      "/founder",
+      "/founder/todo",
+      "/founder/calendar",
+      "/founder/diagnostics",
+      "/founder/calculator",
+      "/founder/incorporation",
+      "/founder/connect",
+      "/founder/vault",
+      "/founder/settings",
     ]);
   });
 
   it("separates manager navigation from founder navigation", () => {
     expect(getSidebarLinks("manager").map((item) => item.href)).toEqual([
-      "/manager#dashboard",
-      "/manager#review-queue",
-      "/manager#teams",
-      "/manager#reports",
-      "/manager#settings",
+      "/manager",
+      "/manager/review",
+      "/manager/teams",
+      "/manager/reports",
+      "/manager/settings",
+    ]);
+  });
+
+  it("uses independent founder agreement routes after conversion", () => {
+    expect(getSidebarLinks("founder").map((item) => item.href)).toEqual([
+      "/workspace",
+      "/workspace/precheck",
+      "/workspace/tracker",
+      "/workspace/vault",
+      "/workspace/settings",
     ]);
   });
 });

@@ -1,3 +1,3 @@
-import { ManagerDashboard } from "@/features/startup-workspace/components";
+import { ManagerReviewQueuePage } from "@/features/startup-workspace/components";
 
-export default ManagerDashboard;
+export default ManagerReviewQueuePage;
