@@ -1,10 +1,17 @@
 import { supabase } from '../supabase';
+import type { StartupRole } from "@/features/startup-workspace/domain";
 
 /**
  * Service to handle all authentication operations through Supabase.
  */
 
-export const signUp = async (email: string, password: string, fullName: string, emailRedirectTo?: string) => {
+export const signUp = async (
+  email: string,
+  password: string,
+  fullName: string,
+  emailRedirectTo?: string,
+  startupRole: Extract<StartupRole, "pre_founder" | "manager"> = "pre_founder",
+) => {
   if (!supabase) throw new Error('Supabase is not configured.');
   
   const { data, error } = await supabase.auth.signUp({
@@ -14,6 +21,7 @@ export const signUp = async (email: string, password: string, fullName: string, 
       emailRedirectTo,
       data: {
         full_name: fullName,
+        startup_role: startupRole,
       },
     },
   });
@@ -32,6 +40,11 @@ export const signUp = async (email: string, password: string, fullName: string, 
         },
       ]);
     if (profileError) console.error('Error creating profile:', profileError);
+
+    const { error: startupProfileError } = await supabase
+      .from('startup_profiles')
+      .upsert({ id: data.user.id, role: startupRole, onboarding_complete: false }, { onConflict: 'id' });
+    if (startupProfileError) console.error('Error creating startup profile:', startupProfileError);
   }
 
   return data;

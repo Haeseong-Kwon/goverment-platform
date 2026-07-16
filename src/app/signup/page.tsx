@@ -7,6 +7,7 @@ import { Button } from "@/components/common/Button";
 import { Mail, Lock, User, ChevronRight, Loader2, Sparkles } from "lucide-react";
 import { m, LazyMotion, domAnimation } from "framer-motion";
 import { getCurrentUser, signUp } from "@/lib/services/AuthService";
+import type { StartupRole } from "@/features/startup-workspace/domain";
 
 const DEFAULT_SITE_URL = "https://swcapstone.vercel.app";
 
@@ -15,6 +16,7 @@ export default function SignupPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [fullName, setFullName] = useState("");
+    const [startupRole, setStartupRole] = useState<Extract<StartupRole, "pre_founder" | "manager">>("pre_founder");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [checkingSession, setCheckingSession] = useState(true);
@@ -39,7 +41,7 @@ export default function SignupPage() {
         try {
             const emailRedirectTo =
                 `${process.env.NEXT_PUBLIC_SITE_URL || DEFAULT_SITE_URL}/auth/callback`;
-            await signUp(email, password, fullName, emailRedirectTo);
+            await signUp(email, password, fullName, emailRedirectTo, startupRole);
             alert("회원가입이 완료되었습니다. 이메일 인증 링크를 눌러 가입을 완료해 주세요.");
             router.push("/login");
         } catch (err: any) {
@@ -120,6 +122,25 @@ export default function SignupPage() {
                                             placeholder="홍길동"
                                             className="w-full h-16 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-white/5 rounded-2xl pl-16 pr-6 font-bold text-slate-900 dark:text-white focus:ring-4 focus:ring-primary/10 transition-all outline-none"
                                         />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-primary uppercase tracking-[0.2em] ml-1">Workspace Role</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {([
+                                            ["pre_founder", "창업자"],
+                                            ["manager", "주관기관"],
+                                        ] as const).map(([role, label]) => (
+                                            <button
+                                                key={role}
+                                                type="button"
+                                                onClick={() => setStartupRole(role)}
+                                                className={`h-12 rounded-xl border text-sm font-bold transition-colors ${startupRole === role ? "border-primary bg-primary/10 text-primary" : "border-slate-200 text-slate-500"}`}
+                                            >
+                                                {label}
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
 

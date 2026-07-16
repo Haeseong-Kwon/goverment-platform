@@ -20,6 +20,8 @@ import {
 import { canManagerSeeReviewItem, getDdayTone, getLandingNavigation, getMonthlyDiagnosticUsage, getSidebarLinks, getStartupMilestones } from "./logic";
 import type { DdayTone, StartupRole } from "./types";
 import { cn } from "@/lib/utils";
+import { calculateInsurance } from "./rules";
+import { captureLead, convertPrepTeam, joinWaitlist } from "@/lib/services/WorkspaceService";
 
 const statusClasses = {
   green: "bg-[#F0FDF4] text-[#16A34A] border-[#BBF7D0]",
@@ -150,11 +152,16 @@ function CalendarPreview() {
 
 function CalculatorCard() {
   const [emailOpen, setEmailOpen] = useState(false);
-  return <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">4대보험 계산기</h2><p className="mt-2 text-sm text-[#475569]">사업주 월 부담 총액</p><strong className="mt-2 block text-3xl tabular-nums">641,400원</strong><ContributionBars items={[{ label: "국민연금", value: 220, max: 641 }, { label: "건강보험", value: 188, max: 641 }, { label: "고용보험", value: 109, max: 641 }, { label: "산재보험", value: 74, max: 641 }, { label: "장기요양", value: 50, max: 641 }]} /><p className="mt-4 text-[13px] font-medium text-[#DC2626]">⚠️ 세무 계산은 참고용이며 실제 신고 전 전문가 확인이 필요합니다.</p><button onClick={() => setEmailOpen(true)} className="mt-4 rounded-[10px] bg-[#2563EB] px-4 py-2.5 text-sm font-bold text-white">PDF로 저장</button>{emailOpen && <EmailCaptureModal onClose={() => setEmailOpen(false)} />}</div>;
+  const [salary, setSalary] = useState(3_000_000);
+  const [people, setPeople] = useState(1);
+  const result = calculateInsurance({ monthlySalary: salary, people, accidentRate: 0.007 });
+  return <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">4대보험 계산기</h2><div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="text-sm font-bold">월 급여<input type="number" min="0" value={salary} onChange={(event) => setSalary(Number(event.target.value))} className="mt-1 w-full rounded-xl border border-[#E2E8F0] p-3" /></label><label className="text-sm font-bold">인원<input type="number" min="1" value={people} onChange={(event) => setPeople(Math.max(1, Number(event.target.value)))} className="mt-1 w-full rounded-xl border border-[#E2E8F0] p-3" /></label></div><p className="mt-5 text-sm text-[#475569]">사업주 월 부담 총액</p><strong className="mt-2 block text-3xl tabular-nums">{result.employerTotal.toLocaleString()}원</strong><ContributionBars items={Object.entries(result.employer).map(([label, value]) => ({ label, value: Math.round(value / 1000), max: Math.max(1, Math.round(result.employerTotal / 1000)) }))} /><p className="mt-4 text-[13px] font-medium text-[#DC2626]">⚠️ 세무 계산은 참고용이며 실제 신고 전 전문가 확인이 필요합니다.</p><button onClick={() => setEmailOpen(true)} className="mt-4 rounded-[10px] bg-[#2563EB] px-4 py-2.5 text-sm font-bold text-white">PDF 저장 정보 받기</button>{emailOpen && <EmailCaptureModal onClose={() => setEmailOpen(false)} />}</div>;
 }
 
 function EmailCaptureModal({ onClose }: { onClose: () => void }) {
-  return <div className="fixed inset-0 z-[80] grid place-items-center bg-black/30 p-4"><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><Mail className="text-[#2563EB]" /><h2 className="mt-3 text-2xl font-bold">이메일로 자료 받기</h2><p className="mt-2 text-sm text-[#475569]">PDF 저장과 자료실 다운로드 이력을 리드 KPI로 기록합니다.</p><input className="mt-4 w-full rounded-[10px] border border-[#E2E8F0] px-3 py-3" placeholder="founder@example.com" /><div className="mt-4 flex justify-end gap-2"><button onClick={onClose} className="rounded-[10px] px-4 py-2 text-sm font-bold text-[#475569]">닫기</button><button onClick={onClose} className="rounded-[10px] bg-[#2563EB] px-4 py-2 text-sm font-bold text-white">받기</button></div></div></div>;
+  const [email, setEmail] = useState(""); const [error, setError] = useState<string | null>(null); const [saving, setSaving] = useState(false);
+  const submit = async () => { setSaving(true); setError(null); try { await captureLead(email, "calc_insurance"); onClose(); } catch (reason) { setError(reason instanceof Error ? reason.message : "저장하지 못했습니다."); } finally { setSaving(false); } };
+  return <div className="fixed inset-0 z-[80] grid place-items-center bg-black/30 p-4"><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><Mail className="text-[#2563EB]" /><h2 className="mt-3 text-2xl font-bold">이메일로 자료 받기</h2><p className="mt-2 text-sm text-[#475569]">PDF 저장과 자료실 다운로드 이력을 기록합니다.</p><input value={email} onChange={(event) => setEmail(event.target.value)} className="mt-4 w-full rounded-[10px] border border-[#E2E8F0] px-3 py-3" placeholder="founder@example.com" />{error && <p className="mt-2 text-sm text-[#DC2626]">{error}</p>}<div className="mt-4 flex justify-end gap-2"><button onClick={onClose} className="rounded-[10px] px-4 py-2 text-sm font-bold text-[#475569]">닫기</button><button disabled={saving} onClick={submit} className="rounded-[10px] bg-[#2563EB] px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{saving ? "저장 중" : "받기"}</button></div></div></div>;
 }
 
 function VaultCard() {
@@ -170,7 +177,9 @@ function IncorporationCard() {
 }
 
 function ConnectCard() {
-  return <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">커넥트</h2><div className="mt-4 grid gap-3">{["팀빌딩", "멘토", "투자"].map((tab) => <div key={tab} className="relative overflow-hidden rounded-xl border border-[#E2E8F0] p-4"><div className="flex -space-x-2 blur-sm">{["A", "B", "C"].map((v) => <span key={v} className="grid h-8 w-8 place-items-center rounded-full bg-[#EFF6FF] text-sm font-bold text-[#2563EB]">{v}</span>)}</div><div className="absolute inset-0 grid place-items-center bg-white/70 text-sm font-bold text-[#0F172A]">{tab} 대기 명단 등록</div></div>)}</div><button className="mt-4 rounded-[10px] border border-[#2563EB] px-4 py-2 text-sm font-bold text-[#2563EB]">알림 신청</button></div>;
+  const [message, setMessage] = useState<string | null>(null);
+  const apply = async (tab: "team_building" | "mentor" | "investment") => { try { await joinWaitlist(tab); setMessage("대기 신청이 저장되었습니다."); } catch (reason) { setMessage(reason instanceof Error ? reason.message : "대기 신청을 저장하지 못했습니다."); } };
+  return <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">커넥트</h2><p className="mt-2 text-sm text-[#475569]">실제 대기 신청만 집계하며, 매칭 서비스는 기관 프로그램 연동 전까지 제공하지 않습니다.</p><div className="mt-4 grid gap-3">{([["팀빌딩", "team_building"], ["멘토", "mentor"], ["투자", "investment"]] as const).map(([label, tab]) => <div key={tab} className="flex items-center justify-between rounded-xl border border-[#E2E8F0] p-4"><span className="font-bold">{label}</span><button onClick={() => apply(tab)} className="rounded-lg border border-[#2563EB] px-3 py-2 text-sm font-bold text-[#2563EB]">대기 신청</button></div>)}</div>{message && <p className="mt-4 rounded-xl bg-[#EFF6FF] p-3 text-sm font-semibold text-[#2563EB]">{message}</p>}</div>;
 }
 
 function ManagerDashboard() {
@@ -223,7 +232,9 @@ function WorkspaceEntry() {
 }
 
 function ConvertPage() {
-  return <WorkspaceShell role="pre_founder"><div className="mx-auto max-w-3xl rounded-2xl border border-[#E2E8F0] bg-white p-8"><StatusBadge tone="green">합격 전환</StatusBadge><h1 className="mt-4 text-[32px] font-bold">축하합니다. 기관 연결을 시작합니다.</h1><p className="mt-2 text-[#475569]">기관 코드를 확인하면 role이 pre_founder에서 founder로 단방향 전환됩니다.</p><input className="mt-6 w-full rounded-[10px] border border-[#E2E8F0] px-4 py-3" defaultValue="INHA-2026-YEP" /><div className="mt-5 rounded-xl bg-[#EFF6FF] p-4 text-sm text-[#2563EB]">이관 항목: 서류 보관함 파일, 팀원. TODO, 진단 점수, 초안은 준비 팀 내부에 남습니다.</div><Link href="/workspace?role=founder" className="mt-6 inline-flex rounded-[10px] bg-[#2563EB] px-5 py-3 font-bold text-white">연결 확인</Link></div></WorkspaceShell>;
+  const [code, setCode] = useState(""); const [error, setError] = useState<string | null>(null); const [done, setDone] = useState(false);
+  const convert = async () => { try { await convertPrepTeam(code); setDone(true); } catch (reason) { setError(reason instanceof Error ? reason.message : "기관 코드 확인에 실패했습니다."); } };
+  return <WorkspaceShell role="pre_founder"><div className="mx-auto max-w-3xl rounded-2xl border border-[#E2E8F0] bg-white p-8"><StatusBadge tone="green">합격 전환</StatusBadge><h1 className="mt-4 text-[32px] font-bold">축하합니다. 기관 연결을 시작합니다.</h1><p className="mt-2 text-[#475569]">기관 코드를 확인하면 role이 pre_founder에서 founder로 단방향 전환됩니다.</p><input value={code} onChange={(event) => setCode(event.target.value)} className="mt-6 w-full rounded-[10px] border border-[#E2E8F0] px-4 py-3" placeholder="기관 코드 입력" /><div className="mt-5 rounded-xl bg-[#EFF6FF] p-4 text-sm text-[#2563EB]">이관 항목: 서류 보관함 파일, 팀원. TODO, 진단 점수, 초안은 준비 팀 내부에 남습니다.</div>{error && <p className="mt-4 text-sm font-semibold text-[#DC2626]">{error}</p>}{done ? <Link href="/workspace" className="mt-6 inline-flex rounded-[10px] bg-[#2563EB] px-5 py-3 font-bold text-white">선정 팀 워크스페이스로 이동</Link> : <button onClick={convert} disabled={!code.trim()} className="mt-6 rounded-[10px] bg-[#2563EB] px-5 py-3 font-bold text-white disabled:opacity-50">연결 확인</button>}</div></WorkspaceShell>;
 }
 
 export {

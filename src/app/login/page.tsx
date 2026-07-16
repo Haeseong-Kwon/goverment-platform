@@ -7,6 +7,7 @@ import { Button } from "@/components/common/Button";
 import { Mail, Lock, ChevronRight, Loader2, Rocket, ArrowRight } from "lucide-react";
 import { m, LazyMotion, domAnimation } from "framer-motion";
 import { getCurrentUser, signIn } from "@/lib/services/AuthService";
+import { getStartupProfile, resolveWorkspaceDestination } from "@/lib/services/WorkspaceService";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -20,7 +21,8 @@ export default function LoginPage() {
         const checkSession = async () => {
             const user = await getCurrentUser();
             if (user) {
-                router.replace("/dashboard");
+                const profile = await getStartupProfile();
+                router.replace(profile ? resolveWorkspaceDestination(profile) : "/workspace-entry");
                 return;
             }
             setCheckingSession(false);
@@ -35,7 +37,8 @@ export default function LoginPage() {
         setError(null);
         try {
             await signIn(email, password);
-            router.push("/dashboard");
+            const profile = await getStartupProfile();
+            router.push(profile ? resolveWorkspaceDestination(profile) : "/workspace-entry");
         } catch (err: any) {
             setError(err.message || "로그인에 실패했습니다.");
         } finally {
