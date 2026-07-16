@@ -14,7 +14,6 @@ import {
   Mail,
   MessageCircle,
   ShieldCheck,
-  Upload,
   Users,
 } from "lucide-react";
 import { canManagerSeeReviewItem, getDdayTone, getLandingNavigation, getMonthlyDiagnosticUsage, getSidebarLinks, getStartupMilestones } from "./logic";
@@ -180,7 +179,13 @@ function VaultCard() {
 }
 
 function BizPlanCard({ exhausted }: { exhausted: boolean }) {
-  return <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><div className="flex items-center justify-between"><h2 className="text-xl font-bold">사업계획서 진단</h2><StatusBadge tone={exhausted ? "amber" : "blue"}>{exhausted ? "무료 소진" : "잔여 1/2회"}</StatusBadge></div><div className={cn("mt-4 rounded-2xl border border-dashed border-[#94A3B8] p-5 text-center", exhausted && "opacity-60")}><Upload className="mx-auto text-[#94A3B8]" /><p className="mt-2 text-sm text-[#475569]">hwp/pdf 업로드 또는 지난 버전 불러오기</p></div>{exhausted ? <p className="mt-3 text-sm font-semibold text-[#B45309]">팀원 초대 시 1회 추가</p> : <A1Report kind="bizplan" />}</div>;
+  return <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><div className="flex items-center justify-between"><h2 className="text-xl font-bold">사업계획서 AI 진단</h2><StatusBadge tone={exhausted ? "amber" : "blue"}>{exhausted ? "무료 소진" : "잔여 1/2회"}</StatusBadge></div>{exhausted ? <p className="mt-3 text-sm font-semibold text-[#B45309]">팀원 초대 시 1회 추가</p> : <AiDiagnosisRunner />}</div>;
+}
+
+function AiDiagnosisRunner() {
+  const [text, setText] = useState(""); const [loading, setLoading] = useState(false); const [error, setError] = useState<string | null>(null); const [result, setResult] = useState<{ psst: Record<string, { score: number; evidence: string }>; actions: string[]; swot: Record<string, string[]>; model: string } | null>(null);
+  const run = async () => { setLoading(true); setError(null); try { const response = await fetch("/api/workspace/diagnoses/bizplan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); setResult(data); } catch (reason) { setError(reason instanceof Error ? reason.message : "AI 진단에 실패했습니다."); } finally { setLoading(false); } };
+  return <div className="mt-4 space-y-4"><textarea value={text} onChange={(event) => setText(event.target.value)} className="min-h-40 w-full rounded-xl border border-[#CBD5E1] p-3 text-sm" placeholder="사업계획서 본문을 100자 이상 붙여 넣으세요." /><button disabled={loading || text.trim().length < 100} onClick={() => void run()} className="rounded-xl bg-[#2563EB] px-4 py-3 text-sm font-bold text-white disabled:opacity-50">{loading ? "GLM 5.2 분석 중…" : "AI 진단 실행"}</button>{error && <p className="rounded-xl bg-[#FEF2F2] p-3 text-sm font-semibold text-[#DC2626]">{error}</p>}{result && <div className="space-y-4 rounded-xl bg-[#F8FAFC] p-4"><p className="text-xs font-bold text-[#2563EB]">{result.model} · AI 추정</p><div className="grid gap-2 sm:grid-cols-2">{Object.entries(result.psst).map(([key, item]) => <div key={key} className="rounded-lg bg-white p-3"><strong>{key} {item.score}/25</strong><p className="mt-1 text-sm text-[#475569]">{item.evidence}</p></div>)}</div><div><strong className="text-sm">보완 액션</strong><ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-[#475569]">{result.actions.map((action) => <li key={action}>{action}</li>)}</ul></div><div className="grid gap-2 sm:grid-cols-2">{Object.entries(result.swot).map(([key, items]) => <div key={key} className="rounded-lg bg-white p-3 text-sm"><strong>{key.toUpperCase()}</strong><p className="mt-1 text-[#475569]">{items.join(" · ")}</p></div>)}</div></div>}<p className="text-xs font-medium text-[#94A3B8]">AI 추정·참고용이며 합격 또는 선정 결과를 보장하지 않습니다.</p></div>;
 }
 
 function IncorporationCard() {
