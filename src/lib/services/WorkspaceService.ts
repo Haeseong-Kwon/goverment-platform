@@ -1,6 +1,7 @@
 import { supabase } from "../supabase";
 import type { StartupRole } from "@/features/startup-workspace/domain";
 import type { TaskStatus } from "@/features/startup-workspace/domain";
+import { createMilestones, evaluateEligibility } from "../../features/startup-workspace/rules";
 
 export interface StartupProfile {
   id: string;
@@ -79,6 +80,42 @@ export async function completeOnboarding(input: OnboardingInput) {
       .from("prep_projects")
       .insert(input.programIds.map((programId) => ({ prep_team_id: team.id, program_id: programId })));
     if (projectError) throw projectError;
+
+    const { data: projects, error: projectsError } = await client
+      .from("prep_projects")
+      .select("id, program_id")
+      .eq("prep_team_id", team.id)
+      .in("program_id", input.programIds);
+    if (projectsError) throw projectsError;
+    const { data: programRows, error: programsError } = await client
+      .from("programs")
+      .select("id, deadline")
+      .in("id", input.programIds);
+    if (programsError) throw programsError;
+    const deadlineByProgram = new Map((programRows ?? []).map((program) => [program.id, program.deadline]));
+    const automaticTasks = (projects ?? []).flatMap((project) => {
+      const deadline = deadlineByProgram.get(project.program_id);
+      return deadline ? createMilestones(project.id, new Date(`${deadline}T00:00:00Z`)).map((task) => ({
+        prep_team_id: team.id,
+        prep_project_id: project.id,
+        title: task.title,
+        due_date: task.dueDate,
+        task_type: task.taskType,
+      })) : [];
+    });
+    if (automaticTasks.length) {
+      const { error: taskError } = await client.from("workspace_tasks").insert(automaticTasks);
+      if (taskError) throw taskError;
+    }
+    const reports = (projects ?? []).map((project) => {
+      const report = evaluateEligibility(project.program_id, { hasBusinessRegistration: null });
+      return { prep_team_id: team.id, report_type: "eligibility", state: report.state, score: report.score, result: report, created_by: auth.user.id };
+    });
+    if (reports.length) {
+      const { error: reportError } = await client.from("diagnosis_reports").insert(reports);
+      if (reportError) throw reportError;
+      await trackWorkspaceEvent("diagnosis_complete", team.id, { programIds: input.programIds, automatic: true });
+    }
   }
 
   const { error: updateError } = await client
