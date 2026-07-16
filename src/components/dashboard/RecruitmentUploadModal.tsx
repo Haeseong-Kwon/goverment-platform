@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Plus, Trash2 } from "lucide-react";
 import { TeamBuildingPost } from "@/types";

@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { MOCK_INSIGHTS } from "@/constants/mockData";
 import { Badge } from "@/components/common/Badge";
-import { Calendar, Clock, ArrowLeft, Share2, Bookmark, MessageSquare, ChevronRight } from "lucide-react";
+import { Calendar, Clock, ArrowLeft, Share2, Bookmark, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 

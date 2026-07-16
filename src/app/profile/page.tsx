@@ -4,17 +4,13 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SubPageHero } from "@/components/common/SubPageHero";
 import { Badge } from "@/components/common/Badge";
-import { Card } from "@/components/common/Card";
 import { Button } from "@/components/common/Button";
 import {
     Mail,
     Award,
-    Rocket,
-    Shield,
     Github,
     Settings,
     ChevronRight,
-    CheckCircle2,
     Loader2,
     LogOut
 } from "lucide-react";

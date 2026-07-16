@@ -129,7 +129,6 @@ function FounderCore({ founder = false }: { founder?: boolean }) {
 type FounderFeature = "todo" | "calendar" | "diagnostics" | "calculator" | "incorporation" | "connect" | "vault" | "settings" | "precheck" | "tracker";
 
 function FounderFeaturePage({ feature, founder = false }: { feature: FounderFeature; founder?: boolean }) {
-  const todos = getStartupMilestones("예창패");
   const usage = getMonthlyDiagnosticUsage(["2026-07-01T09:00:00.000Z"], new Date("2026-07-06T00:00:00.000Z"));
   const titleByFeature: Record<FounderFeature, string> = {
     todo: "팀 TODO",

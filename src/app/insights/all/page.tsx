@@ -2,8 +2,7 @@
 
 import { MOCK_INSIGHTS } from "@/constants/mockData";
 import { Badge } from "@/components/common/Badge";
-import { SubPageHero } from "@/components/common/SubPageHero";
-import { Calendar, Clock, ChevronRight, Search, ArrowLeft } from "lucide-react";
+import { Clock, ChevronRight, Search, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { useState, useMemo } from "react";

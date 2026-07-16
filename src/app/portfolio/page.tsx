@@ -28,7 +28,7 @@ export default function PortfolioPage() {
 
                 {/* Masonry / Grid Layout for Portfolios */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-16">
-                    {MOCK_PORTFOLIOS.map((item, index) => (
+                    {MOCK_PORTFOLIOS.map((item) => (
                         <div
                             key={item.id}
                             className="group relative"
