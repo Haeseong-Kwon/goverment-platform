@@ -1,5 +1,6 @@
 import { supabase } from "../supabase";
 import type { StartupRole } from "@/features/startup-workspace/domain";
+import type { TaskStatus } from "@/features/startup-workspace/domain";
 
 export interface StartupProfile {
   id: string;
@@ -132,4 +133,50 @@ export async function convertPrepTeam(code: string) {
   const { data, error } = await client.rpc("convert_prep_team", { input_code: code.trim() });
   if (error) throw error;
   return data as string;
+}
+
+export interface PersistedTask {
+  id: string;
+  title: string;
+  due_date: string | null;
+  status: TaskStatus;
+  task_type: "auto" | "custom";
+  is_hidden: boolean;
+}
+
+async function getCurrentPrepTeamId() {
+  const client = requireClient();
+  const { data: auth, error: authError } = await client.auth.getUser();
+  if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
+  const { data, error } = await client.from("prep_team_members").select("prep_team_id").eq("user_id", auth.user.id).limit(1).maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("준비 팀을 먼저 설정해 주세요.");
+  return data.prep_team_id as string;
+}
+
+export async function getWorkspaceTasks() {
+  const client = requireClient();
+  const teamId = await getCurrentPrepTeamId();
+  const { data, error } = await client.from("workspace_tasks").select("id,title,due_date,status,task_type,is_hidden").eq("prep_team_id", teamId).eq("is_hidden", false).order("due_date", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as PersistedTask[];
+}
+
+export async function createWorkspaceTask(title: string, dueDate?: string) {
+  if (!title.trim()) throw new Error("할 일 제목을 입력해 주세요.");
+  const client = requireClient();
+  const teamId = await getCurrentPrepTeamId();
+  const { data, error } = await client.from("workspace_tasks").insert({ prep_team_id: teamId, title: title.trim(), due_date: dueDate || null, task_type: "custom" }).select("id,title,due_date,status,task_type,is_hidden").single();
+  if (error) throw error;
+  return data as PersistedTask;
+}
+
+export async function updateWorkspaceTask(taskId: string, changes: Partial<Pick<PersistedTask, "status" | "is_hidden">>) {
+  const client = requireClient();
+  const update: Record<string, unknown> = { ...changes, updated_at: new Date().toISOString() };
+  if (changes.status === "done") update.completed_at = new Date().toISOString();
+  const { data, error } = await client.from("workspace_tasks").update(update).eq("id", taskId).select("id,title,due_date,status,task_type,is_hidden").single();
+  if (error) throw error;
+  if (changes.status === "done") await trackWorkspaceEvent("todo_complete", undefined, { taskId });
+  return data as PersistedTask;
 }

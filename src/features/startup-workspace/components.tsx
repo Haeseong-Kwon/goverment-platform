@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Archive,
@@ -21,7 +21,7 @@ import { canManagerSeeReviewItem, getDdayTone, getLandingNavigation, getMonthlyD
 import type { DdayTone, StartupRole } from "./types";
 import { cn } from "@/lib/utils";
 import { calculateInsurance } from "./rules";
-import { captureLead, convertPrepTeam, joinWaitlist } from "@/lib/services/WorkspaceService";
+import { captureLead, convertPrepTeam, createWorkspaceTask, getWorkspaceTasks, joinWaitlist, type PersistedTask, updateWorkspaceTask } from "@/lib/services/WorkspaceService";
 
 const statusClasses = {
   green: "bg-[#F0FDF4] text-[#16A34A] border-[#BBF7D0]",
@@ -109,6 +109,18 @@ function TodoCard({ title, dday, owner, comments }: { title: string; dday: numbe
   return <article className={cn("rounded-2xl border border-[#E2E8F0] bg-white p-4", dday <= 1 && "border-l-4 border-l-[#DC2626]")}><div className="flex items-start justify-between gap-3"><label className="flex gap-3"><input type="checkbox" className="mt-1 h-4 w-4" /><span className="font-semibold text-[#0F172A]">{title}</span></label><DdayPill dday={dday} /></div><div className="mt-4 flex items-center gap-2"><span className="grid h-7 w-7 place-items-center rounded-full bg-[#EFF6FF] text-xs font-bold text-[#2563EB]">{owner.slice(0, 1)}</span><span className="text-sm text-[#475569]">{owner}</span><StatusBadge tone="blue">자동 생성</StatusBadge><span className="ml-auto flex items-center gap-1 text-sm text-[#94A3B8]"><MessageCircle size={14} />{comments}</span></div><button className="mt-3 text-xs font-bold text-[#475569]">숨기기</button></article>;
 }
 
+function TaskBoard() {
+  const [tasks, setTasks] = useState<PersistedTask[]>([]);
+  const [title, setTitle] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const load = async () => { try { setTasks(await getWorkspaceTasks()); } catch (reason) { setMessage(reason instanceof Error ? reason.message : "TODO를 불러오지 못했습니다."); } };
+  useEffect(() => { void load(); }, []);
+  const add = async () => { try { const task = await createWorkspaceTask(title); setTasks((current) => [...current, task]); setTitle(""); } catch (reason) { setMessage(reason instanceof Error ? reason.message : "TODO를 추가하지 못했습니다."); } };
+  const changeStatus = async (task: PersistedTask, status: "todo" | "in_progress" | "done") => { try { const changed = await updateWorkspaceTask(task.id, { status }); setTasks((current) => current.map((item) => item.id === changed.id ? changed : item)); } catch (reason) { setMessage(reason instanceof Error ? reason.message : "상태를 바꾸지 못했습니다."); } };
+  const columns = [["todo", "할 일"], ["in_progress", "진행"], ["done", "완료"]] as const;
+  return <section className="space-y-4"><div className="flex gap-2"><input value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void add(); }} placeholder="새 할 일" className="h-11 flex-1 rounded-xl border border-[#CBD5E1] px-3" /><button onClick={() => void add()} className="rounded-xl bg-[#2563EB] px-4 text-sm font-bold text-white">추가</button></div>{message && <p className="rounded-xl bg-[#EFF6FF] p-3 text-sm text-[#2563EB]">{message}</p>}<div className="grid gap-4 lg:grid-cols-3">{columns.map(([status, label]) => <div key={status} className="rounded-2xl border border-[#E2E8F0] bg-white p-4"><h2 className="font-bold">{label}</h2><div className="mt-3 space-y-3">{tasks.filter((task) => task.status === status).map((task) => <article key={task.id} className="rounded-xl border border-[#E2E8F0] p-3"><strong className="block text-sm">{task.title}</strong><p className="mt-1 text-xs text-[#64748B]">{task.due_date ?? "마감일 없음"} · {task.task_type === "auto" ? "자동" : "직접 추가"}</p><div className="mt-3 flex gap-1">{columns.filter(([next]) => next !== status).map(([next, nextLabel]) => <button key={next} onClick={() => void changeStatus(task, next)} className="rounded-md bg-[#EFF6FF] px-2 py-1 text-xs font-bold text-[#2563EB]">{nextLabel}</button>)}</div></article>)}{tasks.filter((task) => task.status === status).length === 0 && <p className="py-6 text-center text-sm text-[#94A3B8]">항목이 없습니다.</p>}</div></div>)}</div></section>;
+}
+
 function FounderCore({ founder = false }: { founder?: boolean }) {
   const todos = getStartupMilestones("예창패");
   return <WorkspaceShell role={founder ? "founder" : "pre_founder"}><HeroHeader role={founder ? "founder" : "pre_founder"} /><section className="grid gap-4 md:grid-cols-4"><div className="rounded-2xl bg-[#2563EB] p-5 text-white md:col-span-2"><p className="text-sm font-semibold opacity-90">D-day 히어로</p><h2 className="mt-2 text-2xl font-bold">예창패 서류 마감 D-12</h2><p className="mt-2 text-sm opacity-90">자동 TODO 4개가 생성되었습니다.</p></div>{[["남은 TODO", "7"], ["진단 요약", "88점"], ["팀 진행률", "64%"], ["빠른 계산기", "641,400원"]].map(([label, value]) => <div key={label} className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><p className="text-sm text-[#475569]">{label}</p><strong className="mt-2 block text-2xl tabular-nums">{value}</strong></div>)}</section><section className="mt-6 grid gap-4 md:grid-cols-3">{todos.slice(0, 3).map((todo) => <TodoCard key={todo.id} {...todo} />)}</section><section className="mt-6 grid gap-4 md:grid-cols-3"><Link href={founder ? "/workspace/precheck" : "/founder/diagnostics"} className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">{founder ? "정산 사전검증" : "AI 진단"}</h2><p className="mt-2 text-sm text-[#475569]">상세 기능 페이지로 이동합니다.</p></Link><Link href={founder ? "/workspace/tracker" : "/founder/calendar"} className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">{founder ? "상태 트래커" : "마감 캘린더"}</h2><p className="mt-2 text-sm text-[#475569]">마감과 검토 흐름을 확인합니다.</p></Link><Link href={founder ? "/workspace/vault" : "/founder/vault"} className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">서류 보관함</h2><p className="mt-2 text-sm text-[#475569]">버전과 코멘트를 관리합니다.</p></Link></section></WorkspaceShell>;
@@ -131,7 +143,7 @@ function FounderFeaturePage({ feature, founder = false }: { feature: FounderFeat
     precheck: "정산 사전검증",
     tracker: "상태 트래커",
   };
-  return <WorkspaceShell role={founder ? "founder" : "pre_founder"}><div className="mb-6"><StatusBadge tone={founder ? "green" : "blue"}>{founder ? "선정 팀" : "창업자"}</StatusBadge><h1 className="mt-3 text-[32px] font-bold">{titleByFeature[feature]}</h1><p className="mt-2 text-[#475569]">사이드바 메뉴와 독립된 기능 화면입니다.</p></div>{feature === "todo" && <section className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><div className="grid gap-3 md:grid-cols-2">{todos.map((todo) => <TodoCard key={todo.id} {...todo} />)}</div></section>}{feature === "calendar" && <CalendarPreview />}{feature === "diagnostics" && <div className="space-y-6"><A1Report kind="eligibility" /><BizPlanCard exhausted={usage.isExhausted} /></div>}{feature === "calculator" && <CalculatorCard />}{feature === "incorporation" && <IncorporationCard />}{feature === "connect" && <ConnectCard />}{feature === "vault" && <VaultCard />}{feature === "settings" && <SettingsPanel founder={founder} />}{feature === "precheck" && <PrecheckPanel />}{feature === "tracker" && <TrackerPanel />}</WorkspaceShell>;
+  return <WorkspaceShell role={founder ? "founder" : "pre_founder"}><div className="mb-6"><StatusBadge tone={founder ? "green" : "blue"}>{founder ? "선정 팀" : "창업자"}</StatusBadge><h1 className="mt-3 text-[32px] font-bold">{titleByFeature[feature]}</h1><p className="mt-2 text-[#475569]">사이드바 메뉴와 독립된 기능 화면입니다.</p></div>{feature === "todo" && <TaskBoard />}{feature === "calendar" && <CalendarPreview />}{feature === "diagnostics" && <div className="space-y-6"><A1Report kind="eligibility" /><BizPlanCard exhausted={usage.isExhausted} /></div>}{feature === "calculator" && <CalculatorCard />}{feature === "incorporation" && <IncorporationCard />}{feature === "connect" && <ConnectCard />}{feature === "vault" && <VaultCard />}{feature === "settings" && <SettingsPanel founder={founder} />}{feature === "precheck" && <PrecheckPanel />}{feature === "tracker" && <TrackerPanel />}</WorkspaceShell>;
 }
 
 function SettingsPanel({ founder }: { founder: boolean }) {
