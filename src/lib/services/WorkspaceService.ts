@@ -1,6 +1,7 @@
 import { supabase } from "../supabase";
 import type { StartupRole } from "@/features/startup-workspace/domain";
 import type { TaskStatus } from "@/features/startup-workspace/domain";
+import type { ManagerSubmissionInput } from "@/features/startup-workspace/types";
 import { createMilestones, evaluateEligibility } from "../../features/startup-workspace/rules";
 
 export interface StartupProfile {
@@ -181,6 +182,48 @@ export interface PersistedTask {
   is_hidden: boolean;
 }
 
+export type ManagerReviewSubmission = ManagerSubmissionInput;
+
+type RawSubmission = {
+  id: string;
+  title: string;
+  requested_amount: number | string;
+  validation_status: "pending" | "passed" | "failed";
+  status: "draft" | "validated" | "in_review" | "approved" | "rejected";
+  payload: Record<string, unknown> | null;
+  created_at: string;
+  founder_teams?: unknown;
+};
+
+function firstObject(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return firstObject(value[0]);
+  return value && typeof value === "object" ? value as Record<string, unknown> : null;
+}
+
+function formatWon(value: number | string) {
+  const numericValue = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numericValue)) return String(value);
+  return `${new Intl.NumberFormat("ko-KR").format(numericValue)}원`;
+}
+
+function getEvidenceCount(payload: Record<string, unknown> | null) {
+  if (!payload) return 0;
+  if (typeof payload.evidenceCount === "number") return payload.evidenceCount;
+  if (Array.isArray(payload.evidence)) return payload.evidence.length;
+  if (Array.isArray(payload.documents)) return payload.documents.length;
+  return 0;
+}
+
+function getTeamName(row: RawSubmission) {
+  const founderTeam = firstObject(row.founder_teams);
+  const prepTeam = firstObject(founderTeam?.prep_teams);
+  const nestedName = prepTeam?.name;
+  if (typeof nestedName === "string" && nestedName.trim()) return nestedName;
+  const payloadTeam = row.payload?.teamName;
+  if (typeof payloadTeam === "string" && payloadTeam.trim()) return payloadTeam;
+  return "팀명 없음";
+}
+
 async function getCurrentPrepTeamId() {
   const client = requireClient();
   const { data: auth, error: authError } = await client.auth.getUser();
@@ -197,6 +240,27 @@ export async function getWorkspaceTasks() {
   const { data, error } = await client.from("workspace_tasks").select("id,title,due_date,status,task_type,is_hidden").eq("prep_team_id", teamId).eq("is_hidden", false).order("due_date", { ascending: true });
   if (error) throw error;
   return (data ?? []) as PersistedTask[];
+}
+
+export async function getManagerReviewSubmissions(): Promise<ManagerReviewSubmission[]> {
+  const client = requireClient();
+  const { data, error } = await client
+    .from("settlement_submissions")
+    .select("id,title,requested_amount,validation_status,status,payload,created_at,founder_teams(prep_teams(name))")
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+
+  return ((data ?? []) as RawSubmission[]).map((row) => ({
+    id: row.id,
+    title: row.title,
+    team: getTeamName(row),
+    amount: formatWon(row.requested_amount),
+    evidenceCount: getEvidenceCount(row.payload),
+    role: "founder",
+    status: row.status,
+    validation: row.validation_status,
+    createdAt: row.created_at,
+  }));
 }
 
 export async function createWorkspaceTask(title: string, dueDate?: string) {

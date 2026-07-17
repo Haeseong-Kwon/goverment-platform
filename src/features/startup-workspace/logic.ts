@@ -1,4 +1,4 @@
-import type { ReviewVisibilityInput, StartupMilestone, StartupRole } from "./types";
+import type { DashboardTaskInput, ManagerSubmissionInput, ReviewVisibilityInput, StartupMilestone, StartupRole } from "./types";
 
 const sidebarItems: Record<StartupRole, string[]> = {
   pre_founder: ["홈", "팀 TODO", "마감 캘린더", "AI 진단", "계산기", "법인 설립", "커넥트", "서류 보관함", "팀 설정"],
@@ -51,6 +51,47 @@ export function getSidebarLinks(role: StartupRole) {
   }));
 }
 
+export function isSidebarLinkActive(href: string, pathname: string | null | undefined) {
+  if (!pathname) return false;
+  if (pathname === href) return true;
+  const isSectionRoot = ["/founder", "/workspace", "/manager"].includes(href);
+  return !isSectionRoot && pathname.startsWith(`${href}/`);
+}
+
+export function getFounderDashboardSummary(tasks: DashboardTaskInput[]) {
+  const visibleTasks = tasks.filter((task) => !task.is_hidden);
+  const remainingTasks = visibleTasks.filter((task) => task.status !== "done").length;
+  const automaticTasks = visibleTasks.filter((task) => task.task_type === "auto").length;
+  const doneTasks = visibleTasks.filter((task) => task.status === "done").length;
+  const completionRate = visibleTasks.length ? Math.round((doneTasks / visibleTasks.length) * 100) : 0;
+  const nextDueDate = visibleTasks
+    .filter((task) => task.status !== "done" && task.due_date)
+    .map((task) => task.due_date as string)
+    .sort()[0] ?? null;
+  return { remainingTasks, automaticTasks, completionRate, nextDueDate };
+}
+
+export function getManagerDashboardSummary(submissions: ManagerSubmissionInput[], now = new Date()) {
+  const visibleSubmissions = submissions.filter((submission) => canManagerSeeReviewItem(submission));
+  const requestCount = visibleSubmissions.length;
+  const rejectedCount = visibleSubmissions.filter((submission) => submission.status === "rejected").length;
+  const delayedCount = visibleSubmissions.filter((submission) => {
+    const createdAt = new Date(submission.createdAt).getTime();
+    return Number.isFinite(createdAt) && now.getTime() - createdAt >= 3 * 86_400_000;
+  }).length;
+  const totalWaitDays = visibleSubmissions.reduce((sum, submission) => {
+    const createdAt = new Date(submission.createdAt).getTime();
+    if (!Number.isFinite(createdAt)) return sum;
+    return sum + Math.max(0, (now.getTime() - createdAt) / 86_400_000);
+  }, 0);
+  return {
+    requestCount,
+    rejectionRate: requestCount ? Math.round((rejectedCount / requestCount) * 100) : 0,
+    delayedCount,
+    averageWaitDays: requestCount ? Math.round((totalWaitDays / requestCount) * 10) / 10 : 0,
+  };
+}
+
 export function getLandingNavigation(role: "founder" | "manager") {
   return {
     homeHref: "/",
@@ -88,7 +129,7 @@ export function getMonthlyDiagnosticUsage(events: string[], now = new Date()) {
 }
 
 export function canManagerSeeReviewItem(item: ReviewVisibilityInput) {
-  return item.role === "founder" && item.status === "requested" && item.validation === "passed";
+  return item.role === "founder" && ["requested", "validated", "in_review", "approved", "rejected"].includes(item.status) && item.validation === "passed";
 }
 
 export function convertPreFounderToFounder<T extends { vaultFiles: string[]; members: string[] }>(prepTeam: T) {

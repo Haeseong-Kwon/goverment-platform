@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   canManagerSeeReviewItem,
+  getFounderDashboardSummary,
   getDdayTone,
   getMonthlyDiagnosticUsage,
   getLandingNavigation,
+  getManagerDashboardSummary,
   getSidebarLinks,
   getSidebarItems,
+  isSidebarLinkActive,
   getStartupMilestones,
 } from "./logic";
 
@@ -90,6 +93,39 @@ describe("getSidebarLinks", () => {
       "/workspace/vault",
       "/workspace/settings",
     ]);
+  });
+});
+
+describe("isSidebarLinkActive", () => {
+  it("marks the exact top-level workspace route without selecting sibling roots", () => {
+    expect(isSidebarLinkActive("/founder", "/founder")).toBe(true);
+    expect(isSidebarLinkActive("/founder", "/founder/todo")).toBe(false);
+    expect(isSidebarLinkActive("/founder", "/founderish")).toBe(false);
+  });
+
+  it("marks nested pages under a menu href", () => {
+    expect(isSidebarLinkActive("/manager/review", "/manager/review/detail-1")).toBe(true);
+    expect(isSidebarLinkActive("/manager/review", "/manager/reports")).toBe(false);
+  });
+});
+
+describe("getFounderDashboardSummary", () => {
+  it("derives dashboard values from persisted tasks instead of fixed demo numbers", () => {
+    expect(getFounderDashboardSummary([
+      { id: "1", title: "초안", due_date: "2026-07-20", status: "todo", task_type: "auto", is_hidden: false },
+      { id: "2", title: "검토", due_date: null, status: "in_progress", task_type: "custom", is_hidden: false },
+      { id: "3", title: "완료", due_date: "2026-07-18", status: "done", task_type: "auto", is_hidden: false },
+    ])).toEqual({ remainingTasks: 2, automaticTasks: 2, completionRate: 33, nextDueDate: "2026-07-20" });
+  });
+});
+
+describe("getManagerDashboardSummary", () => {
+  it("summarizes visible settlement submissions", () => {
+    expect(getManagerDashboardSummary([
+      { id: "1", title: "A", team: "팀A", amount: "100원", evidenceCount: 2, status: "validated", validation: "passed", role: "founder", createdAt: "2026-07-15T00:00:00.000Z" },
+      { id: "2", title: "B", team: "팀B", amount: "200원", evidenceCount: 1, status: "rejected", validation: "passed", role: "founder", createdAt: "2026-07-10T00:00:00.000Z" },
+      { id: "3", title: "C", team: "팀C", amount: "300원", evidenceCount: 0, status: "draft", validation: "passed", role: "pre_founder", createdAt: "2026-07-17T00:00:00.000Z" },
+    ], new Date("2026-07-17T00:00:00.000Z"))).toEqual({ requestCount: 2, rejectionRate: 50, delayedCount: 1, averageWaitDays: 4.5 });
   });
 });
 
