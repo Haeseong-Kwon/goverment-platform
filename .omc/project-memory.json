@@ -202,6 +202,12 @@
       "type": "file"
     },
     {
+      "path": "src/app/signup/page.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1785318224600,
+      "type": "file"
+    },
+    {
       "path": "src/features/expense-rules/planImport.test.ts",
       "accessCount": 2,
       "lastAccessed": 1785316549709,
@@ -301,6 +307,18 @@
       "path": "vitest.config.ts",
       "accessCount": 1,
       "lastAccessed": 1785317099901,
+      "type": "file"
+    },
+    {
+      "path": "supabase/003-profile-role-lock.sql",
+      "accessCount": 1,
+      "lastAccessed": 1785318000806,
+      "type": "file"
+    },
+    {
+      "path": "supabase/004-seed.sql",
+      "accessCount": 1,
+      "lastAccessed": 1785318025484,
       "type": "file"
     }
   ],

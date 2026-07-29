@@ -129,19 +129,23 @@ export default function SignupPage() {
                                     <label className="text-[10px] font-black text-primary uppercase tracking-[0.2em] ml-1">Workspace Role</label>
                                     <div className="grid grid-cols-2 gap-2">
                                         {([
-                                            ["pre_founder", "창업자"],
-                                            ["manager", "주관기관"],
-                                        ] as const).map(([role, label]) => (
+                                            ["pre_founder", "창업자", true],
+                                            ["manager", "주관기관", false],
+                                        ] as const).map(([role, label, selectable]) => (
                                             <button
                                                 key={role}
                                                 type="button"
+                                                disabled={!selectable}
                                                 onClick={() => setStartupRole(role)}
-                                                className={`h-12 rounded-xl border text-sm font-bold transition-colors ${startupRole === role ? "border-primary bg-primary/10 text-primary" : "border-slate-200 text-slate-500"}`}
+                                                className={`h-12 rounded-xl border text-sm font-bold transition-colors ${startupRole === role ? "border-primary bg-primary/10 text-primary" : "border-slate-200 text-slate-500"} disabled:cursor-not-allowed disabled:opacity-40`}
                                             >
                                                 {label}
                                             </button>
                                         ))}
                                     </div>
+                                    <p className="ml-1 text-[11px] font-semibold text-slate-400">
+                                        주관기관 매니저 계정은 기관이 직접 발급합니다. 담당자에게 문의해 주세요.
+                                    </p>
                                 </div>
 
                                 <div className="space-y-2">
