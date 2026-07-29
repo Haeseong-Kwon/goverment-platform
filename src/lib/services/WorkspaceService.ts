@@ -1,5 +1,5 @@
 import { supabase } from "../supabase";
-import type { StartupRole } from "@/features/startup-workspace/domain";
+import type { EligibilityAnswers, EligibilityReport, StartupRole } from "@/features/startup-workspace/domain";
 import type { TaskStatus } from "@/features/startup-workspace/domain";
 import type { ManagerSubmissionInput } from "@/features/startup-workspace/types";
 import type { ExpenseVerdict } from "@/features/expense-rules/types";
@@ -340,6 +340,91 @@ export async function submitReviewDecision(
   }
   await trackWorkspaceEvent("settlement_reviewed", undefined, { submissionId, decision, reasonCodes: payload.reasonCodes });
   return data as string;
+}
+
+export interface SavedEligibilityReport {
+  programId: string;
+  answers: EligibilityAnswers;
+  report: EligibilityReport;
+  createdAt: string;
+}
+
+/** 자격 진단 결과를 팀 단위로 저장합니다. 준비 팀이 없으면 저장만 건너뜁니다. */
+export async function saveEligibilityReport(programId: string, answers: EligibilityAnswers, report: EligibilityReport) {
+  const client = requireClient();
+  const { data: auth, error: authError } = await client.auth.getUser();
+  if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
+  const teamId = await getCurrentPrepTeamId();
+  const { error } = await client.from("diagnosis_reports").insert({
+    prep_team_id: teamId,
+    report_type: "eligibility",
+    state: report.state,
+    score: report.score,
+    result: { programId, answers, report },
+    created_by: auth.user.id,
+  });
+  if (error) throw error;
+  await trackWorkspaceEvent("eligibility_diagnosis_saved", teamId, { programId, state: report.state });
+}
+
+/** 가장 최근 자격 진단을 복원합니다. 없으면 null. */
+export async function getLatestEligibilityReport(): Promise<SavedEligibilityReport | null> {
+  const client = requireClient();
+  const teamId = await getCurrentPrepTeamId();
+  const { data, error } = await client
+    .from("diagnosis_reports")
+    .select("result, created_at")
+    .eq("prep_team_id", teamId)
+    .eq("report_type", "eligibility")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  const result = data?.result as { programId?: string; answers?: EligibilityAnswers; report?: EligibilityReport } | undefined;
+  if (!result?.report) return null;
+  return {
+    programId: result.programId ?? "",
+    answers: result.answers ?? { hasBusinessRegistration: null },
+    report: result.report,
+    createdAt: data!.created_at as string,
+  };
+}
+
+/** 이번 달 사업계획서 AI 진단 사용 이력. 무료 횟수 계산 입력입니다. */
+export async function getBizplanDiagnosisEvents(): Promise<string[]> {
+  const client = requireClient();
+  const { data: auth } = await client.auth.getUser();
+  if (!auth.user) return [];
+  const { data, error } = await client
+    .from("workspace_events")
+    .select("created_at")
+    .eq("user_id", auth.user.id)
+    .eq("event_name", "bizplan_diagnosis")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return (data ?? []).map((row) => row.created_at as string);
+}
+
+export interface ManagerBootstrapResult {
+  institutionId: string;
+  institutionName: string;
+  conversionCode: string;
+}
+
+/**
+ * 허용목록에 등록된 계정을 기관 매니저로 승격합니다. 완제품 전 단계에서
+ * SQL 수동 실행 없이 기관 화면을 실제 데이터로 확인하기 위한 경로입니다.
+ */
+export async function bootstrapManagerAccess(): Promise<ManagerBootstrapResult> {
+  const client = requireClient();
+  const { data } = await client.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error("로그인이 필요합니다.");
+  const response = await fetch("/api/admin/bootstrap-manager", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error ?? "기관 계정 전환에 실패했습니다.");
+  return body as ManagerBootstrapResult;
 }
 
 /** 기간별 반려 사유 코드 목록 — 매니저 리포트의 사유 분포 계산 입력. */

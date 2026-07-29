@@ -18,10 +18,11 @@ import {
   Users,
 } from "lucide-react";
 import { canManagerSeeReviewItem, getDdayTone, getFounderDashboardSummary, getLandingNavigation, getManagerDashboardSummary, getMonthlyDiagnosticUsage, getSidebarLinks, getStartupMilestones, isSidebarLinkActive } from "./logic";
+import { EligibilityPanel } from "./EligibilityPanel";
 import type { DdayTone, StartupRole } from "./types";
 import { cn } from "@/lib/utils";
 import { calculateInsurance } from "./rules";
-import { captureLead, convertPrepTeam, createWorkspaceTask, getManagerReviewSubmissions, getRejectionReasonCodes, getWorkspaceTasks, joinWaitlist, type ManagerReviewSubmission, type PersistedTask, requestSettlementReview, submitReviewDecision, updateWorkspaceTask } from "@/lib/services/WorkspaceService";
+import { bootstrapManagerAccess, captureLead, getBizplanDiagnosisEvents, trackWorkspaceEvent, convertPrepTeam, createWorkspaceTask, getManagerReviewSubmissions, getRejectionReasonCodes, getStartupProfile, getWorkspaceTasks, joinWaitlist, type ManagerBootstrapResult, type ManagerReviewSubmission, type PersistedTask, requestSettlementReview, submitReviewDecision, updateWorkspaceTask } from "@/lib/services/WorkspaceService";
 import { StatusBadge } from "./ui";
 import { ExpenseValidator } from "@/features/expense-rules/ExpenseValidator";
 import { PreDeliberationPanel } from "@/features/expense-rules/PreDeliberation";
@@ -36,57 +37,8 @@ function DdayPill({ dday }: { dday: number }) {
   return <StatusBadge tone={tone}>D-{dday}</StatusBadge>;
 }
 
-function ScoreRing({ score, tone, label }: { score: number; tone: "green" | "amber" | "red"; label: string }) {
-  return (
-    <div className="flex items-center gap-5">
-      <div className="grid h-28 w-28 place-items-center rounded-full" style={{ background: `conic-gradient(#2563EB ${score * 3.6}deg, #E2E8F0 0deg)` }}>
-        <div className="grid h-20 w-20 place-items-center rounded-full bg-white">
-          <strong className="text-2xl font-bold tabular-nums text-[#0F172A]">{score}</strong>
-        </div>
-      </div>
-      <div>
-        <div className="flex flex-wrap gap-2"><StatusBadge tone={tone}>{label}</StatusBadge><StatusBadge tone="blue">AI 추정</StatusBadge></div>
-        <p className="mt-3 text-sm leading-6 text-[#475569]">입력하신 정보와 보관함 자료를 기준으로 추정했습니다.</p>
-      </div>
-    </div>
-  );
-}
-
 function ContributionBars({ items }: { items: Array<{ label: string; value: number; max?: number; unknown?: boolean }> }) {
   return <div className="space-y-3">{items.map((item) => <div key={item.label}><div className="mb-1 flex items-center justify-between text-sm"><span className="font-semibold text-[#0F172A]">{item.label}</span><span className="tabular-nums text-[#475569]">{item.unknown ? "확인 필요" : `${item.value}/${item.max ?? 25}`}</span></div><div className={cn("h-2.5 rounded-full bg-[#EFF6FF]", item.unknown && "border border-dashed border-[#94A3B8] bg-white")}><div className="h-full rounded-full bg-[#2563EB]" style={{ width: item.unknown ? "36%" : `${Math.min(100, (item.value / (item.max ?? 25)) * 100)}%` }} /></div></div>)}</div>;
-}
-
-function ReasonList({ items }: { items: Array<{ tone: "green" | "amber" | "red"; text: string }> }) {
-  return <ul className="space-y-2">{items.map((item) => <li key={item.text} className="flex gap-2 text-sm text-[#475569]"><span className={cn("grid h-5 w-5 shrink-0 place-items-center rounded-full text-xs font-bold", item.tone === "green" ? "bg-[#F0FDF4] text-[#16A34A]" : item.tone === "amber" ? "bg-[#FFFBEB] text-[#B45309]" : "bg-[#FEF2F2] text-[#DC2626]")}>{item.tone === "green" ? "✓" : "!"}</span>{item.text}</li>)}</ul>;
-}
-
-function NextActions({ items }: { items: string[] }) {
-  return <div className="space-y-2">{items.map((item) => <div key={item} className="flex items-center justify-between gap-3 rounded-xl border border-[#E2E8F0] p-3"><span className="text-sm font-medium text-[#0F172A]">{item}</span><button className="shrink-0 rounded-[10px] border border-[#2563EB] bg-white px-3 py-1.5 text-xs font-bold text-[#2563EB]">TODO에 추가</button></div>)}</div>;
-}
-
-function A1Report({ kind }: { kind: "eligibility" | "bizplan" }) {
-  const isBiz = kind === "bizplan";
-  return (
-    <section className="rounded-2xl border border-[#E2E8F0] bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,.04),0_8px_24px_rgba(15,23,42,.06)]">
-      <ScoreRing score={isBiz ? 62 : 88} tone={isBiz ? "amber" : "green"} label={isBiz ? "보완 권장" : "신청 가능"} />
-      <div className="mt-6"><h3 className="mb-3 text-xl font-semibold text-[#0F172A]">{isBiz ? "PSST 항목 분해" : "자격 판단 기여도"}</h3><ContributionBars items={isBiz ? [{ label: "Problem", value: 18 }, { label: "Solution", value: 12 }, { label: "Scale-up", value: 20 }, { label: "Team", value: 12 }] : [{ label: "업력", value: 25 }, { label: "기수혜 이력", value: 22 }, { label: "대표자 요건", value: 21 }, { label: "사업 분야", value: 20 }]} /></div>
-      <div className="mt-6"><h3 className="mb-3 text-xl font-semibold text-[#0F172A]">왜 이렇게 판단했나요</h3><ReasonList items={isBiz ? [{ tone: "green", text: "문제 정의와 고객군은 명확합니다." }, { tone: "amber", text: "시장 진입 전략의 근거 수치가 부족합니다." }] : [{ tone: "green", text: "대표자 업력과 사업자등록 상태가 신청 조건에 맞습니다." }, { tone: "amber", text: "기수혜 이력은 추가 확인이 필요합니다." }]} /></div>
-      <div className="mt-6 rounded-xl bg-[#F8FAFC] p-4"><h3 className="text-sm font-bold text-[#0F172A]">아직 확인하지 못한 데이터</h3><p className="mt-2 text-sm text-[#475569]">○ 사업자등록 사실증명 최신본, ○ 팀원 4대보험 가입 여부</p></div>
-      <div className="mt-6"><h3 className="mb-3 text-xl font-semibold text-[#0F172A]">다음 액션</h3><NextActions items={isBiz ? ["시장 규모 근거 표를 1장 추가", "수익 모델의 월별 가정을 보강"] : ["사실증명 최신본 업로드", "지원사업 공고문 자격 조항 확인"]} /></div>
-      {isBiz && <SwotQuadrant />}
-      {!isBiz && <RecommendationCards />}
-      <p className="mt-5 text-[13px] font-medium text-[#94A3B8]">본 진단은 참고용 AI 추정이며 최종 선정 또는 적격 여부를 보장하지 않습니다.</p>
-    </section>
-  );
-}
-
-function RecommendationCards() {
-  return <div className="mt-6 grid gap-3 md:grid-cols-3">{["예비창업패키지", "모두의창업", "초기창업패키지"].map((name, index) => <article key={name} className="rounded-2xl border border-[#E2E8F0] p-4"><StatusBadge tone={index === 2 ? "amber" : "green"}>{index === 2 ? "확인 필요" : "적합"}</StatusBadge><h4 className="mt-3 font-bold text-[#0F172A]">{name}</h4><p className="mt-1 text-sm text-[#475569]">2026년 2분기 공고 예상</p><button className="mt-3 text-sm font-bold text-[#2563EB]">캘린더에 추가</button></article>)}</div>;
-}
-
-function SwotQuadrant() {
-  const items = [["S", "기술 검증 근거가 선명합니다.", "green"], ["W", "유통 채널 가설이 약합니다.", "amber"], ["O", "공공 조달 연계성이 있습니다.", "blue"], ["T", "대기업 진입 가능성이 있습니다.", "red"]] as const;
-  return <div className="mt-6 grid gap-3 md:grid-cols-2">{items.map(([k, text, tone]) => <div key={k} className="rounded-xl border border-[#E2E8F0] p-4"><StatusBadge tone={tone}>{k}</StatusBadge><p className="mt-2 text-sm text-[#475569]">{text}</p></div>)}</div>;
 }
 
 function Sidebar({ role }: { role: StartupRole }) {
@@ -135,7 +87,6 @@ function FounderCore({ founder = false }: { founder?: boolean }) {
 type FounderFeature = "todo" | "calendar" | "diagnostics" | "calculator" | "incorporation" | "connect" | "vault" | "settings" | "precheck" | "predeliberation" | "tracker";
 
 function FounderFeaturePage({ feature, founder = false }: { feature: FounderFeature; founder?: boolean }) {
-  const usage = getMonthlyDiagnosticUsage(["2026-07-01T09:00:00.000Z"], new Date("2026-07-06T00:00:00.000Z"));
   const titleByFeature: Record<FounderFeature, string> = {
     todo: "팀 TODO",
     calendar: "마감 캘린더",
@@ -149,7 +100,7 @@ function FounderFeaturePage({ feature, founder = false }: { feature: FounderFeat
     predeliberation: "사전심의 합본",
     tracker: "상태 트래커",
   };
-  return <WorkspaceShell role={founder ? "founder" : "pre_founder"}><div className="mb-6"><StatusBadge tone={founder ? "green" : "blue"}>{founder ? "선정 팀" : "창업자"}</StatusBadge><h1 className="mt-3 text-[32px] font-bold">{titleByFeature[feature]}</h1><p className="mt-2 text-[#475569]">사이드바 메뉴와 독립된 기능 화면입니다.</p></div>{feature === "todo" && <TaskBoard />}{feature === "calendar" && <CalendarPreview />}{feature === "diagnostics" && <div className="space-y-6"><A1Report kind="eligibility" /><BizPlanCard exhausted={usage.isExhausted} /></div>}{feature === "calculator" && <CalculatorCard />}{feature === "incorporation" && <IncorporationCard />}{feature === "connect" && <ConnectCard />}{feature === "vault" && <VaultCard />}{feature === "settings" && <SettingsPanel founder={founder} />}{feature === "precheck" && <PrecheckPanel />}{feature === "predeliberation" && <PreDeliberationPanel />}{feature === "tracker" && <TrackerPanel />}</WorkspaceShell>;
+  return <WorkspaceShell role={founder ? "founder" : "pre_founder"}><div className="mb-6"><StatusBadge tone={founder ? "green" : "blue"}>{founder ? "선정 팀" : "창업자"}</StatusBadge><h1 className="mt-3 text-[32px] font-bold">{titleByFeature[feature]}</h1><p className="mt-2 text-[#475569]">사이드바 메뉴와 독립된 기능 화면입니다.</p></div>{feature === "todo" && <TaskBoard />}{feature === "calendar" && <CalendarPreview />}{feature === "diagnostics" && <div className="space-y-6"><EligibilityPanel /><BizPlanCard /></div>}{feature === "calculator" && <CalculatorCard />}{feature === "incorporation" && <IncorporationCard />}{feature === "connect" && <ConnectCard />}{feature === "vault" && <VaultCard />}{feature === "settings" && <SettingsPanel founder={founder} />}{feature === "precheck" && <PrecheckPanel />}{feature === "predeliberation" && <PreDeliberationPanel />}{feature === "tracker" && <TrackerPanel />}</WorkspaceShell>;
 }
 
 function SettingsPanel({ founder }: { founder: boolean }) {
@@ -209,13 +160,18 @@ function VaultCard() {
   return <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">서류 보관함</h2><p className="mt-2 rounded-xl bg-[#EFF6FF] p-3 text-sm text-[#2563EB]">선정 후 파일과 팀원만 기관 Team으로 이관됩니다.</p>{["사업계획서", "증빙서류", "검토본 아카이브"].map((folder) => <div key={folder} className="mt-3 flex items-center gap-3 rounded-xl border border-[#E2E8F0] p-3"><Archive size={17} /><span className="font-semibold">{folder}</span><StatusBadge>v2</StatusBadge><span className="ml-auto text-sm text-[#94A3B8]">댓글 2</span></div>)}</div>;
 }
 
-function BizPlanCard({ exhausted }: { exhausted: boolean }) {
-  return <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><div className="flex items-center justify-between"><h2 className="text-xl font-bold">사업계획서 AI 진단</h2><StatusBadge tone={exhausted ? "amber" : "blue"}>{exhausted ? "무료 소진" : "잔여 1/2회"}</StatusBadge></div>{exhausted ? <p className="mt-3 text-sm font-semibold text-[#B45309]">팀원 초대 시 1회 추가</p> : <AiDiagnosisRunner />}</div>;
+function BizPlanCard() {
+  const [events, setEvents] = useState<string[] | null>(null);
+  const reload = () => { getBizplanDiagnosisEvents().then(setEvents).catch(() => setEvents([])); };
+  useEffect(() => { reload(); }, []);
+  const usage = getMonthlyDiagnosticUsage(events ?? []);
+  const loading = events === null;
+  return <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><div className="flex items-center justify-between"><h2 className="text-xl font-bold">사업계획서 AI 진단</h2><StatusBadge tone={loading ? "slate" : usage.isExhausted ? "amber" : "blue"}>{loading ? "확인 중" : usage.isExhausted ? "이번 달 무료 소진" : `잔여 ${usage.remaining}/2회`}</StatusBadge></div>{!loading && usage.isExhausted ? <p className="mt-3 text-sm font-semibold text-[#B45309]">다음 달에 무료 횟수가 초기화됩니다.</p> : <AiDiagnosisRunner onComplete={reload} />}</div>;
 }
 
-function AiDiagnosisRunner() {
+function AiDiagnosisRunner({ onComplete }: { onComplete: () => void }) {
   const [text, setText] = useState(""); const [loading, setLoading] = useState(false); const [error, setError] = useState<string | null>(null); const [result, setResult] = useState<{ psst: Record<string, { score: number; evidence: string }>; actions: string[]; swot: Record<string, string[]>; model: string } | null>(null);
-  const run = async () => { setLoading(true); setError(null); try { const response = await fetch("/api/workspace/diagnoses/bizplan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); setResult(data); } catch (reason) { setError(reason instanceof Error ? reason.message : "AI 진단에 실패했습니다."); } finally { setLoading(false); } };
+  const run = async () => { setLoading(true); setError(null); try { const response = await fetch("/api/workspace/diagnoses/bizplan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); setResult(data); await trackWorkspaceEvent("bizplan_diagnosis", undefined, { model: data.model }); onComplete(); } catch (reason) { setError(reason instanceof Error ? reason.message : "AI 진단에 실패했습니다."); } finally { setLoading(false); } };
   return <div className="mt-4 space-y-4"><textarea value={text} onChange={(event) => setText(event.target.value)} className="min-h-40 w-full rounded-xl border border-[#CBD5E1] p-3 text-sm" placeholder="사업계획서 본문을 100자 이상 붙여 넣으세요." /><button disabled={loading || text.trim().length < 100} onClick={() => void run()} className="rounded-xl bg-[#2563EB] px-4 py-3 text-sm font-bold text-white disabled:opacity-50">{loading ? "GLM 5.2 분석 중…" : "AI 진단 실행"}</button>{error && <p className="rounded-xl bg-[#FEF2F2] p-3 text-sm font-semibold text-[#DC2626]">{error}</p>}{result && <div className="space-y-4 rounded-xl bg-[#F8FAFC] p-4"><p className="text-xs font-bold text-[#2563EB]">{result.model} · AI 추정</p><div className="grid gap-2 sm:grid-cols-2">{Object.entries(result.psst).map(([key, item]) => <div key={key} className="rounded-lg bg-white p-3"><strong>{key} {item.score}/25</strong><p className="mt-1 text-sm text-[#475569]">{item.evidence}</p></div>)}</div><div><strong className="text-sm">보완 액션</strong><ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-[#475569]">{result.actions.map((action) => <li key={action}>{action}</li>)}</ul></div><div className="grid gap-2 sm:grid-cols-2">{Object.entries(result.swot).map(([key, items]) => <div key={key} className="rounded-lg bg-white p-3 text-sm"><strong>{key.toUpperCase()}</strong><p className="mt-1 text-[#475569]">{items.join(" · ")}</p></div>)}</div></div>}<p className="text-xs font-medium text-[#94A3B8]">AI 추정·참고용이며 합격 또는 선정 결과를 보장하지 않습니다.</p></div>;
 }
 
@@ -229,12 +185,38 @@ function ConnectCard() {
   return <div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">커넥트</h2><p className="mt-2 text-sm text-[#475569]">실제 대기 신청만 집계하며, 매칭 서비스는 기관 프로그램 연동 전까지 제공하지 않습니다.</p><div className="mt-4 grid gap-3">{([["팀빌딩", "team_building"], ["멘토", "mentor"], ["투자", "investment"]] as const).map(([label, tab]) => <div key={tab} className="flex items-center justify-between rounded-xl border border-[#E2E8F0] p-4"><span className="font-bold">{label}</span><button onClick={() => apply(tab)} className="rounded-lg border border-[#2563EB] px-3 py-2 text-sm font-bold text-[#2563EB]">대기 신청</button></div>)}</div>{message && <p className="mt-4 rounded-xl bg-[#EFF6FF] p-3 text-sm font-semibold text-[#2563EB]">{message}</p>}</div>;
 }
 
+/** 아직 기관 계정이 아닌 경우, 실제 기관·전환 코드를 만들어 검토 큐를 돌려볼 수 있게 합니다. */
+function ManagerBootstrapCard({ onDone }: { onDone: () => void }) {
+  const [result, setResult] = useState<ManagerBootstrapResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const run = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setResult(await bootstrapManagerAccess());
+      onDone();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "기관 계정 전환에 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  if (result) {
+    return <section className="mb-6 rounded-2xl border border-[#BBF7D0] bg-[#F0FDF4] p-5"><StatusBadge tone="green">기관 계정 활성화됨</StatusBadge><h2 className="mt-3 text-xl font-bold">{result.institutionName}</h2><p className="mt-2 text-sm text-[#475569]">창업자 계정에서 아래 코드를 <strong>합격 전환</strong>에 입력하면 이 기관의 검토 큐로 연결됩니다.</p><p className="mt-3 inline-block rounded-lg bg-white px-4 py-2 font-mono text-lg font-bold tracking-widest text-[#16A34A]">{result.conversionCode}</p></section>;
+  }
+  return <section className="mb-6 rounded-2xl border border-[#FDE68A] bg-[#FFFBEB] p-5"><StatusBadge tone="amber">기관 계정 아님</StatusBadge><h2 className="mt-3 text-xl font-bold">기관 데이터가 연결되지 않았습니다</h2><p className="mt-2 text-sm leading-6 text-[#475569]">현재 계정은 기관 소속이 아니라 검토 큐가 비어 있습니다. 허용목록에 등록된 계정이면 아래 버튼으로 기관과 합격 전환 코드를 생성할 수 있습니다.</p><button onClick={() => void run()} disabled={loading} className="mt-4 rounded-[10px] bg-[#2563EB] px-4 py-3 text-sm font-bold text-white disabled:opacity-50">{loading ? "전환 중…" : "기관 계정 활성화"}</button>{error && <p className="mt-3 rounded-xl bg-[#FEF2F2] p-3 text-sm font-semibold text-[#DC2626]">{error}</p>}</section>;
+}
+
 function ManagerDashboard() {
   const [submissions, setSubmissions] = useState<ManagerReviewSubmission[]>([]);
+  const [isManager, setIsManager] = useState<boolean | null>(null);
   const [message, setMessage] = useState("검토 요청을 불러오는 중입니다.");
+  const loadProfile = () => { getStartupProfile().then((profile) => setIsManager(profile?.role === "manager" && Boolean(profile.institutionId))).catch(() => setIsManager(false)); };
+  useEffect(() => { loadProfile(); }, []);
   useEffect(() => { let mounted = true; getManagerReviewSubmissions().then((items) => { if (!mounted) return; const visible = items.filter(canManagerSeeReviewItem); setSubmissions(visible); setMessage(visible.length ? "" : "검증 통과 후 제출된 검토 요청이 없습니다."); }).catch((reason) => { if (mounted) setMessage(reason instanceof Error ? reason.message : "검토 요청을 불러오지 못했습니다."); }); return () => { mounted = false; }; }, []);
   const summary = getManagerDashboardSummary(submissions);
-  return <WorkspaceShell role="manager"><HeroHeader role="manager" /><section className="grid gap-4 md:grid-cols-4">{[["검토 요청", `${summary.requestCount}건`], ["반려율", `${summary.rejectionRate}%`], ["평균 대기", `${summary.averageWaitDays}일`], ["지연", `${summary.delayedCount}팀`]].map(([label, value], i) => <div key={label} className={cn("rounded-2xl border border-[#E2E8F0] bg-white p-5", i === 3 && summary.delayedCount > 0 && "border-l-4 border-l-[#DC2626]")}><p className="text-sm text-[#475569]">{label}</p><strong className="mt-2 block text-2xl tabular-nums">{value}</strong></div>)}</section>{message && <p className="mt-6 rounded-xl border border-[#E2E8F0] bg-white p-4 text-sm font-semibold text-[#475569]">{message}</p>}<section className="mt-6 grid gap-4 md:grid-cols-3"><Link href="/manager/review" className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">검토 큐</h2><p className="mt-2 text-sm text-[#475569]">검증 통과 요청 {summary.requestCount}건을 확인합니다.</p></Link><Link href="/manager/teams" className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">팀 관리</h2><p className="mt-2 text-sm text-[#475569]">제출 이력이 있는 선정 팀만 봅니다.</p></Link><Link href="/manager/reports" className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">리포트</h2><p className="mt-2 text-sm text-[#475569]">실제 검토 요청 기준으로 집계합니다.</p></Link></section></WorkspaceShell>;
+  return <WorkspaceShell role="manager"><HeroHeader role="manager" />{isManager === false && <ManagerBootstrapCard onDone={loadProfile} />}<section className="grid gap-4 md:grid-cols-4">{[["검토 요청", `${summary.requestCount}건`], ["반려율", `${summary.rejectionRate}%`], ["평균 대기", `${summary.averageWaitDays}일`], ["지연", `${summary.delayedCount}팀`]].map(([label, value], i) => <div key={label} className={cn("rounded-2xl border border-[#E2E8F0] bg-white p-5", i === 3 && summary.delayedCount > 0 && "border-l-4 border-l-[#DC2626]")}><p className="text-sm text-[#475569]">{label}</p><strong className="mt-2 block text-2xl tabular-nums">{value}</strong></div>)}</section>{message && <p className="mt-6 rounded-xl border border-[#E2E8F0] bg-white p-4 text-sm font-semibold text-[#475569]">{message}</p>}<section className="mt-6 grid gap-4 md:grid-cols-3"><Link href="/manager/review" className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">검토 큐</h2><p className="mt-2 text-sm text-[#475569]">검증 통과 요청 {summary.requestCount}건을 확인합니다.</p></Link><Link href="/manager/teams" className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">팀 관리</h2><p className="mt-2 text-sm text-[#475569]">제출 이력이 있는 선정 팀만 봅니다.</p></Link><Link href="/manager/reports" className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">리포트</h2><p className="mt-2 text-sm text-[#475569]">실제 검토 요청 기준으로 집계합니다.</p></Link></section></WorkspaceShell>;
 }
 
 function ManagerReviewQueuePage() {
