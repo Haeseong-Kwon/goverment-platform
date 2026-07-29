@@ -1,3 +1,3 @@
-import { ManagerDashboard } from "@/features/startup-workspace/components";
+import { ManagerDashboard } from "@/features/startup-workspace/ManagerScreens";
 
 export default ManagerDashboard;

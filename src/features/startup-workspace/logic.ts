@@ -36,6 +36,18 @@ export function getDdayTone(dday: number) {
   return "slate";
 }
 
+/**
+ * 남은 일수. 시각이 아니라 날짜(UTC 자정)끼리 빼서 오늘 마감이 항상 0이 되게 합니다.
+ * 마감일이 없으면 null이며, 지난 마감은 음수입니다.
+ */
+export function getDday(dueDate: string | null | undefined, now = new Date()): number | null {
+  if (!dueDate) return null;
+  const due = Date.parse(`${dueDate}T00:00:00Z`);
+  if (!Number.isFinite(due)) return null;
+  const todayKey = now.toISOString().slice(0, 10);
+  return Math.round((due - Date.parse(`${todayKey}T00:00:00Z`)) / 86_400_000);
+}
+
 export function getSidebarItems(role: StartupRole) {
   return sidebarByRole[role].map((item) => item.label);
 }
@@ -64,24 +76,31 @@ export function getFounderDashboardSummary(tasks: DashboardTaskInput[]) {
   return { remainingTasks, automaticTasks, completionRate, nextDueDate };
 }
 
+const DELAY_THRESHOLD_DAYS = 3;
+
+/**
+ * 대기·지연은 아직 판정하지 않은 건에 대해서만 셉니다.
+ * 이미 승인·반려한 건까지 "지연"으로 세면 처리할수록 지표가 나빠져 큐를 잘못 읽게 됩니다.
+ */
 export function getManagerDashboardSummary(submissions: ManagerSubmissionInput[], now = new Date()) {
   const visibleSubmissions = submissions.filter((submission) => canManagerSeeReviewItem(submission));
   const requestCount = visibleSubmissions.length;
   const rejectedCount = visibleSubmissions.filter((submission) => submission.status === "rejected").length;
-  const delayedCount = visibleSubmissions.filter((submission) => {
-    const createdAt = new Date(submission.createdAt).getTime();
-    return Number.isFinite(createdAt) && now.getTime() - createdAt >= 3 * 86_400_000;
-  }).length;
-  const totalWaitDays = visibleSubmissions.reduce((sum, submission) => {
-    const createdAt = new Date(submission.createdAt).getTime();
-    if (!Number.isFinite(createdAt)) return sum;
-    return sum + Math.max(0, (now.getTime() - createdAt) / 86_400_000);
-  }, 0);
+
+  const waitingDays = visibleSubmissions
+    .filter((submission) => submission.status !== "approved" && submission.status !== "rejected")
+    .map((submission) => (now.getTime() - new Date(submission.createdAt).getTime()) / 86_400_000)
+    .filter((days) => Number.isFinite(days))
+    .map((days) => Math.max(0, days));
+
+  const totalWaitDays = waitingDays.reduce((sum, days) => sum + days, 0);
+
   return {
     requestCount,
     rejectionRate: requestCount ? Math.round((rejectedCount / requestCount) * 100) : 0,
-    delayedCount,
-    averageWaitDays: requestCount ? Math.round((totalWaitDays / requestCount) * 10) / 10 : 0,
+    pendingCount: waitingDays.length,
+    delayedCount: waitingDays.filter((days) => days >= DELAY_THRESHOLD_DAYS).length,
+    averageWaitDays: waitingDays.length ? Math.round((totalWaitDays / waitingDays.length) * 10) / 10 : 0,
   };
 }
 

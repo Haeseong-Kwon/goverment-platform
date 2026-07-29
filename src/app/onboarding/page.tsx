@@ -1,91 +1,177 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
+import { getCurrentUser } from "@/lib/services/AuthService";
 import { completeOnboarding } from "@/lib/services/WorkspaceService";
+import { STARTUP_PROGRAMS } from "@/features/startup-workspace/rules";
+import { Button, ChoiceChip, Field, Notice, StatusBadge, inputClass } from "@/features/startup-workspace/ui";
+import { cn } from "@/lib/utils";
 
-const programs = [
-  { id: "yechang-2026", label: "예비창업패키지" },
-  { id: "chocang-2026", label: "초기창업패키지" },
-  { id: "modu-2026", label: "모두의창업" },
-];
+const STEPS = [
+  { title: "대표자 정보", hint: "누가 팀을 이끄는지 확인합니다." },
+  { title: "지원사업 선택", hint: "선택한 공고의 마감일로 준비 일정을 역산합니다." },
+  { title: "아이템 소개", hint: "자격 진단과 계획서 진단의 기준이 됩니다." },
+] as const;
+
+const emptyForm = {
+  fullName: "",
+  position: "대표",
+  teamName: "",
+  itemSummary: "",
+  industry: "",
+  programIds: [] as string[],
+  teamBuildingIntent: false,
+  desiredPositions: "",
+};
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const [step, setStep] = useState(1);
+  const [checking, setChecking] = useState(true);
+  const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    fullName: "",
-    position: "대표",
-    teamName: "",
-    itemSummary: "",
-    industry: "",
-    programIds: [] as string[],
-    teamBuildingIntent: false,
-    desiredPositions: "",
-  });
+  const [form, setForm] = useState(emptyForm);
 
-  const toggleProgram = (programId: string) => setForm((current) => ({
-    ...current,
-    programIds: current.programIds.includes(programId)
-      ? current.programIds.filter((id) => id !== programId)
-      : [...current.programIds, programId],
-  }));
+  useEffect(() => {
+    let mounted = true;
+    getCurrentUser()
+      .then((user) => {
+        if (!mounted) return;
+        if (!user) router.replace("/login");
+        else setChecking(false);
+      })
+      .catch(() => { if (mounted) setChecking(false); });
+    return () => { mounted = false; };
+  }, [router]);
+
+  const patch = (changes: Partial<typeof form>) => setForm((current) => ({ ...current, ...changes }));
+
+  const toggleProgram = (programId: string) =>
+    setForm((current) => ({
+      ...current,
+      programIds: current.programIds.includes(programId)
+        ? current.programIds.filter((id) => id !== programId)
+        : [...current.programIds, programId],
+    }));
+
+  const stepValid =
+    step === 0 ? Boolean(form.fullName.trim() && form.teamName.trim())
+    : step === 1 ? true
+    : Boolean(form.itemSummary.trim());
 
   const submit = async () => {
-    if (!form.fullName.trim() || !form.teamName.trim() || !form.itemSummary.trim()) {
-      setError("이름, 팀 이름, 아이템 소개를 입력해 주세요.");
-      return;
-    }
     setLoading(true);
     setError(null);
     try {
       const result = await completeOnboarding({
         ...form,
+        fullName: form.fullName.trim(),
+        teamName: form.teamName.trim(),
+        itemSummary: form.itemSummary.trim(),
         desiredPositions: form.desiredPositions.split(",").map((item) => item.trim()).filter(Boolean),
       });
       router.replace(result.redirect);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "온보딩을 완료하지 못했습니다.");
-    } finally {
       setLoading(false);
     }
   };
 
+  if (checking) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#F8FAFC]">
+        <Loader2 className="animate-spin text-[#2563EB]" size={28} />
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#F8FAFC] px-5 py-10 text-[#0F172A]">
-      <section className="mx-auto max-w-2xl rounded-3xl border border-[#E2E8F0] bg-white p-6 shadow-sm md:p-10">
-        <p className="text-sm font-bold text-[#2563EB]">창업자 워크스페이스 설정 · {step}/3</p>
-        <h1 className="mt-3 text-3xl font-bold">준비 흐름을 개인화합니다</h1>
-        <p className="mt-2 text-sm leading-6 text-[#475569]">입력한 정보는 자격 진단, 마감 일정, 팀 TODO의 기준으로 사용됩니다.</p>
+      <div className="mx-auto max-w-2xl">
+        <Link href="/" className="text-xl font-bold">StartUp Pilot</Link>
 
-        {step === 1 && <div className="mt-8 grid gap-4">
-          <Field label="이름" value={form.fullName} onChange={(fullName) => setForm({ ...form, fullName })} placeholder="홍길동" />
-          <Field label="현재 포지션" value={form.position} onChange={(position) => setForm({ ...form, position })} placeholder="대표 / 기획 / 개발" />
-          <Field label="팀 이름" value={form.teamName} onChange={(teamName) => setForm({ ...form, teamName })} placeholder="예: 성장하는 팀" />
-        </div>}
+        <ol className="mt-6 flex gap-2">
+          {STEPS.map((item, index) => (
+            <li key={item.title} className="flex-1">
+              <div className={cn("h-1.5 rounded-full", index <= step ? "bg-[#2563EB]" : "bg-[#E2E8F0]")} />
+              <p className={cn("mt-2 text-xs font-bold", index <= step ? "text-[#2563EB]" : "text-[#94A3B8]")}>
+                {index < step ? <Check size={12} className="mr-1 inline" /> : `${index + 1}. `}{item.title}
+              </p>
+            </li>
+          ))}
+        </ol>
 
-        {step === 2 && <div className="mt-8 space-y-5">
-          <div><p className="text-sm font-bold">준비 중인 지원사업</p><p className="mt-1 text-xs text-[#64748B]">선택하지 않아도 시작할 수 있으며, 나중에 일정에 추가할 수 있습니다.</p></div>
-          <div className="grid gap-3 sm:grid-cols-3">{programs.map((program) => <button key={program.id} type="button" onClick={() => toggleProgram(program.id)} className={`rounded-2xl border p-4 text-left text-sm font-bold ${form.programIds.includes(program.id) ? "border-[#2563EB] bg-[#EFF6FF] text-[#1D4ED8]" : "border-[#E2E8F0]"}`}>{program.label}</button>)}</div>
-        </div>}
+        <section className="mt-5 rounded-3xl border border-[#E2E8F0] bg-white p-6 md:p-9">
+          <h1 className="text-[26px] font-bold md:text-[30px]">{STEPS[step].title}</h1>
+          <p className="mt-2 text-sm leading-6 text-[#475569]">{STEPS[step].hint}</p>
 
-        {step === 3 && <div className="mt-8 grid gap-4">
-          <Field label="아이템 한 줄 소개" value={form.itemSummary} onChange={(itemSummary) => setForm({ ...form, itemSummary })} placeholder="예: 소상공인을 위한 재고 예측 서비스" />
-          <Field label="업종" value={form.industry} onChange={(industry) => setForm({ ...form, industry })} placeholder="예: SaaS, 교육, 제조" />
-          <label className="flex items-center gap-3 rounded-2xl bg-[#F8FAFC] p-4 text-sm font-semibold"><input type="checkbox" checked={form.teamBuildingIntent} onChange={(event) => setForm({ ...form, teamBuildingIntent: event.target.checked })} /> 함께할 팀원을 찾고 있어요</label>
-          {form.teamBuildingIntent && <Field label="찾는 포지션 (쉼표로 구분)" value={form.desiredPositions} onChange={(desiredPositions) => setForm({ ...form, desiredPositions })} placeholder="개발, 디자인" />}
-        </div>}
+          {step === 0 && (
+            <div className="mt-7 grid gap-4">
+              <Field label="이름"><input value={form.fullName} onChange={(event) => patch({ fullName: event.target.value })} placeholder="홍길동" className={inputClass} /></Field>
+              <Field label="현재 포지션"><input value={form.position} onChange={(event) => patch({ position: event.target.value })} placeholder="대표 / 기획 / 개발" className={inputClass} /></Field>
+              <Field label="팀 이름" hint="워크스페이스와 초대 코드에 표시됩니다."><input value={form.teamName} onChange={(event) => patch({ teamName: event.target.value })} placeholder="예: 성장하는 팀" className={inputClass} /></Field>
+            </div>
+          )}
 
-        {error && <p className="mt-5 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-600">{error}</p>}
-        <div className="mt-8 flex justify-between gap-3"><button type="button" disabled={step === 1 || loading} onClick={() => setStep(step - 1)} className="rounded-xl border border-[#CBD5E1] px-5 py-3 text-sm font-bold disabled:opacity-40">이전</button>{step < 3 ? <button type="button" onClick={() => setStep(step + 1)} className="rounded-xl bg-[#2563EB] px-5 py-3 text-sm font-bold text-white">다음</button> : <button type="button" disabled={loading} onClick={submit} className="inline-flex items-center gap-2 rounded-xl bg-[#2563EB] px-5 py-3 text-sm font-bold text-white">{loading && <Loader2 size={16} className="animate-spin" />}설정 완료</button>}</div>
-      </section>
+          {step === 1 && (
+            <div className="mt-7 space-y-4">
+              <p className="text-sm text-[#64748B]">선택하지 않아도 시작할 수 있고, 나중에 캘린더에서 추가할 수 있습니다.</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {STARTUP_PROGRAMS.map((program) => {
+                  const selected = form.programIds.includes(program.id);
+                  return (
+                    <ChoiceChip
+                      key={program.id}
+                      selected={selected}
+                      onClick={() => toggleProgram(program.id)}
+                      className="rounded-2xl p-4 text-left"
+                    >
+                      {program.name}
+                      <span className="mt-2 block text-xs font-semibold text-[#94A3B8]">
+                        {program.requiresNoBusinessRegistration ? "사업자등록 없어야 함" : "사업자등록 무관"}
+                      </span>
+                    </ChoiceChip>
+                  );
+                })}
+              </div>
+              <p className="rounded-xl bg-[#F8FAFC] p-4 text-sm leading-6 text-[#475569]">
+                선택한 사업의 공고 마감일을 기준으로 초안·증빙·리허설·제출 마일스톤이 자동 생성됩니다.
+              </p>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="mt-7 grid gap-4">
+              <Field label="아이템 한 줄 소개"><input value={form.itemSummary} onChange={(event) => patch({ itemSummary: event.target.value })} placeholder="예: 소상공인을 위한 재고 예측 서비스" className={inputClass} /></Field>
+              <Field label="업종"><input value={form.industry} onChange={(event) => patch({ industry: event.target.value })} placeholder="예: SaaS, 교육, 제조" className={inputClass} /></Field>
+              <label className="flex items-center gap-3 rounded-2xl bg-[#F8FAFC] p-4 text-sm font-semibold">
+                <input type="checkbox" className="h-4 w-4" checked={form.teamBuildingIntent} onChange={(event) => patch({ teamBuildingIntent: event.target.checked })} />
+                함께할 팀원을 찾고 있어요
+              </label>
+              {form.teamBuildingIntent && (
+                <Field label="찾는 포지션" hint="쉼표로 구분해 주세요."><input value={form.desiredPositions} onChange={(event) => patch({ desiredPositions: event.target.value })} placeholder="개발, 디자인" className={inputClass} /></Field>
+              )}
+            </div>
+          )}
+
+          {error && <div className="mt-5"><Notice tone="error" onDismiss={() => setError(null)}>{error}</Notice></div>}
+
+          <div className="mt-8 flex items-center justify-between gap-3">
+            <Button variant="secondary" size="lg" disabled={step === 0 || loading} onClick={() => setStep((current) => current - 1)}>
+              이전
+            </Button>
+            {!stepValid && <StatusBadge tone="amber">필수 항목을 입력해 주세요</StatusBadge>}
+            {step < STEPS.length - 1 ? (
+              <Button size="lg" disabled={!stepValid} onClick={() => setStep((current) => current + 1)}>다음</Button>
+            ) : (
+              <Button size="lg" loading={loading} disabled={!stepValid} onClick={() => void submit()}>설정 완료</Button>
+            )}
+          </div>
+        </section>
+      </div>
     </main>
   );
-}
-
-function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder: string }) {
-  return <label className="grid gap-2 text-sm font-bold">{label}<input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="h-12 rounded-xl border border-[#CBD5E1] px-4 font-medium outline-none focus:border-[#2563EB]" /></label>;
 }

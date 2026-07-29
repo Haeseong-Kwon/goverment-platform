@@ -5,7 +5,7 @@ const SECTIONS = [
     title: "창업자",
     links: [
       { href: "/founder/diagnostics", label: "AI 자격진단" },
-      { href: "/founder/calculator", label: "세금 계산기" },
+      { href: "/founder/calculator", label: "4대보험 계산기" },
       { href: "/workspace/precheck", label: "정산 사전검증" },
     ],
   },
@@ -48,7 +48,7 @@ export function Footer() {
         </div>
 
         <div className="flex flex-col items-start justify-between gap-4 border-t border-slate-800 pt-8 md:flex-row md:items-center">
-          <p className="text-xs font-semibold text-slate-500">© 2026 INSPEC. All rights reserved.</p>
+          <p className="text-xs font-semibold text-slate-500">© {new Date().getFullYear()} StartUp Pilot. All rights reserved.</p>
           <p className="text-xs font-medium text-slate-500">
             AI 진단·계산 결과는 참고용이며, 최종 기준은 각 사업 공고문과 관리지침입니다.
           </p>

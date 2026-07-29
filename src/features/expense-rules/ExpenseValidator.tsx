@@ -5,7 +5,7 @@ import { AlertTriangle, CheckCircle2, Info, Sparkles } from "lucide-react";
 import { validateExpense } from "./engine";
 import { CATEGORIES, CATEGORY_LIST, FRAUD_WARNING, ITEM_FLAG_LABELS, REASON_CODES } from "./ruleset";
 import type { ExpenseCategory, ExpenseInput, ExpenseVerdict, ItemFlag, Severity } from "./types";
-import { Field, Panel, StatusBadge, inputClass, type StatusTone } from "../startup-workspace/ui";
+import { Button, ChoiceChip, Field, Notice, Panel, StatusBadge, inputClass, textareaClass, type StatusTone } from "../startup-workspace/ui";
 import { cn } from "@/lib/utils";
 
 interface AiJudgement {
@@ -77,13 +77,9 @@ export function VerdictReport({ verdict, ai, onRequestReview }: { verdict: Expen
         </div>
         <p className="mt-3 text-sm font-semibold leading-6 text-[#475569]">{verdict.summary}</p>
         {onRequestReview && (
-          <button
-            onClick={onRequestReview}
-            disabled={verdict.verdict === "fail"}
-            className="mt-4 rounded-[10px] bg-[#2563EB] px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
-          >
+          <Button onClick={onRequestReview} disabled={verdict.verdict === "fail"} className="mt-4">
             {verdict.verdict === "fail" ? "위반 항목을 먼저 수정하세요" : "매니저에게 검토 요청"}
-          </button>
+          </Button>
         )}
       </Panel>
 
@@ -139,9 +135,12 @@ export function VerdictReport({ verdict, ai, onRequestReview }: { verdict: Expen
   );
 }
 
+/** 협약 기간 기본값. 대부분의 사업이 당해 연도 안에서 끝나므로 올해 기준으로 채우고, 사용자가 고칠 수 있게 둡니다. */
+const currentYear = () => new Date().getFullYear();
+
 export function ExpenseValidator({
-  agreementStart = "2026-04-01",
-  agreementEnd = "2026-12-31",
+  agreementStart = `${currentYear()}-04-01`,
+  agreementEnd = `${currentYear()}-12-31`,
   onRequestReview,
 }: {
   agreementStart?: string;
@@ -336,19 +335,16 @@ export function ExpenseValidator({
 
         <Panel title="항목 특성" action={<StatusBadge tone="slate">해당되는 항목만 체크</StatusBadge>}>
           <div className="flex flex-wrap gap-2">
-            {FLAGS_BY_CATEGORY[expense.category].map((flag) => {
-              const active = (expense.itemFlags ?? []).includes(flag);
-              return (
-                <button
-                  key={flag}
-                  type="button"
-                  onClick={() => patch({ itemFlags: toggle(expense.itemFlags, flag) })}
-                  className={cn("rounded-lg border px-3 py-2 text-sm font-semibold", active ? "border-[#DC2626] bg-[#FEF2F2] text-[#DC2626]" : "border-[#E2E8F0] text-[#475569]")}
-                >
-                  {ITEM_FLAG_LABELS[flag]}
-                </button>
-              );
-            })}
+            {FLAGS_BY_CATEGORY[expense.category].map((flag) => (
+              <ChoiceChip
+                key={flag}
+                tone="red"
+                selected={(expense.itemFlags ?? []).includes(flag)}
+                onClick={() => patch({ itemFlags: toggle(expense.itemFlags, flag) })}
+              >
+                {ITEM_FLAG_LABELS[flag]}
+              </ChoiceChip>
+            ))}
           </div>
         </Panel>
 
@@ -358,14 +354,15 @@ export function ExpenseValidator({
               const active = (expense.evidence ?? []).includes(name);
               const required = spec.requiredEvidence.includes(name);
               return (
-                <button
+                <ChoiceChip
                   key={name}
-                  type="button"
+                  tone="green"
+                  selected={active}
                   onClick={() => patch({ evidence: toggle(expense.evidence, name) })}
-                  className={cn("rounded-lg border px-3 py-2 text-sm font-semibold", active ? "border-[#16A34A] bg-[#F0FDF4] text-[#16A34A]" : required ? "border-[#FDE68A] bg-[#FFFBEB] text-[#B45309]" : "border-[#E2E8F0] text-[#475569]")}
+                  className={cn(!active && required && "border-[#FDE68A] bg-[#FFFBEB] text-[#B45309] hover:border-[#F59E0B]")}
                 >
                   {active ? "✓ " : required ? "! " : "+ "}{name}
-                </button>
+                </ChoiceChip>
               );
             })}
           </div>
@@ -376,13 +373,17 @@ export function ExpenseValidator({
             value={description}
             onChange={(event) => setDescription(event.target.value)}
             placeholder="예) 시제품 외관 목업 제작을 A사에 의뢰했고 계약금 절반을 먼저 지급했습니다. 업체는 3D 프린팅 전문 사업자입니다."
-            className="min-h-32 w-full rounded-xl border border-[#CBD5E1] p-3 text-sm"
+            className={cn(textareaClass, "min-h-32")}
           />
-          <button onClick={() => void run()} disabled={loading} className="mt-3 rounded-[10px] bg-[#2563EB] px-4 py-3 text-sm font-bold text-white disabled:opacity-50">
+          <Button onClick={() => void run()} loading={loading} className="mt-3">
             {loading ? "판정 중…" : "AI 사전검증 실행"}
-          </button>
-          {error && <p className="mt-3 rounded-xl bg-[#FEF2F2] p-3 text-sm font-semibold text-[#DC2626]">{error}</p>}
-          {remote?.aiError && <p className="mt-3 rounded-xl bg-[#FFFBEB] p-3 text-sm font-semibold text-[#B45309]">AI 판정은 실패했지만 규정 검증 결과는 아래에 표시됩니다. ({remote.aiError})</p>}
+          </Button>
+          {error && <div className="mt-3"><Notice tone="error" onDismiss={() => setError(null)}>{error}</Notice></div>}
+          {remote?.aiError && (
+            <div className="mt-3">
+              <Notice tone="warning">AI 판정은 실패했지만 규정 검증 결과는 아래에 표시됩니다. ({remote.aiError})</Notice>
+            </div>
+          )}
           <p className="mt-3 text-xs font-medium text-[#94A3B8]">설명을 비워두어도 아래 규정 검증 결과는 입력값 기준으로 실시간 갱신됩니다.</p>
         </Panel>
       </div>

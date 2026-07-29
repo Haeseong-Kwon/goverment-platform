@@ -1,7 +1,0 @@
-{
-  "tool_name": "mcp__Claude_Browser__navigate",
-  "tool_input_preview": "{\"url\":\"localhost:3000/workspace/precheck\",\"tabId\":\"seed\"}",
-  "error": "navigation to https://localhost:3000 was denied or failed",
-  "timestamp": "2026-07-29T09:23:09.101Z",
-  "retry_count": 3
-}

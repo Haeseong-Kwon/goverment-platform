@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Printer } from "lucide-react";
 import { POLICY } from "./ruleset";
-import { Field, Panel, StatusBadge, inputClass } from "../startup-workspace/ui";
+import { Button, Field, Panel, StatusBadge, inputClass } from "../startup-workspace/ui";
 import { cn } from "@/lib/utils";
 
 /** 사전심의 합본 구성 서류 6종. */
@@ -33,6 +33,7 @@ export function PreDeliberationPanel() {
 
   return (
     <div className="space-y-5">
+      <div data-print-hide>
       <Panel title="사전심의 대상 판정">
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="건명"><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="예) 앱 개발 외주" className={inputClass} /></Field>
@@ -77,17 +78,18 @@ export function PreDeliberationPanel() {
             미구비 {missing.length}종: {missing.map((document) => document.name).join(", ")}
           </p>
         )}
-        <button
-          onClick={() => window.print()}
+        <Button
+          className="mt-4"
+          icon={<Printer size={14} />}
           disabled={missing.length > 0 || !required}
-          className="mt-4 rounded-[10px] bg-[#2563EB] px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+          onClick={() => window.print()}
         >
-          <Printer size={14} className="mr-1 inline" />
           {!required ? "사전심의 비대상 건입니다" : missing.length ? `합본 생성 (${missing.length}종 미구비)` : "합본 PDF 생성"}
-        </button>
+        </Button>
       </Panel>
+      </div>
 
-      <Panel title="합본 표지 미리보기">
+      <Panel title="합본 표지">
         <div className="rounded-xl border border-[#E2E8F0] p-6">
           <p className="text-center text-sm font-bold text-[#475569]">사업비 집행 사전심의 요청</p>
           <h3 className="mt-3 text-center text-2xl font-bold text-[#0F172A]">{title || "건명을 입력하세요"}</h3>

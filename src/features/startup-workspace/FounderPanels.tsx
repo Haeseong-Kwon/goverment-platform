@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Archive, Download, Upload, UserPlus } from "lucide-react";
+import { Archive, ClipboardCopy, Download, RefreshCw, Upload, UserPlus } from "lucide-react";
 import {
   VAULT_FOLDERS,
   createTeamInvite,
@@ -21,7 +21,7 @@ import {
   type VaultFolder,
 } from "@/lib/services/FounderWorkspaceService";
 import { STARTUP_PROGRAMS } from "./rules";
-import { Panel, StatusBadge, inputClass, type StatusTone } from "./ui";
+import { Button, ChoiceChip, EmptyState, LinkButton, Panel, Skeleton, StatusBadge, inputClass, type StatusTone } from "./ui";
 import { cn } from "@/lib/utils";
 
 /** 서비스 호출 상태를 한 곳에서 다룹니다. 각 패널이 같은 방식으로 로딩·에러를 보여줍니다. */
@@ -41,10 +41,24 @@ function useLoader<T>(load: () => Promise<T>, deps: unknown[] = []) {
   return { data, error, reload: () => setReloadKey((key) => key + 1), setError };
 }
 
-function Notice({ error, empty, loading }: { error: string | null; empty?: boolean; loading: boolean }) {
-  if (error) return <p className="rounded-xl bg-[#FEF2F2] p-4 text-sm font-semibold text-[#DC2626]">{error}</p>;
-  if (loading) return <p className="rounded-xl bg-[#F8FAFC] p-4 text-sm font-semibold text-[#475569]">불러오는 중입니다…</p>;
-  if (empty) return <p className="rounded-xl bg-[#F8FAFC] p-4 text-sm font-semibold text-[#94A3B8]">아직 등록된 항목이 없습니다.</p>;
+function LoadState({
+  error,
+  empty,
+  loading,
+  emptyTitle = "아직 등록된 항목이 없습니다",
+  emptyDescription,
+  emptyAction,
+}: {
+  error: string | null;
+  empty?: boolean;
+  loading: boolean;
+  emptyTitle?: string;
+  emptyDescription?: string;
+  emptyAction?: React.ReactNode;
+}) {
+  if (error) return <p className="rounded-xl border border-[#FECACA] bg-[#FEF2F2] p-4 text-sm font-semibold text-[#DC2626]">{error}</p>;
+  if (loading) return <div className="space-y-2">{[0, 1, 2].map((key) => <Skeleton key={key} className="h-14" />)}</div>;
+  if (empty) return <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />;
   return null;
 }
 
@@ -53,9 +67,16 @@ function Notice({ error, empty, loading }: { error: string | null; empty?: boole
 const MS_DAY = 86_400_000;
 const toKey = (date: Date) => date.toISOString().slice(0, 10);
 
+const itemTone = (item: CalendarItem) =>
+  item.kind === "program" ? "bg-[#FEF2F2] text-[#DC2626]" : item.status === "done" ? "bg-[#F0FDF4] text-[#16A34A]" : "bg-[#EFF6FF] text-[#2563EB]";
+
+const itemDot = (item: CalendarItem) =>
+  item.kind === "program" ? "bg-[#DC2626]" : item.status === "done" ? "bg-[#16A34A]" : "bg-[#2563EB]";
+
 export function CalendarPanel() {
   const { data, error, reload } = useLoader(getCalendarItems);
   const [monthOffset, setMonthOffset] = useState(0);
+  const [selected, setSelected] = useState<string | null>(null);
   const items = useMemo(() => data ?? [], [data]);
 
   const { cells, label } = useMemo(() => {
@@ -82,40 +103,92 @@ export function CalendarPanel() {
         title={label}
         action={
           <div className="flex gap-2">
-            <button onClick={() => setMonthOffset((value) => value - 1)} className="rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-sm font-bold text-[#475569]">이전</button>
-            <button onClick={() => setMonthOffset(0)} className="rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-sm font-bold text-[#475569]">오늘</button>
-            <button onClick={() => setMonthOffset((value) => value + 1)} className="rounded-lg border border-[#E2E8F0] px-3 py-1.5 text-sm font-bold text-[#475569]">다음</button>
+            <Button variant="secondary" size="sm" onClick={() => setMonthOffset((value) => value - 1)}>이전</Button>
+            <Button variant="secondary" size="sm" onClick={() => setMonthOffset(0)} disabled={monthOffset === 0}>오늘</Button>
+            <Button variant="secondary" size="sm" onClick={() => setMonthOffset((value) => value + 1)}>다음</Button>
           </div>
         }
       >
-        <Notice error={error} loading={!data && !error} />
+        {error && <p className="mb-3 rounded-xl border border-[#FECACA] bg-[#FEF2F2] p-4 text-sm font-semibold text-[#DC2626]">{error}</p>}
         <div className="mt-2 grid grid-cols-7 gap-1 text-center text-xs font-bold text-[#94A3B8]">
           {["일", "월", "화", "수", "목", "금", "토"].map((day) => <div key={day} className="py-2">{day}</div>)}
         </div>
-        <div className="grid grid-cols-7 gap-1 text-center text-sm">
+        <div className="grid grid-cols-7 gap-1">
           {cells.map((cell) => {
             const dayItems = byDate[cell.key] ?? [];
+            const active = selected === cell.key;
             return (
-              <div key={cell.key} className={cn("min-h-16 rounded-xl p-2", cell.inMonth ? "bg-[#F8FAFC]" : "bg-white text-[#CBD5E1]", cell.isToday && "ring-2 ring-[#2563EB]")}>
-                <span className="tabular-nums">{cell.day}</span>
-                <div className="mt-1 flex flex-wrap justify-center gap-1">
-                  {dayItems.map((item) => (
-                    <span key={item.id} title={item.title} className={cn("h-1.5 w-1.5 rounded-full", item.kind === "program" ? "bg-[#DC2626]" : item.status === "done" ? "bg-[#16A34A]" : "bg-[#2563EB]")} />
+              <button
+                key={cell.key}
+                type="button"
+                onClick={() => setSelected(active ? null : cell.key)}
+                aria-pressed={active}
+                className={cn(
+                  "flex min-h-[76px] flex-col gap-1 rounded-xl p-1.5 text-left transition-colors sm:min-h-[92px] sm:p-2",
+                  cell.inMonth ? "bg-[#F8FAFC] hover:bg-[#EFF6FF]" : "bg-white text-[#CBD5E1]",
+                  cell.isToday && "ring-2 ring-[#2563EB]",
+                  active && "ring-2 ring-[#0F172A]",
+                )}
+              >
+                <span className={cn("text-xs font-bold tabular-nums", cell.isToday && "text-[#2563EB]")}>{cell.day}</span>
+
+                {/* 좁은 화면에서는 점, 넓은 화면에서는 제목까지 보여 줍니다. */}
+                <span className="flex flex-wrap gap-1 sm:hidden">
+                  {dayItems.slice(0, 4).map((item) => (
+                    <span key={item.id} className={cn("h-1.5 w-1.5 rounded-full", itemDot(item))} />
                   ))}
-                </div>
-              </div>
+                </span>
+
+                <span className="hidden min-w-0 flex-col gap-1 sm:flex">
+                  {dayItems.slice(0, 2).map((item) => (
+                    <span key={item.id} title={item.title} className={cn("truncate rounded px-1.5 py-0.5 text-[11px] font-semibold leading-4", itemTone(item))}>
+                      {item.title}
+                    </span>
+                  ))}
+                  {dayItems.length > 2 && <span className="px-1.5 text-[11px] font-bold text-[#94A3B8]">+{dayItems.length - 2}건</span>}
+                </span>
+              </button>
             );
           })}
         </div>
+
         <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-[#475569]">
           <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-[#DC2626]" />공고 마감</span>
           <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-[#2563EB]" />할 일</span>
           <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-[#16A34A]" />완료</span>
         </div>
+
+        {selected && (
+          <div className="mt-4 rounded-xl border border-[#E2E8F0] p-4">
+            <p className="text-sm font-bold text-[#0F172A]">{selected}</p>
+            {(byDate[selected] ?? []).length === 0 ? (
+              <p className="mt-2 text-sm text-[#94A3B8]">이 날짜에 등록된 일정이 없습니다.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {(byDate[selected] ?? []).map((item) => (
+                  <li key={item.id} className="flex items-center gap-2 text-sm">
+                    <span className={cn("h-2 w-2 shrink-0 rounded-full", itemDot(item))} />
+                    <span className="min-w-0 flex-1 truncate font-semibold text-[#0F172A]">{item.title}</span>
+                    <StatusBadge tone={item.kind === "program" ? "red" : item.status === "done" ? "green" : "blue"}>
+                      {item.kind === "program" ? "공고 마감" : item.status === "done" ? "완료" : "할 일"}
+                    </StatusBadge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </Panel>
 
-      <Panel title="다가오는 마감" action={<button onClick={reload} className="text-sm font-bold text-[#2563EB]">새로고침</button>}>
-        <Notice error={null} loading={!data && !error} empty={Boolean(data) && upcoming.length === 0} />
+      <Panel title="다가오는 마감" action={<Button variant="ghost" size="sm" onClick={reload} icon={<RefreshCw size={13} />}>새로고침</Button>}>
+        <LoadState
+          error={null}
+          loading={!data && !error}
+          empty={Boolean(data) && upcoming.length === 0}
+          emptyTitle="다가오는 마감이 없습니다"
+          emptyDescription="지원사업을 선택하거나 마감일이 있는 할 일을 추가하면 이곳에 표시됩니다."
+          emptyAction={<LinkButton href="/founder/todo">할 일 추가하기</LinkButton>}
+        />
         <div className="space-y-2">
           {upcoming.map((item) => {
             const dday = Math.ceil((new Date(`${item.date}T00:00:00Z`).getTime() - Date.now()) / MS_DAY);
@@ -141,6 +214,7 @@ export function VaultPanel() {
   const { data, error, reload, setError } = useLoader(listVaultDocuments);
   const [folder, setFolder] = useState<VaultFolder>("bizplan");
   const [busy, setBusy] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const documents = data ?? [];
 
@@ -171,19 +245,53 @@ export function VaultPanel() {
       <Panel title="파일 업로드" action={<StatusBadge tone="blue">만료형 보안 링크</StatusBadge>}>
         <div className="flex flex-wrap gap-2">
           {VAULT_FOLDERS.map((item) => (
-            <button key={item.id} type="button" onClick={() => setFolder(item.id)} className={cn("rounded-lg border px-3 py-2 text-sm font-semibold", folder === item.id ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]" : "border-[#E2E8F0] text-[#475569]")}>
+            <ChoiceChip key={item.id} selected={folder === item.id} onClick={() => setFolder(item.id)}>
               {item.label}
-            </button>
+            </ChoiceChip>
           ))}
         </div>
         <p className="mt-3 text-sm text-[#475569]">{VAULT_FOLDERS.find((item) => item.id === folder)?.hint}</p>
-        <input ref={fileRef} type="file" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }} className="mt-4 block w-full text-sm" />
-        <p className="mt-2 text-xs font-medium text-[#94A3B8]">같은 이름으로 올리면 버전이 올라갑니다. 최대 50MB.</p>
-        {busy && <p className="mt-3 text-sm font-semibold text-[#2563EB]"><Upload size={14} className="mr-1 inline" />업로드 중…</p>}
+
+        <input
+          ref={fileRef}
+          type="file"
+          className="sr-only"
+          disabled={busy}
+          onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); }}
+        />
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => fileRef.current?.click()}
+          onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            const file = event.dataTransfer.files?.[0];
+            if (file) void upload(file);
+          }}
+          className={cn(
+            "mt-4 flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed px-5 py-8 transition-colors disabled:opacity-60",
+            dragging ? "border-[#2563EB] bg-[#EFF6FF]" : "border-[#CBD5E1] bg-[#F8FAFC] hover:border-[#2563EB]",
+          )}
+        >
+          <Upload size={20} className={cn(busy && "animate-pulse", dragging ? "text-[#2563EB]" : "text-[#94A3B8]")} />
+          <span className="text-sm font-bold text-[#0F172A]">
+            {busy ? "업로드 중…" : "파일을 끌어다 놓거나 클릭해 선택하세요"}
+          </span>
+          <span className="text-xs font-medium text-[#94A3B8]">같은 이름으로 올리면 버전이 올라갑니다 · 최대 50MB</span>
+        </button>
       </Panel>
 
-      <Panel title={`보관 파일 ${documents.length}건`} action={<button onClick={reload} className="text-sm font-bold text-[#2563EB]">새로고침</button>}>
-        <Notice error={error} loading={!data && !error} empty={Boolean(data) && documents.length === 0} />
+      <Panel title={`보관 파일 ${documents.length}건`} action={<Button variant="ghost" size="sm" onClick={reload} icon={<RefreshCw size={13} />}>새로고침</Button>}>
+        <LoadState
+          error={error}
+          loading={!data && !error}
+          empty={Boolean(data) && documents.length === 0}
+          emptyTitle="보관된 파일이 없습니다"
+          emptyDescription="위에서 폴더를 고르고 파일을 올리면 버전과 함께 이곳에 쌓입니다."
+        />
         <div className="space-y-2">
           {VAULT_FOLDERS.map((group) => {
             const files = documents.filter((item) => item.folder === group.id);
@@ -197,9 +305,7 @@ export function VaultPanel() {
                     <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#0F172A]">{item.fileName}</span>
                     <StatusBadge tone="slate">v{item.version}</StatusBadge>
                     <span className="hidden text-xs text-[#94A3B8] sm:inline">{item.createdAt.slice(0, 10)}</span>
-                    <button onClick={() => void download(item)} className="shrink-0 rounded-lg border border-[#2563EB] px-3 py-1.5 text-xs font-bold text-[#2563EB]">
-                      <Download size={12} className="mr-1 inline" />열기
-                    </button>
+                    <Button variant="secondary" size="sm" onClick={() => void download(item)} icon={<Download size={12} />}>열기</Button>
                   </div>
                 ))}
               </div>
@@ -234,6 +340,11 @@ const statusLabel: Record<TrackedSubmission["status"], string> = {
   rejected: "반려",
 };
 
+/** 제출 후 며칠 지났는지. 매니저 대기가 길어지는지를 팀이 스스로 판단할 수 있어야 합니다. */
+function waitingDays(from: string, to = new Date().toISOString()) {
+  return Math.max(0, Math.floor((Date.parse(to) - Date.parse(from)) / MS_DAY));
+}
+
 function stepIndex(status: TrackedSubmission["status"]) {
   if (status === "approved") return 3;
   if (status === "in_review") return 2;
@@ -247,16 +358,31 @@ export function TrackerPanel() {
 
   return (
     <div className="space-y-5">
-      <Panel title={`내 정산 건 ${submissions.length}건`} action={<button onClick={reload} className="text-sm font-bold text-[#2563EB]">새로고침</button>}>
-        <Notice error={error} loading={!data && !error} empty={Boolean(data) && submissions.length === 0} />
+      <Panel title={`내 정산 건 ${submissions.length}건`} action={<Button variant="ghost" size="sm" onClick={reload} icon={<RefreshCw size={13} />}>새로고침</Button>}>
+        <LoadState
+          error={error}
+          loading={!data && !error}
+          empty={Boolean(data) && submissions.length === 0}
+          emptyTitle="제출한 정산 건이 없습니다"
+          emptyDescription="정산 사전검증을 통과한 집행 건을 검토 요청하면 여기에서 단계별 상태를 추적할 수 있습니다."
+          emptyAction={<LinkButton href="/workspace/precheck">정산 사전검증 시작</LinkButton>}
+        />
         <div className="space-y-4">
           {submissions.map((item) => {
             const reached = stepIndex(item.status);
             return (
               <article key={item.id} className={cn("rounded-2xl border p-4", item.status === "rejected" ? "border-[#FECACA]" : "border-[#E2E8F0]")}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <strong className="text-sm font-bold text-[#0F172A]">{item.title}</strong>
-                  <div className="flex gap-2">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <strong className="block text-sm font-bold text-[#0F172A]">{item.title}</strong>
+                    <p className="mt-1 text-xs text-[#94A3B8]">
+                      {item.createdAt.slice(0, 10)} 제출
+                      {item.decision
+                        ? ` · ${item.decision.createdAt.slice(0, 10)} 판정 (${waitingDays(item.createdAt, item.decision.createdAt)}일 소요)`
+                        : ` · 대기 ${waitingDays(item.createdAt)}일째`}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
                     <StatusBadge tone="slate">{new Intl.NumberFormat("ko-KR").format(item.amount)}원</StatusBadge>
                     <StatusBadge tone={statusTone[item.status]}>{statusLabel[item.status]}</StatusBadge>
                   </div>
@@ -300,6 +426,13 @@ export function TeamSettingsPanel({ founder }: { founder: boolean }) {
   const [joinCode, setJoinCode] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyCode = async (code: string) => {
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const issue = async () => {
     setBusy(true);
@@ -335,7 +468,7 @@ export function TeamSettingsPanel({ founder }: { founder: boolean }) {
   return (
     <div className="space-y-5">
       <Panel title={founder ? "협약 팀 구성원" : "준비 팀 구성원"} action={<StatusBadge tone="slate">{list.length}명</StatusBadge>}>
-        <Notice error={members.error} loading={!members.data && !members.error} empty={Boolean(members.data) && list.length === 0} />
+        <LoadState error={members.error} loading={!members.data && !members.error} empty={Boolean(members.data) && list.length === 0} />
         <div className="space-y-2">
           {list.map((member) => (
             <div key={member.userId} className="flex items-center gap-3 rounded-xl border border-[#E2E8F0] p-3">
@@ -352,23 +485,30 @@ export function TeamSettingsPanel({ founder }: { founder: boolean }) {
         {invite.data ? (
           <div className="rounded-xl bg-[#F8FAFC] p-4">
             <p className="text-sm font-bold text-[#0F172A]">활성 초대 코드</p>
-            <p className="mt-2 font-mono text-2xl font-bold tracking-widest text-[#2563EB]">{(invite.data as TeamInvite).code}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <p className="font-mono text-2xl font-bold tracking-widest text-[#2563EB]">{(invite.data as TeamInvite).code}</p>
+              <button
+                type="button"
+                onClick={() => void copyCode((invite.data as TeamInvite).code)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#2563EB] px-3 py-1.5 text-xs font-bold text-[#2563EB]"
+              >
+                <ClipboardCopy size={12} />{copied ? "복사됨" : "복사"}
+              </button>
+            </div>
             <p className="mt-2 text-xs text-[#94A3B8]">
               {(invite.data as TeamInvite).expiresAt.slice(0, 10)}까지 · {(invite.data as TeamInvite).useCount}/{(invite.data as TeamInvite).maxUses}명 사용
             </p>
           </div>
         ) : (
-          <p className="rounded-xl bg-[#F8FAFC] p-4 text-sm text-[#475569]">아직 발급된 초대 코드가 없습니다.</p>
+          <EmptyState title="발급된 초대 코드가 없습니다" description="코드를 발급해 팀원에게 전달하면 같은 워크스페이스에 합류합니다." />
         )}
-        <button onClick={() => void issue()} disabled={busy} className="mt-4 rounded-[10px] bg-[#2563EB] px-4 py-3 text-sm font-bold text-white disabled:opacity-50">
-          <UserPlus size={14} className="mr-1 inline" />새 초대 코드 발급
-        </button>
+        <Button className="mt-4" loading={busy} onClick={() => void issue()} icon={<UserPlus size={14} />}>새 초대 코드 발급</Button>
       </Panel>
 
       <Panel title="다른 팀 초대 코드로 합류">
         <div className="flex gap-2">
           <input value={joinCode} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} placeholder="초대 코드" className={cn(inputClass, "mt-0 flex-1 font-mono")} />
-          <button onClick={() => void join()} disabled={busy || !joinCode.trim()} className="rounded-[10px] border border-[#2563EB] px-4 text-sm font-bold text-[#2563EB] disabled:opacity-40">합류</button>
+          <Button variant="secondary" onClick={() => void join()} disabled={busy || !joinCode.trim()}>합류</Button>
         </div>
       </Panel>
 
@@ -403,9 +543,9 @@ export function IncorporationPanel() {
       <Panel title="설립 타이밍 확인">
         <div className="flex flex-wrap gap-2">
           {STARTUP_PROGRAMS.map((item) => (
-            <button key={item.id} type="button" onClick={() => setProgramId(item.id)} className={cn("rounded-lg border px-3 py-2 text-sm font-semibold", programId === item.id ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]" : "border-[#E2E8F0] text-[#475569]")}>
+            <ChoiceChip key={item.id} selected={programId === item.id} onClick={() => setProgramId(item.id)}>
               {item.name}
-            </button>
+            </ChoiceChip>
           ))}
         </div>
         {program.requiresNoBusinessRegistration ? (

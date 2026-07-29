@@ -1,5 +1,6 @@
 import { supabase } from "../supabase";
 import { getCurrentPrepTeamId, requireClient } from "./WorkspaceService";
+import { DEV_BYPASS } from "../dev/devMode";
 
 export type VaultFolder = "bizplan" | "evidence" | "submission_archive";
 
@@ -37,6 +38,7 @@ async function getNextVersion(teamId: string, folder: VaultFolder, fileName: str
 }
 
 export async function listVaultDocuments(): Promise<VaultDocument[]> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devVaultDocuments();
   const client = requireClient();
   const teamId = await getCurrentPrepTeamId();
   const { data, error } = await client
@@ -56,6 +58,7 @@ export async function listVaultDocuments(): Promise<VaultDocument[]> {
 }
 
 export async function uploadVaultDocument(folder: VaultFolder, file: File): Promise<VaultDocument> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devUploadVaultDocument(folder, file);
   const client = requireClient();
   const { data: auth, error: authError } = await client.auth.getUser();
   if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
@@ -88,6 +91,7 @@ export async function uploadVaultDocument(folder: VaultFolder, file: File): Prom
 
 /** 만료형 보안 링크. 기본 5분 후 무효화됩니다. */
 export async function getVaultDownloadUrl(storagePath: string, expiresInSeconds = 300) {
+  if (DEV_BYPASS) throw new Error("개발용 진입 모드에서는 실제 파일이 없어 다운로드 링크를 만들 수 없습니다.");
   const client = requireClient();
   const { data, error } = await client.storage.from(BUCKET).createSignedUrl(storagePath, expiresInSeconds);
   if (error) throw new Error(`다운로드 링크를 만들지 못했습니다. ${error.message}`);
@@ -102,6 +106,7 @@ export interface TeamMember {
 }
 
 export async function getTeamMembers(): Promise<TeamMember[]> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devMembers();
   const client = requireClient();
   const teamId = await getCurrentPrepTeamId();
   const { data, error } = await client
@@ -129,6 +134,7 @@ export interface TeamInvite {
 }
 
 export async function getActiveTeamInvite(): Promise<TeamInvite | null> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devInvite();
   const client = requireClient();
   const teamId = await getCurrentPrepTeamId();
   const { data, error } = await client
@@ -145,6 +151,7 @@ export async function getActiveTeamInvite(): Promise<TeamInvite | null> {
 }
 
 export async function createTeamInvite(): Promise<TeamInvite> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devInvite();
   const client = requireClient();
   const { data: auth, error: authError } = await client.auth.getUser();
   if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
@@ -161,6 +168,7 @@ export async function createTeamInvite(): Promise<TeamInvite> {
 }
 
 export async function joinTeamByInvite(code: string) {
+  if (DEV_BYPASS) return code.trim().toUpperCase();
   const client = requireClient();
   const { data, error } = await client.rpc("join_prep_team", { input_code: code.trim() });
   if (error) {
@@ -179,6 +187,7 @@ export interface CalendarItem {
 
 /** 마감 캘린더 원본: 팀 TODO 마감일 + 선택한 지원사업 공고 마감일. */
 export async function getCalendarItems(): Promise<CalendarItem[]> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devCalendarItems();
   const client = requireClient();
   const teamId = await getCurrentPrepTeamId();
 
@@ -225,6 +234,7 @@ export interface TrackedSubmission {
 
 /** 상태 트래커 원본: 내 팀의 정산 제출 건과 매니저 판정. */
 export async function getTrackedSubmissions(): Promise<TrackedSubmission[]> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devTrackedSubmissions();
   const client = requireClient();
   const { data, error } = await client
     .from("settlement_submissions")
@@ -250,6 +260,7 @@ export const isSupabaseReady = () => Boolean(supabase);
 
 /** 로그인 사용자가 소속된(또는 협약한) 기관명. 없으면 null. */
 export async function getInstitutionName(): Promise<string | null> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devInstitutionName();
   const client = requireClient();
   const { data: auth } = await client.auth.getUser();
   if (!auth.user) return null;
@@ -281,6 +292,7 @@ export interface ConversionCode {
 
 /** 기관이 발급한 합격 전환 코드 목록. 매니저 설정 화면에서 보여줍니다. */
 export async function getConversionCodes(): Promise<ConversionCode[]> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devConversionCodes();
   const client = requireClient();
   const { data, error } = await client
     .from("conversion_codes")

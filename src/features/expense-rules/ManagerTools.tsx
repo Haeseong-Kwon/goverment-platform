@@ -7,7 +7,7 @@ import { parsePlanRows, type PlanRow } from "./planImport";
 import { composeRejectionNotice, getReasonCodeOptions } from "./rejection";
 import { CATEGORIES } from "./ruleset";
 import type { ExpenseVerdict, ReasonCode } from "./types";
-import { Field, Panel, StatusBadge, inputClass, type StatusTone } from "../startup-workspace/ui";
+import { Button, ChoiceChip, Field, Panel, StatusBadge, inputClass, textareaClass, type StatusTone } from "../startup-workspace/ui";
 import { cn } from "@/lib/utils";
 
 const verdictTone: Record<ExpenseVerdict["verdict"], StatusTone> = { pass: "green", review: "amber", fail: "red" };
@@ -24,8 +24,8 @@ type ReviewedRow = PlanRow & { verdict?: ExpenseVerdict };
 /** 협약 초기 선정팀 사업비 집행 계획 일괄 검토. */
 export function PlanReviewBoard() {
   const [text, setText] = useState("");
-  const [start, setStart] = useState("2026-04-01");
-  const [end, setEnd] = useState("2026-12-31");
+  const [start, setStart] = useState(`${new Date().getFullYear()}-04-01`);
+  const [end, setEnd] = useState(`${new Date().getFullYear()}-12-31`);
   const [copied, setCopied] = useState(false);
 
   const rows: ReviewedRow[] = useMemo(() => {
@@ -75,11 +75,11 @@ export function PlanReviewBoard() {
           value={text}
           onChange={(event) => setText(event.target.value)}
           placeholder={`팀명, 비목, 건명, 금액, 집행일, 납품일 순으로 붙여넣으세요.\n\n${SAMPLE}`}
-          className="mt-4 min-h-44 w-full rounded-xl border border-[#CBD5E1] p-3 font-mono text-xs"
+          className={cn(textareaClass, "mt-4 min-h-44 font-mono text-xs")}
         />
         <div className="mt-3 flex flex-wrap gap-2">
-          <button onClick={() => setText(SAMPLE)} className="rounded-lg border border-[#2563EB] px-3 py-2 text-sm font-bold text-[#2563EB]">예시 채우기</button>
-          <button onClick={() => setText("")} className="rounded-lg border border-[#E2E8F0] px-3 py-2 text-sm font-bold text-[#475569]">비우기</button>
+          <Button variant="secondary" size="sm" onClick={() => setText(SAMPLE)}>예시 채우기</Button>
+          <Button variant="ghost" size="sm" onClick={() => setText("")} disabled={!text}>비우기</Button>
         </div>
       </Panel>
 
@@ -122,9 +122,9 @@ export function PlanReviewBoard() {
 
           {adjustmentComment && (
             <Panel title="조정 요청 코멘트" action={
-              <button onClick={() => void copy()} className="rounded-lg border border-[#2563EB] px-3 py-2 text-sm font-bold text-[#2563EB]">
-                <ClipboardCopy size={13} className="mr-1 inline" />{copied ? "복사됨" : "복사"}
-              </button>
+              <Button variant="secondary" size="sm" onClick={() => void copy()} icon={<ClipboardCopy size={13} />}>
+                {copied ? "복사됨" : "복사"}
+              </Button>
             }>
               <pre className="whitespace-pre-wrap rounded-xl bg-[#F8FAFC] p-4 text-sm leading-6 text-[#475569]">{adjustmentComment}</pre>
             </Panel>
@@ -184,17 +184,15 @@ export function RejectionComposer({
       <p className="text-sm font-bold text-[#475569]">반려 사유코드 <span className="text-[#DC2626]">*</span></p>
       <div className="mt-2 flex flex-wrap gap-2">
         {options.map((option) => (
-          <button
+          <ChoiceChip
             key={option.code}
-            type="button"
+            tone="red"
+            selected={selected.includes(option.code)}
             onClick={() => toggle(option.code)}
-            className={cn(
-              "rounded-lg border px-3 py-2 text-sm font-semibold",
-              selected.includes(option.code) ? "border-[#DC2626] bg-[#FEF2F2] text-[#DC2626]" : option.detected ? "border-[#FDE68A] bg-[#FFFBEB] text-[#B45309]" : "border-[#E2E8F0] text-[#475569]",
-            )}
+            className={cn(!selected.includes(option.code) && option.detected && "border-[#FDE68A] bg-[#FFFBEB] text-[#B45309] hover:border-[#F59E0B]")}
           >
             {option.code} {option.label}{option.detected ? " · 검증 감지" : ""}
-          </button>
+          </ChoiceChip>
         ))}
       </div>
 
@@ -202,15 +200,15 @@ export function RejectionComposer({
         value={comment}
         onChange={(event) => setComment(event.target.value)}
         placeholder="담당자 코멘트 (선택)"
-        className="mt-4 min-h-20 w-full rounded-xl border border-[#CBD5E1] p-3 text-sm"
+        className={cn(textareaClass, "mt-4 min-h-20")}
       />
 
       <div className="mt-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-bold text-[#0F172A]">발송 예정 안내문</p>
-          <button onClick={() => void copy()} className="rounded-lg border border-[#2563EB] px-3 py-1.5 text-xs font-bold text-[#2563EB]">
-            <ClipboardCopy size={12} className="mr-1 inline" />{copied ? "복사됨" : "복사"}
-          </button>
+          <Button variant="secondary" size="sm" onClick={() => void copy()} icon={<ClipboardCopy size={12} />}>
+            {copied ? "복사됨" : "복사"}
+          </Button>
         </div>
         <p className="mt-2 text-xs font-semibold text-[#94A3B8]">{notice.subject}</p>
         <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl bg-[#F8FAFC] p-4 text-sm leading-6 text-[#475569]">{notice.body}</pre>
@@ -218,19 +216,18 @@ export function RejectionComposer({
 
       {onSubmit && (
         <div className="mt-4 flex gap-2">
-          <button
-            onClick={() => onSubmit("rejected", { reasonCodes: selected, feedback: notice.body })}
+          <Button
+            variant="danger"
+            className="flex-1"
             disabled={selected.length === 0}
-            className="flex-1 rounded-[10px] border border-[#DC2626] px-4 py-3 text-sm font-bold text-[#DC2626] disabled:cursor-not-allowed disabled:opacity-40"
+            title={selected.length === 0 ? "반려하려면 사유코드를 1개 이상 선택하세요" : undefined}
+            onClick={() => onSubmit("rejected", { reasonCodes: selected, feedback: notice.body })}
           >
             반려하고 안내문 발송
-          </button>
-          <button
-            onClick={() => onSubmit("approved", { reasonCodes: [], feedback: comment })}
-            className="flex-1 rounded-[10px] bg-[#2563EB] px-4 py-3 text-sm font-bold text-white"
-          >
+          </Button>
+          <Button className="flex-1" onClick={() => onSubmit("approved", { reasonCodes: [], feedback: comment })}>
             승인
-          </button>
+          </Button>
         </div>
       )}
       <p className="mt-3 text-xs font-medium text-[#94A3B8]">모든 판정은 지침 조항 원문을 근거로 기록되며, 승인·반려의 최종 결정은 매니저에게 있습니다.</p>

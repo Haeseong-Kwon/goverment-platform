@@ -2,34 +2,22 @@
 
 import { usePathname } from "next/navigation";
 import { Footer } from "./Footer";
-import { Navbar } from "./Navbar";
-
-const STANDALONE_PREFIXES = ["/manager", "/founder", "/workspace"];
-const STANDALONE_EXACT = ["/", "/onboarding", "/workspace-entry"];
 
 /**
- * StartUp Pilot 워크스페이스 화면은 자체 사이드바와 헤더를 갖습니다.
- * 이전 프로젝트에서 남은 상단 내비게이션이 겹쳐 보이지 않도록 여기서 제외합니다.
+ * 워크스페이스와 인증 화면은 자체 헤더를 갖습니다.
+ * 공용 푸터는 공개 소개 화면에만 붙여 워크스페이스 안에서 내비게이션이 겹치지 않게 합니다.
  */
-function isStandaloneAppPath(pathname: string | null) {
-  if (!pathname) return false;
-  return (
-    STANDALONE_EXACT.includes(pathname) ||
-    STANDALONE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
-  );
-}
+const PUBLIC_PAGES = ["/", "/manager/landing", "/workspace-entry"];
 
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const standalone = isStandaloneAppPath(pathname);
 
   return (
     <>
-      {!standalone && <Navbar />}
       <main className="min-h-screen overflow-x-clip" data-scroll-root>
         {children}
       </main>
-      {!standalone && <Footer />}
+      {pathname !== null && PUBLIC_PAGES.includes(pathname) && <Footer />}
     </>
   );
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canManagerSeeReviewItem,
   getFounderDashboardSummary,
+  getDday,
   getDdayTone,
   getMonthlyDiagnosticUsage,
   getLandingNavigation,
@@ -18,6 +19,25 @@ describe("getDdayTone", () => {
     expect(getDdayTone(7)).toBe("amber");
     expect(getDdayTone(4)).toBe("amber");
     expect(getDdayTone(3)).toBe("red");
+  });
+});
+
+describe("getDday", () => {
+  it("counts whole days from today, so a deadline today is D-0", () => {
+    const now = new Date("2026-07-30T15:20:00.000Z");
+    expect(getDday("2026-07-30", now)).toBe(0);
+    expect(getDday("2026-07-31", now)).toBe(1);
+    expect(getDday("2026-08-31", now)).toBe(32);
+  });
+
+  it("returns a negative number for a deadline that already passed", () => {
+    expect(getDday("2026-07-28", new Date("2026-07-30T00:00:00.000Z"))).toBe(-2);
+  });
+
+  it("returns null when there is no usable deadline", () => {
+    expect(getDday(null)).toBeNull();
+    expect(getDday(undefined)).toBeNull();
+    expect(getDday("나중에")).toBeNull();
   });
 });
 
@@ -122,12 +142,50 @@ describe("getFounderDashboardSummary", () => {
 });
 
 describe("getManagerDashboardSummary", () => {
-  it("summarizes visible settlement submissions", () => {
+  const at = (createdAt: string, status: "validated" | "rejected" | "approved" | "draft", role: "founder" | "pre_founder" = "founder") =>
+    ({ id: createdAt, title: "건", team: "팀", amount: "100원", evidenceCount: 0, status, validation: "passed", role, createdAt }) as const;
+
+  it("counts only requests a manager is allowed to see", () => {
+    const summary = getManagerDashboardSummary([
+      at("2026-07-15T00:00:00.000Z", "validated"),
+      at("2026-07-10T00:00:00.000Z", "rejected"),
+      at("2026-07-17T00:00:00.000Z", "draft", "pre_founder"),
+    ], new Date("2026-07-17T00:00:00.000Z"));
+    expect(summary.requestCount).toBe(2);
+    expect(summary.rejectionRate).toBe(50);
+  });
+
+  it("measures waiting and delay on undecided requests only", () => {
+    // 승인·반려한 건은 더 이상 기다리는 건이 아니므로 대기 지표에서 빠집니다.
     expect(getManagerDashboardSummary([
-      { id: "1", title: "A", team: "팀A", amount: "100원", evidenceCount: 2, status: "validated", validation: "passed", role: "founder", createdAt: "2026-07-15T00:00:00.000Z" },
-      { id: "2", title: "B", team: "팀B", amount: "200원", evidenceCount: 1, status: "rejected", validation: "passed", role: "founder", createdAt: "2026-07-10T00:00:00.000Z" },
-      { id: "3", title: "C", team: "팀C", amount: "300원", evidenceCount: 0, status: "draft", validation: "passed", role: "pre_founder", createdAt: "2026-07-17T00:00:00.000Z" },
-    ], new Date("2026-07-17T00:00:00.000Z"))).toEqual({ requestCount: 2, rejectionRate: 50, delayedCount: 1, averageWaitDays: 4.5 });
+      at("2026-07-15T00:00:00.000Z", "validated"),
+      at("2026-07-01T00:00:00.000Z", "rejected"),
+      at("2026-07-02T00:00:00.000Z", "approved"),
+    ], new Date("2026-07-17T00:00:00.000Z"))).toEqual({
+      requestCount: 3,
+      rejectionRate: 33,
+      pendingCount: 1,
+      delayedCount: 0,
+      averageWaitDays: 2,
+    });
+  });
+
+  it("flags requests waiting three days or longer as delayed", () => {
+    const summary = getManagerDashboardSummary([
+      at("2026-07-14T00:00:00.000Z", "validated"),
+      at("2026-07-16T00:00:00.000Z", "validated"),
+    ], new Date("2026-07-17T00:00:00.000Z"));
+    expect(summary).toMatchObject({ pendingCount: 2, delayedCount: 1, averageWaitDays: 2 });
+  });
+
+  it("reports zeroes instead of dividing by zero when nothing is visible", () => {
+    expect(getManagerDashboardSummary([])).toEqual({
+      requestCount: 0,
+      rejectionRate: 0,
+      pendingCount: 0,
+      delayedCount: 0,
+      averageWaitDays: 0,
+    });
   });
 });
 

@@ -1,12 +1,12 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, MailCheck, TriangleAlert } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { AuthShell } from "@/features/auth/AuthShell";
+import { LinkButton } from "@/features/startup-workspace/ui";
+import { completeAuthFromUrl, toAuthMessage } from "@/lib/services/AuthService";
 import { getStartupProfile, resolveWorkspaceDestination } from "@/lib/services/WorkspaceService";
-import { Button } from "@/components/common/Button";
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -15,95 +15,44 @@ function AuthCallbackContent() {
   const [message, setMessage] = useState("이메일 인증을 확인하고 있습니다.");
 
   useEffect(() => {
-    const completeAuth = async () => {
-      if (!supabase) {
-        setStatus("error");
-        setMessage("Supabase 설정을 확인할 수 없습니다.");
-        return;
-      }
+    let mounted = true;
 
-      const code = searchParams.get("code");
-      const tokenHash = searchParams.get("token_hash");
-      const type = searchParams.get("type");
-
-      try {
-        if (typeof window !== "undefined" && window.location.hash) {
-          const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-          const accessToken = hashParams.get("access_token");
-          const refreshToken = hashParams.get("refresh_token");
-
-          if (accessToken && refreshToken) {
-            const { error } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            });
-            if (error) throw error;
-          }
-        }
-
-        if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw error;
-        } else if (tokenHash && type) {
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type: type as any,
-          });
-          if (error) throw error;
-        } else {
-          const {
-            data: { session },
-          } = await supabase.auth.getSession();
-
-          if (session) {
-            setStatus("success");
-            setMessage("이메일 인증이 완료되었습니다. 잠시 후 워크스페이스로 이동합니다.");
-            const profile = await getStartupProfile().catch(() => null);
-            const destination = profile ? resolveWorkspaceDestination(profile) : "/onboarding";
-            setTimeout(() => router.replace(destination), 1200);
-            return;
-          }
-
-          throw new Error("인증 정보가 올바르지 않습니다.");
-        }
-
+    completeAuthFromUrl(new URLSearchParams(searchParams.toString()))
+      .then(async (authenticated) => {
+        if (!mounted) return;
+        if (!authenticated) throw new Error("인증 정보가 올바르지 않거나 링크가 만료되었습니다.");
         setStatus("success");
         setMessage("이메일 인증이 완료되었습니다. 잠시 후 워크스페이스로 이동합니다.");
         const profile = await getStartupProfile().catch(() => null);
         setTimeout(() => router.replace(profile ? resolveWorkspaceDestination(profile) : "/onboarding"), 1200);
-      } catch (error: any) {
-        console.error("Auth callback failed:", error);
+      })
+      .catch((reason) => {
+        if (!mounted) return;
         setStatus("error");
-        setMessage(error?.message || "이메일 인증 처리 중 오류가 발생했습니다.");
-      }
-    };
+        setMessage(toAuthMessage(reason, "이메일 인증 처리 중 오류가 발생했습니다."));
+      });
 
-    completeAuth();
+    return () => { mounted = false; };
   }, [router, searchParams]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-white px-6 dark:bg-slate-950">
-      <div className="w-full max-w-xl rounded-[2rem] border border-slate-200 bg-white p-10 shadow-xl dark:border-slate-800 dark:bg-slate-900">
-        <div className="mx-auto flex max-w-md flex-col items-center text-center">
-          <div className={`mb-6 rounded-full p-4 ${status === "error" ? "bg-red-50 text-red-500 dark:bg-red-500/10" : "bg-primary/10 text-primary dark:bg-blue-500/10 dark:text-blue-400"}`}>
-            {status === "error" ? <TriangleAlert size={24} /> : status === "success" ? <MailCheck size={24} /> : <Loader2 className="animate-spin" size={24} />}
-          </div>
-
-          <h1 className="text-2xl font-black text-slate-900 dark:text-slate-50">
-            {status === "loading" && "이메일 인증 처리 중"}
-            {status === "success" && "인증 완료"}
-            {status === "error" && "인증 실패"}
-          </h1>
-          <p className="mt-4 text-sm leading-7 text-slate-600 dark:text-slate-300">{message}</p>
-
-          {status === "error" && (
-            <Link href="/login" className="mt-8">
-              <Button className="rounded-2xl px-6 py-3">로그인 화면으로 이동</Button>
-            </Link>
-          )}
-        </div>
+    <AuthShell
+      title={status === "error" ? "인증 실패" : status === "success" ? "인증 완료" : "이메일 인증 처리 중"}
+      description={message}
+    >
+      <div className="flex items-center gap-3 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-5">
+        {status === "error" ? <TriangleAlert className="text-[#DC2626]" size={20} />
+          : status === "success" ? <MailCheck className="text-[#16A34A]" size={20} />
+          : <Loader2 className="animate-spin text-[#2563EB]" size={20} />}
+        <span className="text-sm font-semibold text-[#475569]">
+          {status === "error" ? "링크를 다시 요청하거나 로그인 화면에서 재시도해 주세요." : "이 화면을 닫지 말고 잠시 기다려 주세요."}
+        </span>
       </div>
-    </main>
+
+      {status === "error" && (
+        <LinkButton href="/login" size="lg" block className="mt-6">로그인 화면으로 이동</LinkButton>
+      )}
+    </AuthShell>
   );
 }
 
@@ -111,8 +60,8 @@ export default function AuthCallbackPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center bg-white px-6 dark:bg-slate-950">
-          <Loader2 className="animate-spin text-primary" size={28} />
+        <main className="grid min-h-screen place-items-center bg-white">
+          <Loader2 className="animate-spin text-[#2563EB]" size={28} />
         </main>
       }
     >

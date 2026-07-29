@@ -3,9 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { evaluateEligibility, recommendPrograms, STARTUP_PROGRAMS } from "./rules";
 import type { EligibilityAnswers, EligibilityReport, EligibilityState } from "./domain";
-import { Panel, StatusBadge, type StatusTone } from "./ui";
+import { Button, ChoiceChip, Notice, Panel, StatusBadge, type StatusTone } from "./ui";
 import { getLatestEligibilityReport, saveEligibilityReport } from "@/lib/services/WorkspaceService";
-import { cn } from "@/lib/utils";
 
 const stateTone: Record<EligibilityState, StatusTone> = { eligible: "green", review: "amber", ineligible: "red", pending: "slate" };
 const stateLabel: Record<EligibilityState, string> = { eligible: "신청 가능", review: "확인 필요", ineligible: "신청 불가", pending: "룰셋 준비 중" };
@@ -30,7 +29,12 @@ const EMPTY: EligibilityAnswers = {
 function ScoreRing({ score, state }: { score: number; state: EligibilityState }) {
   return (
     <div className="flex items-center gap-5">
-      <div className="grid h-28 w-28 place-items-center rounded-full" style={{ background: `conic-gradient(${ringColor[state]} ${score * 3.6}deg, #E2E8F0 0deg)` }}>
+      <div
+        className="grid h-28 w-28 shrink-0 place-items-center rounded-full transition-[background] duration-500 ease-out"
+        style={{ background: `conic-gradient(${ringColor[state]} ${score * 3.6}deg, #E2E8F0 0deg)` }}
+        role="img"
+        aria-label={`자격 진단 점수 ${score}점`}
+      >
         <div className="grid h-20 w-20 place-items-center rounded-full bg-white">
           <strong className="text-2xl font-bold tabular-nums text-[#0F172A]">{score}</strong>
         </div>
@@ -58,17 +62,9 @@ function TriStateRow({ label, hint, value, onChange }: { label: string; hint: st
       <p className="mt-1 text-xs leading-5 text-[#94A3B8]">{hint}</p>
       <div className="mt-3 flex gap-2">
         {options.map(([optionLabel, optionValue]) => (
-          <button
-            key={optionLabel}
-            type="button"
-            onClick={() => onChange(optionValue)}
-            className={cn(
-              "rounded-lg border px-3 py-2 text-sm font-semibold",
-              value === optionValue ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]" : "border-[#E2E8F0] text-[#475569]",
-            )}
-          >
+          <ChoiceChip key={optionLabel} selected={value === optionValue} onClick={() => onChange(optionValue)}>
             {optionLabel}
-          </button>
+          </ChoiceChip>
         ))}
       </div>
     </div>
@@ -127,7 +123,7 @@ function ReportBody({ report }: { report: EligibilityReport }) {
 export function EligibilityPanel() {
   const [programId, setProgramId] = useState<string>(STARTUP_PROGRAMS[0].id);
   const [answers, setAnswers] = useState<EligibilityAnswers>(EMPTY);
-  const [status, setStatus] = useState<string | null>(null);
+  const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [restored, setRestored] = useState<string | null>(null);
 
@@ -153,9 +149,9 @@ export function EligibilityPanel() {
     setStatus(null);
     try {
       await saveEligibilityReport(programId, answers, report);
-      setStatus("진단 결과를 팀 보관함에 저장했습니다.");
+      setStatus({ tone: "success", text: "진단 결과를 팀 보관함에 저장했습니다." });
     } catch (reason) {
-      setStatus(reason instanceof Error ? reason.message : "저장하지 못했습니다.");
+      setStatus({ tone: "error", text: reason instanceof Error ? reason.message : "저장하지 못했습니다." });
     } finally {
       setSaving(false);
     }
@@ -167,17 +163,9 @@ export function EligibilityPanel() {
         <Panel title="지원사업 선택">
           <div className="flex flex-wrap gap-2">
             {STARTUP_PROGRAMS.map((program) => (
-              <button
-                key={program.id}
-                type="button"
-                onClick={() => setProgramId(program.id)}
-                className={cn(
-                  "rounded-lg border px-3 py-2 text-sm font-semibold",
-                  programId === program.id ? "border-[#2563EB] bg-[#EFF6FF] text-[#2563EB]" : "border-[#E2E8F0] text-[#475569]",
-                )}
-              >
+              <ChoiceChip key={program.id} selected={programId === program.id} onClick={() => setProgramId(program.id)}>
                 {program.name}
-              </button>
+              </ChoiceChip>
             ))}
           </div>
         </Panel>
@@ -195,10 +183,10 @@ export function EligibilityPanel() {
               />
             ))}
           </div>
-          <button onClick={() => void save()} disabled={saving} className="mt-4 w-full rounded-[10px] bg-[#2563EB] px-4 py-3 text-sm font-bold text-white disabled:opacity-50">
+          <Button block loading={saving} onClick={() => void save()} className="mt-4">
             {saving ? "저장 중…" : "진단 결과 저장"}
-          </button>
-          {status && <p className="mt-3 rounded-xl bg-[#F8FAFC] p-3 text-sm font-semibold text-[#475569]">{status}</p>}
+          </Button>
+          {status && <div className="mt-3"><Notice tone={status.tone} onDismiss={() => setStatus(null)}>{status.text}</Notice></div>}
         </Panel>
       </div>
 
@@ -216,7 +204,9 @@ export function EligibilityPanel() {
                 <p className="mt-1 text-sm text-[#475569]">
                   {item.report.blockers.length > 0 ? item.report.blockers[0] : item.report.unchecked.length > 0 ? `미확인 ${item.report.unchecked.length}건` : "즉시 결격 사유 없음"}
                 </p>
-                <button type="button" onClick={() => setProgramId(item.programId)} className="mt-3 text-sm font-bold text-[#2563EB]">이 사업으로 진단</button>
+                <Button variant="ghost" size="sm" onClick={() => setProgramId(item.programId)} className="mt-3 -ml-3 text-[#2563EB] hover:text-[#1D4ED8]">
+                  이 사업으로 진단
+                </Button>
               </article>
             ))}
           </div>

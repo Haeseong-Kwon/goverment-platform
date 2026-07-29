@@ -4,6 +4,7 @@ import type { TaskStatus } from "@/features/startup-workspace/domain";
 import type { ManagerSubmissionInput } from "@/features/startup-workspace/types";
 import type { ExpenseVerdict } from "@/features/expense-rules/types";
 import { createMilestones, evaluateEligibility } from "../../features/startup-workspace/rules";
+import { DEV_BYPASS } from "../dev/devMode";
 
 export interface StartupProfile {
   id: string;
@@ -35,6 +36,7 @@ export function resolveWorkspaceDestination(profile: Pick<StartupProfile, "role"
 }
 
 export async function getStartupProfile(): Promise<StartupProfile | null> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devProfile();
   const client = requireClient();
   const { data: auth, error: authError } = await client.auth.getUser();
   if (authError || !auth.user) return null;
@@ -54,6 +56,7 @@ export async function getStartupProfile(): Promise<StartupProfile | null> {
 }
 
 export async function completeOnboarding(input: OnboardingInput) {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devCompleteOnboarding();
   const client = requireClient();
   const { data: auth, error: authError } = await client.auth.getUser();
   if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
@@ -131,6 +134,7 @@ export async function completeOnboarding(input: OnboardingInput) {
 }
 
 export async function trackWorkspaceEvent(eventName: string, prepTeamId?: string, payload: Record<string, unknown> = {}) {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devTrackEvent(eventName);
   const client = requireClient();
   const { data: auth } = await client.auth.getUser();
   if (!auth.user) return;
@@ -144,6 +148,7 @@ export async function trackWorkspaceEvent(eventName: string, prepTeamId?: string
 }
 
 export async function joinWaitlist(tab: "team_building" | "mentor" | "investment") {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devWaitlistJoin(tab);
   const client = requireClient();
   const { data: auth, error: authError } = await client.auth.getUser();
   if (authError || !auth.user) throw new Error("대기 신청에는 로그인이 필요합니다.");
@@ -155,6 +160,7 @@ export async function joinWaitlist(tab: "team_building" | "mentor" | "investment
 export async function captureLead(email: string, source: string) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) throw new Error("유효한 이메일 주소를 입력해 주세요.");
+  if (DEV_BYPASS) return;
   const client = requireClient();
   const { data: auth } = await client.auth.getUser();
   const { error } = await client.from("leads").insert({
@@ -168,6 +174,7 @@ export async function captureLead(email: string, source: string) {
 }
 
 export async function convertPrepTeam(code: string) {
+  if (DEV_BYPASS) return code.trim().toUpperCase();
   const client = requireClient();
   const { data, error } = await client.rpc("convert_prep_team", { input_code: code.trim() });
   if (error) throw error;
@@ -232,6 +239,7 @@ function getTeamName(row: RawSubmission) {
 }
 
 export async function getCurrentPrepTeamId() {
+  if (DEV_BYPASS) return "dev-team";
   const client = requireClient();
   const { data: auth, error: authError } = await client.auth.getUser();
   if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
@@ -242,6 +250,7 @@ export async function getCurrentPrepTeamId() {
 }
 
 export async function getWorkspaceTasks() {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devTasks();
   const client = requireClient();
   const teamId = await getCurrentPrepTeamId();
   const { data, error } = await client.from("workspace_tasks").select("id,title,due_date,status,task_type,is_hidden").eq("prep_team_id", teamId).eq("is_hidden", false).order("due_date", { ascending: true });
@@ -250,6 +259,7 @@ export async function getWorkspaceTasks() {
 }
 
 export async function getManagerReviewSubmissions(): Promise<ManagerReviewSubmission[]> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devManagerSubmissions();
   const client = requireClient();
   const { data, error } = await client
     .from("settlement_submissions")
@@ -288,6 +298,7 @@ export async function requestSettlementReview(input: {
   expense: Record<string, unknown>;
 }) {
   if (input.verdict.verdict === "fail") throw new Error("위반 항목이 남아 있어 검토를 요청할 수 없습니다.");
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devRequestReview(input);
   const client = requireClient();
   const { data: auth, error: authError } = await client.auth.getUser();
   if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
@@ -327,6 +338,7 @@ export async function submitReviewDecision(
   payload: { reasonCodes: string[]; feedback: string },
 ) {
   if (decision === "rejected" && payload.reasonCodes.length === 0) throw new Error(REVIEW_ERRORS.REASON_CODE_REQUIRED);
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devReviewDecision(submissionId, decision, payload);
   const client = requireClient();
   const { data, error } = await client.rpc("review_settlement_submission", {
     input_submission_id: submissionId,
@@ -351,6 +363,7 @@ export interface SavedEligibilityReport {
 
 /** 자격 진단 결과를 팀 단위로 저장합니다. 준비 팀이 없으면 저장만 건너뜁니다. */
 export async function saveEligibilityReport(programId: string, answers: EligibilityAnswers, report: EligibilityReport) {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devSaveEligibility(programId, answers, report);
   const client = requireClient();
   const { data: auth, error: authError } = await client.auth.getUser();
   if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
@@ -369,6 +382,7 @@ export async function saveEligibilityReport(programId: string, answers: Eligibil
 
 /** 가장 최근 자격 진단을 복원합니다. 없으면 null. */
 export async function getLatestEligibilityReport(): Promise<SavedEligibilityReport | null> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devLatestEligibility();
   const client = requireClient();
   const teamId = await getCurrentPrepTeamId();
   const { data, error } = await client
@@ -392,6 +406,7 @@ export async function getLatestEligibilityReport(): Promise<SavedEligibilityRepo
 
 /** 이번 달 사업계획서 AI 진단 사용 이력. 무료 횟수 계산 입력입니다. */
 export async function getBizplanDiagnosisEvents(): Promise<string[]> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devBizplanEvents();
   const client = requireClient();
   const { data: auth } = await client.auth.getUser();
   if (!auth.user) return [];
@@ -429,6 +444,7 @@ export async function bootstrapManagerAccess(): Promise<ManagerBootstrapResult> 
 
 /** 기간별 반려 사유 코드 목록 — 매니저 리포트의 사유 분포 계산 입력. */
 export async function getRejectionReasonCodes(): Promise<string[]> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devRejectionReasonCodes();
   const client = requireClient();
   const { data, error } = await client.from("submission_reviews").select("reason_code").eq("decision", "rejected");
   if (error) throw error;
@@ -437,6 +453,7 @@ export async function getRejectionReasonCodes(): Promise<string[]> {
 
 export async function createWorkspaceTask(title: string, dueDate?: string) {
   if (!title.trim()) throw new Error("할 일 제목을 입력해 주세요.");
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devCreateTask(title, dueDate);
   const client = requireClient();
   const teamId = await getCurrentPrepTeamId();
   const { data, error } = await client.from("workspace_tasks").insert({ prep_team_id: teamId, title: title.trim(), due_date: dueDate || null, task_type: "custom" }).select("id,title,due_date,status,task_type,is_hidden").single();
@@ -445,6 +462,7 @@ export async function createWorkspaceTask(title: string, dueDate?: string) {
 }
 
 export async function updateWorkspaceTask(taskId: string, changes: Partial<Pick<PersistedTask, "status" | "is_hidden">>) {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devUpdateTask(taskId, changes);
   const client = requireClient();
   const update: Record<string, unknown> = { ...changes, updated_at: new Date().toISOString() };
   if (changes.status === "done") update.completed_at = new Date().toISOString();
