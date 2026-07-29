@@ -7,6 +7,7 @@ import { Button } from "@/components/common/Button";
 import { Mail, Lock, User, ChevronRight, Loader2, Sparkles } from "lucide-react";
 import { m, LazyMotion, domAnimation } from "framer-motion";
 import { getCurrentUser, signUp } from "@/lib/services/AuthService";
+import { getStartupProfile, resolveWorkspaceDestination } from "@/lib/services/WorkspaceService";
 import type { StartupRole } from "@/features/startup-workspace/domain";
 
 const DEFAULT_SITE_URL = "https://swcapstone.vercel.app";
@@ -25,7 +26,8 @@ export default function SignupPage() {
         const checkSession = async () => {
             const user = await getCurrentUser();
             if (user) {
-                router.replace("/dashboard");
+                const profile = await getStartupProfile().catch(() => null);
+                router.replace(profile ? resolveWorkspaceDestination(profile) : "/workspace-entry");
                 return;
             }
             setCheckingSession(false);

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, MailCheck, TriangleAlert } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { getStartupProfile, resolveWorkspaceDestination } from "@/lib/services/WorkspaceService";
 import { Button } from "@/components/common/Button";
 
 function AuthCallbackContent() {
@@ -56,8 +57,10 @@ function AuthCallbackContent() {
 
           if (session) {
             setStatus("success");
-            setMessage("이메일 인증이 완료되었습니다. 잠시 후 대시보드로 이동합니다.");
-            setTimeout(() => router.replace("/dashboard"), 1200);
+            setMessage("이메일 인증이 완료되었습니다. 잠시 후 워크스페이스로 이동합니다.");
+            const profile = await getStartupProfile().catch(() => null);
+            const destination = profile ? resolveWorkspaceDestination(profile) : "/onboarding";
+            setTimeout(() => router.replace(destination), 1200);
             return;
           }
 
@@ -65,8 +68,9 @@ function AuthCallbackContent() {
         }
 
         setStatus("success");
-        setMessage("이메일 인증이 완료되었습니다. 잠시 후 대시보드로 이동합니다.");
-        setTimeout(() => router.replace("/dashboard"), 1200);
+        setMessage("이메일 인증이 완료되었습니다. 잠시 후 워크스페이스로 이동합니다.");
+        const profile = await getStartupProfile().catch(() => null);
+        setTimeout(() => router.replace(profile ? resolveWorkspaceDestination(profile) : "/onboarding"), 1200);
       } catch (error: any) {
         console.error("Auth callback failed:", error);
         setStatus("error");

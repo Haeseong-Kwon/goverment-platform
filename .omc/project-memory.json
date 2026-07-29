@@ -184,6 +184,12 @@
       "type": "file"
     },
     {
+      "path": "src/app/signup/page.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1785328234096,
+      "type": "file"
+    },
+    {
       "path": "src/features/expense-rules/engine.ts",
       "accessCount": 4,
       "lastAccessed": 1785316262325,
@@ -202,9 +208,9 @@
       "type": "file"
     },
     {
-      "path": "src/app/signup/page.tsx",
+      "path": "src/components/layout/Footer.tsx",
       "accessCount": 3,
-      "lastAccessed": 1785318224600,
+      "lastAccessed": 1785328148860,
       "type": "file"
     },
     {
@@ -223,6 +229,18 @@
       "path": "supabase/002-manager-review.sql",
       "accessCount": 2,
       "lastAccessed": 1785317362431,
+      "type": "file"
+    },
+    {
+      "path": "src/components/layout/Navbar.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1785328033490,
+      "type": "file"
+    },
+    {
+      "path": "src/app/auth/callback/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1785328122205,
       "type": "file"
     },
     {
@@ -337,6 +355,30 @@
       "path": "src/features/startup-workspace/EligibilityPanel.tsx",
       "accessCount": 1,
       "lastAccessed": 1785319490819,
+      "type": "file"
+    },
+    {
+      "path": "supabase/005-vault-and-team.sql",
+      "accessCount": 1,
+      "lastAccessed": 1785327257586,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/services/FounderWorkspaceService.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785327303092,
+      "type": "file"
+    },
+    {
+      "path": "src/features/startup-workspace/FounderPanels.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1785327404163,
+      "type": "file"
+    },
+    {
+      "path": "src/components/layout/AppChrome.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1785327427281,
       "type": "file"
     }
   ],

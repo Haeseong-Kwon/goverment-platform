@@ -23,7 +23,7 @@ export interface OnboardingInput {
   desiredPositions: string[];
 }
 
-const requireClient = () => {
+export const requireClient = () => {
   if (!supabase) throw new Error("Supabase 연결 정보가 없습니다. .env.local을 확인하세요.");
   return supabase;
 };
@@ -231,7 +231,7 @@ function getTeamName(row: RawSubmission) {
   return "팀명 없음";
 }
 
-async function getCurrentPrepTeamId() {
+export async function getCurrentPrepTeamId() {
   const client = requireClient();
   const { data: auth, error: authError } = await client.auth.getUser();
   if (authError || !auth.user) throw new Error("로그인이 필요합니다.");

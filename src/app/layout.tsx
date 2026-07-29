@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import "@/features/administration-simulator/simulator.css";
 import { AppChrome } from "@/components/layout/AppChrome";
 
 import { ThemeProvider } from "@/context/ThemeContext";
