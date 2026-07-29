@@ -6,8 +6,8 @@ import { AppChrome } from "@/components/layout/AppChrome";
 import { ThemeProvider } from "@/context/ThemeContext";
 
 export const metadata: Metadata = {
-  title: "AOP | All-in-One Platform",
-  description: "한양대학교 ERICA SW창업캡스톤디자인 통합 플랫폼",
+  title: "StartUp Pilot | 정부 창업지원사업 행정 SaaS",
+  description: "창업자 전용 워크스페이스와 주관기관 매니저 대시보드를 하나의 규정 룰 엔진으로 연결하는 창업 행정 SaaS",
 };
 
 export default function RootLayout({

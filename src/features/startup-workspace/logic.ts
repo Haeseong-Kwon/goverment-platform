@@ -1,36 +1,32 @@
 import type { DashboardTaskInput, ManagerSubmissionInput, ReviewVisibilityInput, StartupMilestone, StartupRole } from "./types";
 
-const sidebarItems: Record<StartupRole, string[]> = {
-  pre_founder: ["홈", "팀 TODO", "마감 캘린더", "AI 진단", "계산기", "법인 설립", "커넥트", "서류 보관함", "팀 설정"],
-  founder: ["홈", "정산 사전검증", "상태 트래커", "서류 보관함", "팀 설정"],
-  manager: ["대시보드", "검토 큐", "팀 관리", "리포트", "설정"],
-};
-
-const sidebarHrefByRole: Record<StartupRole, string[]> = {
+const sidebarByRole: Record<StartupRole, Array<{ label: string; href: string }>> = {
   pre_founder: [
-    "/founder",
-    "/founder/todo",
-    "/founder/calendar",
-    "/founder/diagnostics",
-    "/founder/calculator",
-    "/founder/incorporation",
-    "/founder/connect",
-    "/founder/vault",
-    "/founder/settings",
+    { label: "홈", href: "/founder" },
+    { label: "팀 TODO", href: "/founder/todo" },
+    { label: "마감 캘린더", href: "/founder/calendar" },
+    { label: "AI 진단", href: "/founder/diagnostics" },
+    { label: "계산기", href: "/founder/calculator" },
+    { label: "법인 설립", href: "/founder/incorporation" },
+    { label: "커넥트", href: "/founder/connect" },
+    { label: "서류 보관함", href: "/founder/vault" },
+    { label: "팀 설정", href: "/founder/settings" },
   ],
   founder: [
-    "/workspace",
-    "/workspace/precheck",
-    "/workspace/tracker",
-    "/workspace/vault",
-    "/workspace/settings",
+    { label: "홈", href: "/workspace" },
+    { label: "정산 사전검증", href: "/workspace/precheck" },
+    { label: "사전심의 합본", href: "/workspace/predeliberation" },
+    { label: "상태 트래커", href: "/workspace/tracker" },
+    { label: "서류 보관함", href: "/workspace/vault" },
+    { label: "팀 설정", href: "/workspace/settings" },
   ],
   manager: [
-    "/manager",
-    "/manager/review",
-    "/manager/teams",
-    "/manager/reports",
-    "/manager/settings",
+    { label: "대시보드", href: "/manager" },
+    { label: "검토 큐", href: "/manager/review" },
+    { label: "사업비 계획 검토", href: "/manager/plan-review" },
+    { label: "팀 관리", href: "/manager/teams" },
+    { label: "리포트", href: "/manager/reports" },
+    { label: "설정", href: "/manager/settings" },
   ],
 };
 
@@ -41,14 +37,11 @@ export function getDdayTone(dday: number) {
 }
 
 export function getSidebarItems(role: StartupRole) {
-  return sidebarItems[role];
+  return sidebarByRole[role].map((item) => item.label);
 }
 
 export function getSidebarLinks(role: StartupRole) {
-  return sidebarItems[role].map((label, index) => ({
-    label,
-    href: sidebarHrefByRole[role][index],
-  }));
+  return sidebarByRole[role];
 }
 
 export function isSidebarLinkActive(href: string, pathname: string | null | undefined) {

@@ -21,19 +21,15 @@ import { canManagerSeeReviewItem, getDdayTone, getFounderDashboardSummary, getLa
 import type { DdayTone, StartupRole } from "./types";
 import { cn } from "@/lib/utils";
 import { calculateInsurance } from "./rules";
-import { captureLead, convertPrepTeam, createWorkspaceTask, getManagerReviewSubmissions, getWorkspaceTasks, joinWaitlist, type ManagerReviewSubmission, type PersistedTask, updateWorkspaceTask } from "@/lib/services/WorkspaceService";
+import { captureLead, convertPrepTeam, createWorkspaceTask, getManagerReviewSubmissions, getRejectionReasonCodes, getWorkspaceTasks, joinWaitlist, type ManagerReviewSubmission, type PersistedTask, requestSettlementReview, submitReviewDecision, updateWorkspaceTask } from "@/lib/services/WorkspaceService";
+import { StatusBadge } from "./ui";
+import { ExpenseValidator } from "@/features/expense-rules/ExpenseValidator";
+import { PreDeliberationPanel } from "@/features/expense-rules/PreDeliberation";
+import { PlanReviewBoard, RejectionComposer } from "@/features/expense-rules/ManagerTools";
+import { summarizeRejectionReasons } from "@/features/expense-rules/rejection";
+import type { ReasonCode } from "@/features/expense-rules/types";
 
-const statusClasses = {
-  green: "bg-[#F0FDF4] text-[#16A34A] border-[#BBF7D0]",
-  amber: "bg-[#FFFBEB] text-[#B45309] border-[#FDE68A]",
-  red: "bg-[#FEF2F2] text-[#DC2626] border-[#FECACA]",
-  slate: "bg-[#F8FAFC] text-[#475569] border-[#E2E8F0]",
-  blue: "bg-[#EFF6FF] text-[#2563EB] border-[#BFDBFE]",
-};
-
-function StatusBadge({ tone = "slate", children }: { tone?: keyof typeof statusClasses; children: React.ReactNode }) {
-  return <span className={cn("inline-flex shrink-0 whitespace-nowrap rounded-lg border px-2.5 py-1 text-[13px] font-semibold", statusClasses[tone])}>{children}</span>;
-}
+export const PRODUCT_NAME = "StartUp Pilot";
 
 function DdayPill({ dday }: { dday: number }) {
   const tone = getDdayTone(dday) as DdayTone;
@@ -95,7 +91,7 @@ function SwotQuadrant() {
 
 function Sidebar({ role }: { role: StartupRole }) {
   const pathname = usePathname();
-  return <aside className="hidden w-[240px] shrink-0 border-r border-[#E2E8F0] bg-white p-5 lg:block"><Link href="/" className="text-xl font-bold text-[#0F172A]">StartupOS</Link>{role === "founder" && <p className="mt-1 text-xs font-semibold text-[#2563EB]">인하대학교 창업지원단 연결됨</p>}<nav className="mt-8 space-y-1">{getSidebarLinks(role).map((item) => { const active = isSidebarLinkActive(item.href, pathname); return <Link key={item.label} href={item.href} aria-current={active ? "page" : undefined} className={cn("flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm font-semibold", active ? "bg-[#EFF6FF] text-[#2563EB]" : "text-[#475569] hover:bg-[#F8FAFC]")}><LayoutDashboard size={17} />{item.label}</Link>; })}</nav>{role === "pre_founder" && <Link href="/founder/convert" className="mt-8 block rounded-2xl bg-[#EFF6FF] p-4 text-sm font-bold text-[#2563EB]">합격하셨나요?</Link>}</aside>;
+  return <aside className="hidden w-[240px] shrink-0 border-r border-[#E2E8F0] bg-white p-5 lg:block"><Link href="/" className="text-xl font-bold text-[#0F172A]">StartUp Pilot</Link>{role === "founder" && <p className="mt-1 text-xs font-semibold text-[#2563EB]">인하대학교 창업지원단 연결됨</p>}<nav className="mt-8 space-y-1">{getSidebarLinks(role).map((item) => { const active = isSidebarLinkActive(item.href, pathname); return <Link key={item.label} href={item.href} aria-current={active ? "page" : undefined} className={cn("flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm font-semibold", active ? "bg-[#EFF6FF] text-[#2563EB]" : "text-[#475569] hover:bg-[#F8FAFC]")}><LayoutDashboard size={17} />{item.label}</Link>; })}</nav>{role === "pre_founder" && <Link href="/founder/convert" className="mt-8 block rounded-2xl bg-[#EFF6FF] p-4 text-sm font-bold text-[#2563EB]">합격하셨나요?</Link>}</aside>;
 }
 
 function WorkspaceShell({ role, children }: { role: StartupRole; children: React.ReactNode }) {
@@ -136,7 +132,7 @@ function FounderCore({ founder = false }: { founder?: boolean }) {
   return <WorkspaceShell role={founder ? "founder" : "pre_founder"}><HeroHeader role={founder ? "founder" : "pre_founder"} /><section className="grid gap-4 md:grid-cols-4"><div className="rounded-2xl bg-[#2563EB] p-5 text-white md:col-span-2"><p className="text-sm font-semibold opacity-90">다음 마감</p><h2 className="mt-2 text-2xl font-bold">{summary.nextDueDate ?? "등록된 마감 없음"}</h2><p className="mt-2 text-sm opacity-90">저장된 TODO {tasks.length}개 기준으로 계산했습니다.</p></div>{[["남은 TODO", `${summary.remainingTasks}`], ["자동 TODO", `${summary.automaticTasks}`], ["팀 진행률", `${summary.completionRate}%`], ["빠른 계산기", `${insurance.employerTotal.toLocaleString()}원`]].map(([label, value]) => <div key={label} className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><p className="text-sm text-[#475569]">{label}</p><strong className="mt-2 block text-2xl tabular-nums">{value}</strong></div>)}</section>{message && <p className="mt-6 rounded-xl border border-[#E2E8F0] bg-white p-4 text-sm font-semibold text-[#475569]">{message}</p>}<section className="mt-6 grid gap-4 md:grid-cols-3">{visibleTasks.map((task) => <PersistedTaskCard key={task.id} task={task} />)}</section><section className="mt-6 grid gap-4 md:grid-cols-3"><Link href={founder ? "/workspace/precheck" : "/founder/diagnostics"} className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">{founder ? "정산 사전검증" : "AI 진단"}</h2><p className="mt-2 text-sm text-[#475569]">상세 기능 페이지로 이동합니다.</p></Link><Link href={founder ? "/workspace/tracker" : "/founder/calendar"} className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">{founder ? "상태 트래커" : "마감 캘린더"}</h2><p className="mt-2 text-sm text-[#475569]">마감과 검토 흐름을 확인합니다.</p></Link><Link href={founder ? "/workspace/vault" : "/founder/vault"} className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">서류 보관함</h2><p className="mt-2 text-sm text-[#475569]">버전과 코멘트를 관리합니다.</p></Link></section></WorkspaceShell>;
 }
 
-type FounderFeature = "todo" | "calendar" | "diagnostics" | "calculator" | "incorporation" | "connect" | "vault" | "settings" | "precheck" | "tracker";
+type FounderFeature = "todo" | "calendar" | "diagnostics" | "calculator" | "incorporation" | "connect" | "vault" | "settings" | "precheck" | "predeliberation" | "tracker";
 
 function FounderFeaturePage({ feature, founder = false }: { feature: FounderFeature; founder?: boolean }) {
   const usage = getMonthlyDiagnosticUsage(["2026-07-01T09:00:00.000Z"], new Date("2026-07-06T00:00:00.000Z"));
@@ -150,17 +146,41 @@ function FounderFeaturePage({ feature, founder = false }: { feature: FounderFeat
     vault: "서류 보관함",
     settings: "팀 설정",
     precheck: "정산 사전검증",
+    predeliberation: "사전심의 합본",
     tracker: "상태 트래커",
   };
-  return <WorkspaceShell role={founder ? "founder" : "pre_founder"}><div className="mb-6"><StatusBadge tone={founder ? "green" : "blue"}>{founder ? "선정 팀" : "창업자"}</StatusBadge><h1 className="mt-3 text-[32px] font-bold">{titleByFeature[feature]}</h1><p className="mt-2 text-[#475569]">사이드바 메뉴와 독립된 기능 화면입니다.</p></div>{feature === "todo" && <TaskBoard />}{feature === "calendar" && <CalendarPreview />}{feature === "diagnostics" && <div className="space-y-6"><A1Report kind="eligibility" /><BizPlanCard exhausted={usage.isExhausted} /></div>}{feature === "calculator" && <CalculatorCard />}{feature === "incorporation" && <IncorporationCard />}{feature === "connect" && <ConnectCard />}{feature === "vault" && <VaultCard />}{feature === "settings" && <SettingsPanel founder={founder} />}{feature === "precheck" && <PrecheckPanel />}{feature === "tracker" && <TrackerPanel />}</WorkspaceShell>;
+  return <WorkspaceShell role={founder ? "founder" : "pre_founder"}><div className="mb-6"><StatusBadge tone={founder ? "green" : "blue"}>{founder ? "선정 팀" : "창업자"}</StatusBadge><h1 className="mt-3 text-[32px] font-bold">{titleByFeature[feature]}</h1><p className="mt-2 text-[#475569]">사이드바 메뉴와 독립된 기능 화면입니다.</p></div>{feature === "todo" && <TaskBoard />}{feature === "calendar" && <CalendarPreview />}{feature === "diagnostics" && <div className="space-y-6"><A1Report kind="eligibility" /><BizPlanCard exhausted={usage.isExhausted} /></div>}{feature === "calculator" && <CalculatorCard />}{feature === "incorporation" && <IncorporationCard />}{feature === "connect" && <ConnectCard />}{feature === "vault" && <VaultCard />}{feature === "settings" && <SettingsPanel founder={founder} />}{feature === "precheck" && <PrecheckPanel />}{feature === "predeliberation" && <PreDeliberationPanel />}{feature === "tracker" && <TrackerPanel />}</WorkspaceShell>;
 }
 
 function SettingsPanel({ founder }: { founder: boolean }) {
-  return <section className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">{founder ? "협약 팀 설정" : "준비 팀 설정"}</h2><div className="mt-4 grid gap-3 md:grid-cols-2"><div className="rounded-xl bg-[#F8FAFC] p-4"><p className="text-sm font-bold">초대 링크</p><p className="mt-2 text-sm text-[#475569]">team.startupos.kr/invite/inha-2026</p></div><div className="rounded-xl bg-[#F8FAFC] p-4"><p className="text-sm font-bold">권한</p><p className="mt-2 text-sm text-[#475569]">팀원은 TODO, 진행 상황, 보관함만 공유합니다.</p></div></div></section>;
+  return <section className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">{founder ? "협약 팀 설정" : "준비 팀 설정"}</h2><div className="mt-4 grid gap-3 md:grid-cols-2"><div className="rounded-xl bg-[#F8FAFC] p-4"><p className="text-sm font-bold">초대 링크</p><p className="mt-2 text-sm text-[#475569]">team.startuppilot.kr/invite/inha-2026</p></div><div className="rounded-xl bg-[#F8FAFC] p-4"><p className="text-sm font-bold">권한</p><p className="mt-2 text-sm text-[#475569]">팀원은 TODO, 진행 상황, 보관함만 공유합니다.</p></div></div></section>;
 }
 
 function PrecheckPanel() {
-  return <section className="grid gap-6 xl:grid-cols-[1fr_360px]"><div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">정산 사전검증</h2><ReasonList items={[{ tone: "green", text: "증빙 파일명이 비목과 일치합니다." }, { tone: "amber", text: "세금계산서 발행일과 집행일 간격 확인이 필요합니다." }]} /><div className="mt-5"><NextActions items={["이체확인증 원본 업로드", "거래처 사업자등록번호 확인"]} /></div></div><div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><StatusBadge tone="green">검증 통과 🟢</StatusBadge><p className="mt-3 text-sm text-[#475569]">매니저에게는 점수 없이 이 뱃지만 표시됩니다.</p></div></section>;
+  const [message, setMessage] = useState<string | null>(null);
+  const request = async (expense: Parameters<typeof requestSettlementReview>[0]["expense"], verdict: { verdict: "pass" | "review" | "fail"; findings: unknown[]; missingEvidence: string[] }) => {
+    try {
+      await requestSettlementReview({
+        title: (expense.title as string) || "정산 건",
+        amount: Number(expense.amount) || 0,
+        verdict,
+        expense,
+      });
+      setMessage("검토 요청이 매니저 큐로 전달되었습니다.");
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "검토 요청에 실패했습니다.");
+    }
+  };
+  return (
+    <div className="space-y-4">
+      {message && <p className="rounded-xl border border-[#E2E8F0] bg-white p-4 text-sm font-semibold text-[#2563EB]">{message}</p>}
+      <ExpenseValidator
+        onRequestReview={(expense, verdict) =>
+          void request(expense as unknown as Record<string, unknown>, { verdict: verdict.verdict, findings: verdict.findings, missingEvidence: verdict.missingEvidence })
+        }
+      />
+    </div>
+  );
 }
 
 function TrackerPanel() {
@@ -219,30 +239,83 @@ function ManagerDashboard() {
 
 function ManagerReviewQueuePage() {
   const [submissions, setSubmissions] = useState<ManagerReviewSubmission[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [message, setMessage] = useState("검토 큐를 불러오는 중입니다.");
-  useEffect(() => { let mounted = true; getManagerReviewSubmissions().then((items) => { if (!mounted) return; const visible = items.filter(canManagerSeeReviewItem); setSubmissions(visible); setMessage(visible.length ? "" : "검증 통과 후 제출된 검토 요청이 없습니다."); }).catch((reason) => { if (mounted) setMessage(reason instanceof Error ? reason.message : "검토 큐를 불러오지 못했습니다."); }); return () => { mounted = false; }; }, []);
-  return <WorkspaceShell role="manager"><div className="mb-6"><StatusBadge tone="blue">주관기관 매니저</StatusBadge><h1 className="mt-3 text-[32px] font-bold">검토 큐</h1><p className="mt-2 text-[#475569]">founder의 검증 통과 후 검토 요청 건만 표시합니다.</p></div>{message && <p className="mb-6 rounded-xl border border-[#E2E8F0] bg-white p-4 text-sm font-semibold text-[#475569]">{message}</p>}<section className="grid gap-6 xl:grid-cols-[1fr_420px]"><div className="rounded-2xl border border-[#E2E8F0] bg-white"><div className="grid grid-cols-[1.4fr_.8fr_.8fr] border-b border-[#E2E8F0] px-5 py-3 text-xs font-bold text-[#475569]"><span>팀</span><span>상태</span><span className="text-right">증빙</span></div>{submissions.map((row) => <div key={row.id} className="grid min-h-14 grid-cols-[1.4fr_.8fr_.8fr] items-center border-b border-[#F1F5F9] px-5 py-3 text-sm"><strong>{row.team}</strong><span>{row.status}</span><span className="text-right tabular-nums">{row.evidenceCount}건</span></div>)}</div><ReviewPanel submission={submissions[0]} /></section></WorkspaceShell>;
+  const load = () => getManagerReviewSubmissions().then((items) => {
+    const visible = items.filter(canManagerSeeReviewItem);
+    setSubmissions(visible);
+    setSelectedId((current) => current ?? visible[0]?.id ?? null);
+    setMessage(visible.length ? "" : "검증 통과 후 제출된 검토 요청이 없습니다.");
+  });
+  useEffect(() => { let mounted = true; load().catch((reason) => { if (mounted) setMessage(reason instanceof Error ? reason.message : "검토 큐를 불러오지 못했습니다."); }); return () => { mounted = false; }; }, []);
+  const selected = submissions.find((item) => item.id === selectedId);
+  const decide = async (decision: "approved" | "rejected", payload: { reasonCodes: ReasonCode[]; feedback: string }) => {
+    if (!selected) return;
+    try {
+      await submitReviewDecision(selected.id, decision, payload);
+      setMessage(decision === "approved" ? "승인 처리했습니다." : "반려 처리하고 안내문을 기록했습니다.");
+      await load();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "처리에 실패했습니다.");
+    }
+  };
+  return <WorkspaceShell role="manager"><div className="mb-6"><StatusBadge tone="blue">주관기관 매니저</StatusBadge><h1 className="mt-3 text-[32px] font-bold">검토 큐</h1><p className="mt-2 text-[#475569]">사전검증을 통과한 검토 요청 건만 표시합니다. 오류가 이미 표시된 상태에서 판단만 하세요.</p></div>{message && <p className="mb-6 rounded-xl border border-[#E2E8F0] bg-white p-4 text-sm font-semibold text-[#475569]">{message}</p>}<section className="grid gap-6 xl:grid-cols-[1fr_460px]"><div className="rounded-2xl border border-[#E2E8F0] bg-white"><div className="grid grid-cols-[1.4fr_1fr_.8fr_.7fr] border-b border-[#E2E8F0] px-5 py-3 text-xs font-bold text-[#475569]"><span>팀</span><span>건명</span><span>상태</span><span className="text-right">증빙</span></div>{submissions.map((row) => <button key={row.id} onClick={() => setSelectedId(row.id)} className={cn("grid w-full min-h-14 grid-cols-[1.4fr_1fr_.8fr_.7fr] items-center border-b border-[#F1F5F9] px-5 py-3 text-left text-sm", row.id === selectedId && "bg-[#EFF6FF]")}><strong>{row.team}</strong><span className="truncate text-[#475569]">{row.title}</span><span><StatusBadge tone={row.status === "rejected" ? "red" : row.status === "approved" ? "green" : "amber"}>{row.status}</StatusBadge></span><span className="text-right tabular-nums">{row.evidenceCount}건</span></button>)}</div><div className="space-y-5"><ReviewPanel submission={selected} /><RejectionComposer teamName={selected?.team ?? "선정 팀"} submissionTitle={selected?.title ?? "정산 건"} verdict={selected?.verdict} onSubmit={selected ? (decision, payload) => void decide(decision, payload) : undefined} /></div></section></WorkspaceShell>;
 }
 
-type ManagerFeature = "teams" | "reports" | "settings";
+/** 기관 리포트를 CSV로 내려받습니다. 상부·전담기관 보고 자료로 바로 씁니다. */
+function exportManagerReport(
+  summary: ReturnType<typeof getManagerDashboardSummary>,
+  reasons: ReturnType<typeof summarizeRejectionReasons>,
+) {
+  const rows = [
+    ["구분", "값"],
+    ["검토 요청", `${summary.requestCount}건`],
+    ["반려율", `${summary.rejectionRate}%`],
+    ["평균 대기", `${summary.averageWaitDays}일`],
+    ["지연 팀", `${summary.delayedCount}팀`],
+    [],
+    ["반려 사유코드", "사유", "건수", "비중"],
+    ...reasons.map((item) => [item.code, item.label, String(item.count), `${item.share}%`]),
+  ];
+  const csv = rows.map((row) => row.join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "startup-pilot-report.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+type ManagerFeature = "teams" | "reports" | "settings" | "plan-review";
+
+const managerFeatureTitles: Record<ManagerFeature, string> = {
+  teams: "팀 관리",
+  reports: "기관 리포트",
+  settings: "설정",
+  "plan-review": "사업비 계획 검토",
+};
 
 function ManagerFeaturePage({ feature }: { feature: ManagerFeature }) {
-  const title = feature === "teams" ? "팀 관리" : feature === "reports" ? "리포트" : "설정";
+  const title = managerFeatureTitles[feature];
   const [submissions, setSubmissions] = useState<ManagerReviewSubmission[]>([]);
+  const [reasonCodes, setReasonCodes] = useState<ReasonCode[]>([]);
   const [message, setMessage] = useState("기관 데이터를 불러오는 중입니다.");
-  useEffect(() => { if (feature === "settings") { setMessage(""); return; } let mounted = true; getManagerReviewSubmissions().then((items) => { if (!mounted) return; const visible = items.filter(canManagerSeeReviewItem); setSubmissions(visible); setMessage(visible.length ? "" : "표시할 제출 데이터가 없습니다."); }).catch((reason) => { if (mounted) setMessage(reason instanceof Error ? reason.message : "기관 데이터를 불러오지 못했습니다."); }); return () => { mounted = false; }; }, [feature]);
+  useEffect(() => { if (feature === "settings" || feature === "plan-review") { setMessage(""); return; } let mounted = true; getManagerReviewSubmissions().then((items) => { if (!mounted) return; const visible = items.filter(canManagerSeeReviewItem); setSubmissions(visible); setMessage(visible.length ? "" : "표시할 제출 데이터가 없습니다."); }).catch((reason) => { if (mounted) setMessage(reason instanceof Error ? reason.message : "기관 데이터를 불러오지 못했습니다."); }); return () => { mounted = false; }; }, [feature]);
+  useEffect(() => { if (feature !== "reports") return; let mounted = true; getRejectionReasonCodes().then((codes) => { if (mounted) setReasonCodes(codes as ReasonCode[]); }).catch(() => undefined); return () => { mounted = false; }; }, [feature]);
   const summary = getManagerDashboardSummary(submissions);
-  return <WorkspaceShell role="manager"><div className="mb-6"><StatusBadge tone="blue">주관기관 매니저</StatusBadge><h1 className="mt-3 text-[32px] font-bold">{title}</h1><p className="mt-2 text-[#475569]">매니저 세계의 독립 기능 화면입니다.</p></div>{message && <p className="mb-6 rounded-xl border border-[#E2E8F0] bg-white p-4 text-sm font-semibold text-[#475569]">{message}</p>}{feature === "teams" && <section className="rounded-2xl border border-[#E2E8F0] bg-white"><div className="grid grid-cols-[1.2fr_1fr_.8fr] border-b border-[#E2E8F0] px-5 py-3 text-xs font-bold text-[#475569]"><span>팀</span><span>최근 제출</span><span className="text-right">상태</span></div>{submissions.map((item) => <div key={item.id} className="grid min-h-14 grid-cols-[1.2fr_1fr_.8fr] items-center border-b border-[#F1F5F9] px-5 py-3 text-sm"><strong>{item.team}</strong><span>{item.title}</span><span className="text-right"><StatusBadge tone={item.status === "rejected" ? "red" : item.status === "approved" ? "green" : "amber"}>{item.status}</StatusBadge></span></div>)}</section>}{feature === "reports" && <section className="grid gap-4 md:grid-cols-3"><div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-lg font-bold">검토 요청</h2><p className="mt-3 text-3xl font-bold tabular-nums">{summary.requestCount}건</p></div><div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-lg font-bold">평균 대기</h2><p className="mt-3 text-3xl font-bold tabular-nums">{summary.averageWaitDays}일</p></div><div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-lg font-bold">지연 팀</h2><p className="mt-3 text-3xl font-bold tabular-nums text-[#DC2626]">{summary.delayedCount}팀</p></div></section>}{feature === "settings" && <section className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">기관 설정</h2><div className="mt-4 rounded-xl bg-[#F8FAFC] p-4"><p className="text-sm font-bold">권한 규칙</p><p className="mt-2 text-sm text-[#475569]">준비 데이터와 진단 점수는 접근하지 않습니다.</p></div></section>}</WorkspaceShell>;
+  const reasonDistribution = summarizeRejectionReasons(reasonCodes);
+  return <WorkspaceShell role="manager"><div className="mb-6"><StatusBadge tone="blue">주관기관 매니저</StatusBadge><h1 className="mt-3 text-[32px] font-bold">{title}</h1><p className="mt-2 text-[#475569]">매니저 세계의 독립 기능 화면입니다.</p></div>{message && <p className="mb-6 rounded-xl border border-[#E2E8F0] bg-white p-4 text-sm font-semibold text-[#475569]">{message}</p>}{feature === "teams" && <section className="rounded-2xl border border-[#E2E8F0] bg-white"><div className="grid grid-cols-[1.2fr_1fr_.8fr] border-b border-[#E2E8F0] px-5 py-3 text-xs font-bold text-[#475569]"><span>팀</span><span>최근 제출</span><span className="text-right">상태</span></div>{submissions.map((item) => <div key={item.id} className="grid min-h-14 grid-cols-[1.2fr_1fr_.8fr] items-center border-b border-[#F1F5F9] px-5 py-3 text-sm"><strong>{item.team}</strong><span>{item.title}</span><span className="text-right"><StatusBadge tone={item.status === "rejected" ? "red" : item.status === "approved" ? "green" : "amber"}>{item.status}</StatusBadge></span></div>)}</section>}{feature === "plan-review" && <PlanReviewBoard />}{feature === "reports" && <section className="space-y-6"><div className="grid gap-4 md:grid-cols-4"><div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-lg font-bold">검토 요청</h2><p className="mt-3 text-3xl font-bold tabular-nums">{summary.requestCount}건</p></div><div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-lg font-bold">반려율</h2><p className="mt-3 text-3xl font-bold tabular-nums">{summary.rejectionRate}%</p></div><div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-lg font-bold">평균 대기</h2><p className="mt-3 text-3xl font-bold tabular-nums">{summary.averageWaitDays}일</p></div><div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-lg font-bold">지연 팀</h2><p className="mt-3 text-3xl font-bold tabular-nums text-[#DC2626]">{summary.delayedCount}팀</p></div></div><div className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><div className="flex items-center justify-between"><h2 className="text-lg font-bold">반려 사유 분포</h2><button onClick={() => exportManagerReport(summary, reasonDistribution)} className="rounded-lg border border-[#2563EB] px-3 py-2 text-sm font-bold text-[#2563EB]">CSV 내보내기</button></div>{reasonDistribution.length === 0 ? <p className="mt-4 text-sm text-[#94A3B8]">아직 반려 기록이 없습니다.</p> : <div className="mt-4 space-y-3">{reasonDistribution.map((item) => <div key={item.code}><div className="mb-1 flex items-center justify-between text-sm"><span className="font-semibold text-[#0F172A]">{item.code} {item.label}</span><span className="tabular-nums text-[#475569]">{item.count}건 · {item.share}%</span></div><div className="h-2.5 rounded-full bg-[#EFF6FF]"><div className="h-full rounded-full bg-[#2563EB]" style={{ width: `${item.share}%` }} /></div></div>)}</div>}</div></section>}{feature === "settings" && <section className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><h2 className="text-xl font-bold">기관 설정</h2><div className="mt-4 rounded-xl bg-[#F8FAFC] p-4"><p className="text-sm font-bold">권한 규칙</p><p className="mt-2 text-sm text-[#475569]">준비 데이터와 진단 점수는 접근하지 않습니다.</p></div></section>}</WorkspaceShell>;
 }
 
 function ReviewPanel({ submission }: { submission?: ManagerReviewSubmission }) {
-  const [reason, setReason] = useState("");
-  return <aside className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><div className="flex items-center justify-between"><h2 className="text-lg font-bold">{submission ? `${submission.team} · ${submission.title}` : "선택된 요청 없음"}</h2>{submission && <StatusBadge tone="green">검증 통과</StatusBadge>}</div><div className="mt-4 rounded-xl bg-[#F8FAFC] p-5 text-center text-sm text-[#94A3B8]"><FileText className="mx-auto mb-2" />{submission ? `${submission.evidenceCount}개 증빙 · ${submission.amount}` : "검토 큐에서 요청을 선택하세요"}</div><p className="mt-4 text-sm font-bold text-[#475569]">반려 사유코드 <span className="text-[#DC2626]">*</span></p><select value={reason} onChange={(event) => setReason(event.target.value)} className="mt-2 w-full rounded-[10px] border border-[#E2E8F0] px-3 py-3 text-sm"><option value="">선택하세요</option><option>E-101 비목 부적합</option><option>E-102 증빙 누락</option><option>E-103 한도 초과</option><option>E-104 서명·날인 누락</option></select><textarea className="mt-3 min-h-20 w-full rounded-[10px] border border-[#E2E8F0] p-3 text-sm" placeholder="코멘트 입력 (반려 시 필수)" /><div className="mt-4 flex gap-2"><button disabled={!submission || !reason} className="flex-1 rounded-[10px] border border-[#DC2626] px-4 py-3 text-sm font-bold text-[#DC2626] disabled:cursor-not-allowed disabled:opacity-40">반려</button><button disabled={!submission} className="flex-1 rounded-[10px] bg-[#2563EB] px-4 py-3 text-sm font-bold text-white disabled:opacity-40">승인</button></div></aside>;
+  const verdict = submission?.verdict;
+  const blocking = (verdict?.findings ?? []).filter((finding) => finding.severity !== "info");
+  return <aside className="rounded-2xl border border-[#E2E8F0] bg-white p-5"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-bold">{submission ? `${submission.team} · ${submission.title}` : "선택된 요청 없음"}</h2>{submission && <StatusBadge tone="green">사전검증 통과</StatusBadge>}</div><div className="mt-4 rounded-xl bg-[#F8FAFC] p-5 text-center text-sm text-[#94A3B8]"><FileText className="mx-auto mb-2" />{submission ? `${submission.evidenceCount}개 증빙 · ${submission.amount}` : "검토 큐에서 요청을 선택하세요"}</div>{verdict && <div className="mt-4"><div className="flex flex-wrap gap-2"><StatusBadge tone="slate">{verdict.categoryName}</StatusBadge><StatusBadge tone={blocking.length ? "red" : "green"}>AI 사전검증 지적 {blocking.length}건</StatusBadge>{verdict.missingEvidence.length > 0 && <StatusBadge tone="amber">증빙 미비 {verdict.missingEvidence.length}건</StatusBadge>}</div><ul className="mt-3 space-y-2">{blocking.map((finding) => <li key={finding.code} className="rounded-lg border border-[#E2E8F0] p-3 text-sm"><strong className="text-[#DC2626]">{finding.reasonCode}</strong> <span className="font-semibold text-[#0F172A]">{finding.message}</span><span className="mt-1 block text-[#475569]">근거 · {finding.clause}</span></li>)}</ul></div>}</aside>;
 }
 
 function LandingNav({ role }: { role: "founder" | "manager" }) {
   const nav = getLandingNavigation(role);
-  return <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5"><Link href={nav.homeHref} className="text-xl font-bold text-[#0F172A]">StartupOS</Link><nav className="hidden gap-6 text-sm font-semibold text-[#475569] md:flex"><Link href="/">창업자</Link><Link href="/manager/landing">매니저</Link><a href="#library">자료실</a></nav><Link href={nav.workspaceEntryHref} className="rounded-[10px] bg-[#2563EB] px-4 py-2.5 text-sm font-bold text-white">워크스페이스 진입</Link></header>;
+  return <header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5"><Link href={nav.homeHref} className="text-xl font-bold text-[#0F172A]">StartUp Pilot</Link><nav className="hidden gap-6 text-sm font-semibold text-[#475569] md:flex"><Link href="/">창업자</Link><Link href="/manager/landing">매니저</Link><a href="#library">자료실</a></nav><Link href={nav.workspaceEntryHref} className="rounded-[10px] bg-[#2563EB] px-4 py-2.5 text-sm font-bold text-white">워크스페이스 진입</Link></header>;
 }
 
 function FounderLanding() {
@@ -256,7 +329,7 @@ function ManagerLanding() {
 }
 
 function WorkspaceEntry() {
-  return <main className="min-h-screen bg-white text-[#0F172A]"><header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5"><Link href="/" className="text-xl font-bold">StartupOS</Link><nav className="hidden gap-6 text-sm font-semibold text-[#475569] md:flex"><a>창업자</a><a>매니저</a><a>자료실</a></nav><Link href="/founder" className="rounded-[10px] bg-[#2563EB] px-4 py-2.5 text-sm font-bold text-white">창업자로 시작</Link></header><section className="mx-auto grid max-w-7xl gap-6 px-5 py-16 md:grid-cols-2"><Link href="/founder" className="rounded-2xl bg-[#EFF6FF] p-8 shadow-[0_1px_2px_rgba(15,23,42,.04),0_8px_24px_rgba(15,23,42,.06)]"><Users className="text-[#2563EB]" /><h1 className="mt-6 text-[44px] font-bold leading-tight tracking-normal">창업자 워크스페이스</h1><p className="mt-4 text-lg leading-8 text-[#475569]">지원사업 준비, AI 진단, 팀 TODO, 서류 보관함을 한곳에서 관리합니다.</p><span className="mt-6 inline-flex items-center gap-2 font-bold text-[#2563EB]">준비 시작 <ChevronRight size={18} /></span></Link><Link href="/manager" className="rounded-2xl border border-[#E2E8F0] bg-white p-8 shadow-[0_1px_2px_rgba(15,23,42,.04),0_8px_24px_rgba(15,23,42,.06)]"><Building2 className="text-[#2563EB]" /><h2 className="mt-6 text-[44px] font-bold leading-tight tracking-normal">매니저 대시보드</h2><p className="mt-4 text-lg leading-8 text-[#475569]">검증 통과 후 검토 요청된 선정 팀만 고밀도 테이블로 관리합니다.</p><span className="mt-6 inline-flex items-center gap-2 font-bold text-[#2563EB]">기관 인증 <ChevronRight size={18} /></span></Link></section><section className="mx-auto max-w-7xl px-5 pb-16"><div className="grid gap-4 md:grid-cols-4">{[[ShieldCheck, "RBAC 분리"], [ClipboardCheck, "자동 마일스톤"], [CalendarDays, "마감 캘린더"], [Lock, "준비 데이터 비공개"]].map(([Icon, label]) => { const TypedIcon = Icon as typeof ShieldCheck; return <div key={String(label)} className="rounded-2xl border border-[#E2E8F0] p-5"><TypedIcon className="text-[#2563EB]" /><strong className="mt-4 block">{String(label)}</strong></div>; })}</div></section></main>;
+  return <main className="min-h-screen bg-white text-[#0F172A]"><header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5"><Link href="/" className="text-xl font-bold">StartUp Pilot</Link><nav className="hidden gap-6 text-sm font-semibold text-[#475569] md:flex"><a>창업자</a><a>매니저</a><a>자료실</a></nav><Link href="/founder" className="rounded-[10px] bg-[#2563EB] px-4 py-2.5 text-sm font-bold text-white">창업자로 시작</Link></header><section className="mx-auto grid max-w-7xl gap-6 px-5 py-16 md:grid-cols-2"><Link href="/founder" className="rounded-2xl bg-[#EFF6FF] p-8 shadow-[0_1px_2px_rgba(15,23,42,.04),0_8px_24px_rgba(15,23,42,.06)]"><Users className="text-[#2563EB]" /><h1 className="mt-6 text-[44px] font-bold leading-tight tracking-normal">창업자 워크스페이스</h1><p className="mt-4 text-lg leading-8 text-[#475569]">지원사업 준비, AI 진단, 팀 TODO, 서류 보관함을 한곳에서 관리합니다.</p><span className="mt-6 inline-flex items-center gap-2 font-bold text-[#2563EB]">준비 시작 <ChevronRight size={18} /></span></Link><Link href="/manager" className="rounded-2xl border border-[#E2E8F0] bg-white p-8 shadow-[0_1px_2px_rgba(15,23,42,.04),0_8px_24px_rgba(15,23,42,.06)]"><Building2 className="text-[#2563EB]" /><h2 className="mt-6 text-[44px] font-bold leading-tight tracking-normal">매니저 대시보드</h2><p className="mt-4 text-lg leading-8 text-[#475569]">검증 통과 후 검토 요청된 선정 팀만 고밀도 테이블로 관리합니다.</p><span className="mt-6 inline-flex items-center gap-2 font-bold text-[#2563EB]">기관 인증 <ChevronRight size={18} /></span></Link></section><section className="mx-auto max-w-7xl px-5 pb-16"><div className="grid gap-4 md:grid-cols-4">{[[ShieldCheck, "RBAC 분리"], [ClipboardCheck, "자동 마일스톤"], [CalendarDays, "마감 캘린더"], [Lock, "준비 데이터 비공개"]].map(([Icon, label]) => { const TypedIcon = Icon as typeof ShieldCheck; return <div key={String(label)} className="rounded-2xl border border-[#E2E8F0] p-5"><TypedIcon className="text-[#2563EB]" /><strong className="mt-4 block">{String(label)}</strong></div>; })}</div></section></main>;
 }
 
 function ConvertPage() {

@@ -55,8 +55,8 @@ describe("canManagerSeeReviewItem", () => {
 describe("getSidebarItems", () => {
   it("returns role-specific fixed navigation", () => {
     expect(getSidebarItems("pre_founder")).toContain("AI 진단");
-    expect(getSidebarItems("founder")).toEqual(["홈", "정산 사전검증", "상태 트래커", "서류 보관함", "팀 설정"]);
-    expect(getSidebarItems("manager")).toEqual(["대시보드", "검토 큐", "팀 관리", "리포트", "설정"]);
+    expect(getSidebarItems("founder")).toEqual(["홈", "정산 사전검증", "사전심의 합본", "상태 트래커", "서류 보관함", "팀 설정"]);
+    expect(getSidebarItems("manager")).toEqual(["대시보드", "검토 큐", "사업비 계획 검토", "팀 관리", "리포트", "설정"]);
   });
 });
 
@@ -79,6 +79,7 @@ describe("getSidebarLinks", () => {
     expect(getSidebarLinks("manager").map((item) => item.href)).toEqual([
       "/manager",
       "/manager/review",
+      "/manager/plan-review",
       "/manager/teams",
       "/manager/reports",
       "/manager/settings",
@@ -89,6 +90,7 @@ describe("getSidebarLinks", () => {
     expect(getSidebarLinks("founder").map((item) => item.href)).toEqual([
       "/workspace",
       "/workspace/precheck",
+      "/workspace/predeliberation",
       "/workspace/tracker",
       "/workspace/vault",
       "/workspace/settings",

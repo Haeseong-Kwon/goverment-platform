@@ -37,7 +37,7 @@ export async function runBizplanDiagnosis(text: string) {
   };
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000", "X-OpenRouter-Title": "StartupOS" },
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000", "X-OpenRouter-Title": "StartUp Pilot" },
     body: JSON.stringify({
       model: process.env.OPENROUTER_MODEL ?? "z-ai/glm-5.2", temperature: 0.2, stream: false,
       messages: [

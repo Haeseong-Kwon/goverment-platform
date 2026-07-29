@@ -2,6 +2,7 @@ import { supabase } from "../supabase";
 import type { StartupRole } from "@/features/startup-workspace/domain";
 import type { TaskStatus } from "@/features/startup-workspace/domain";
 import type { ManagerSubmissionInput } from "@/features/startup-workspace/types";
+import type { ExpenseVerdict } from "@/features/expense-rules/types";
 import { createMilestones, evaluateEligibility } from "../../features/startup-workspace/rules";
 
 export interface StartupProfile {
@@ -182,7 +183,13 @@ export interface PersistedTask {
   is_hidden: boolean;
 }
 
-export type ManagerReviewSubmission = ManagerSubmissionInput;
+/** 창업자가 제출 시 저장한 사전검증 결과를 매니저 화면에서 그대로 재사용합니다. */
+export type ManagerReviewSubmission = ManagerSubmissionInput & { verdict?: ExpenseVerdict };
+
+function getStoredVerdict(payload: Record<string, unknown> | null): ExpenseVerdict | undefined {
+  const verdict = payload?.verdict as Partial<ExpenseVerdict> | undefined;
+  return verdict && Array.isArray(verdict.findings) ? (verdict as ExpenseVerdict) : undefined;
+}
 
 type RawSubmission = {
   id: string;
@@ -260,7 +267,87 @@ export async function getManagerReviewSubmissions(): Promise<ManagerReviewSubmis
     status: row.status,
     validation: row.validation_status,
     createdAt: row.created_at,
+    verdict: getStoredVerdict(row.payload),
   }));
+}
+
+async function getCurrentFounderTeamId() {
+  const client = requireClient();
+  const teamId = await getCurrentPrepTeamId();
+  const { data, error } = await client.from("founder_teams").select("id").eq("prep_team_id", teamId).maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("협약 팀으로 전환된 뒤에 정산 검토를 요청할 수 있습니다.");
+  return data.id as string;
+}
+
+/** 사전검증을 통과한 집행 건을 매니저 검토 큐로 올립니다. */
+export async function requestSettlementReview(input: {
+  title: string;
+  amount: number;
+  verdict: { verdict: "pass" | "review" | "fail"; findings: unknown[]; missingEvidence: string[] };
+  expense: Record<string, unknown>;
+}) {
+  if (input.verdict.verdict === "fail") throw new Error("위반 항목이 남아 있어 검토를 요청할 수 없습니다.");
+  const client = requireClient();
+  const { data: auth, error: authError } = await client.auth.getUser();
+  if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
+  const founderTeamId = await getCurrentFounderTeamId();
+  const { data, error } = await client
+    .from("settlement_submissions")
+    .insert({
+      founder_team_id: founderTeamId,
+      title: input.title,
+      requested_amount: input.amount,
+      validation_status: "passed",
+      status: "validated",
+      payload: { expense: input.expense, verdict: input.verdict, evidenceCount: (input.expense.evidence as string[] | undefined)?.length ?? 0 },
+      submitted_by: auth.user.id,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  await trackWorkspaceEvent("settlement_review_requested", undefined, { submissionId: data.id, verdict: input.verdict.verdict });
+  return data.id as string;
+}
+
+const REVIEW_ERRORS: Record<string, string> = {
+  DECISION_INVALID: "승인 또는 반려만 처리할 수 있습니다.",
+  REASON_CODE_REQUIRED: "반려 사유코드를 1개 이상 선택해 주세요.",
+  SUBMISSION_NOT_REVIEWABLE: "이미 처리되었거나 검토할 수 없는 건입니다.",
+  MANAGER_ROLE_REQUIRED: "해당 기관의 매니저만 처리할 수 있습니다.",
+};
+
+/**
+ * 매니저 승인·반려 처리. 검토 기록 저장과 상태 변경을 하나의 RPC로 묶어
+ * 한쪽만 반영되는 상태를 막고, 판정 근거와 안내문을 감사 기록으로 남깁니다.
+ */
+export async function submitReviewDecision(
+  submissionId: string,
+  decision: "approved" | "rejected",
+  payload: { reasonCodes: string[]; feedback: string },
+) {
+  if (decision === "rejected" && payload.reasonCodes.length === 0) throw new Error(REVIEW_ERRORS.REASON_CODE_REQUIRED);
+  const client = requireClient();
+  const { data, error } = await client.rpc("review_settlement_submission", {
+    input_submission_id: submissionId,
+    input_decision: decision,
+    input_reason_code: payload.reasonCodes.join(","),
+    input_feedback: payload.feedback,
+  });
+  if (error) {
+    const known = Object.keys(REVIEW_ERRORS).find((code) => error.message.includes(code));
+    throw new Error(known ? REVIEW_ERRORS[known] : error.message);
+  }
+  await trackWorkspaceEvent("settlement_reviewed", undefined, { submissionId, decision, reasonCodes: payload.reasonCodes });
+  return data as string;
+}
+
+/** 기간별 반려 사유 코드 목록 — 매니저 리포트의 사유 분포 계산 입력. */
+export async function getRejectionReasonCodes(): Promise<string[]> {
+  const client = requireClient();
+  const { data, error } = await client.from("submission_reviews").select("reason_code").eq("decision", "rejected");
+  if (error) throw error;
+  return (data ?? []).flatMap((row) => String(row.reason_code ?? "").split(",")).filter(Boolean);
 }
 
 export async function createWorkspaceTask(title: string, dueDate?: string) {
