@@ -58,8 +58,11 @@ npm run build     # next build
 
 ## 도메인 · SEO · 트래킹
 
-서비스 도메인은 `startuppilot.co.kr`입니다. 연결 절차와 검색 등록·트래킹 설정은
-[docs/도메인-연결과-검색등록.md](docs/도메인-연결과-검색등록.md)에 순서대로 있습니다.
+서비스 도메인은 `startuppilot.co.kr`입니다.
+
+- [docs/도메인-연결과-검색등록.md](docs/도메인-연결과-검색등록.md) — 가비아 DNS, Vercel 도메인, 검색 등록, 트래킹
+- [docs/이메일-발송-설정.md](docs/이메일-발송-설정.md) — 커스텀 SMTP, SPF·DKIM·DMARC
+- [supabase/email-templates/README.md](supabase/email-templates/README.md) — 인증 메일 문안
 
 - 메타데이터·OG·sitemap·robots·JSON-LD는 모두 `src/lib/seo.ts` 한 곳을 봅니다.
 - OG 카드는 `app/opengraph-image.tsx`가 빌드 시 생성합니다(한글 렌더링을 위해 Pretendard를 내려받고, 실패하면 라틴 문자로 대체).

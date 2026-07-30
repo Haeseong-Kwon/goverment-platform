@@ -173,8 +173,8 @@
   "hotPaths": [
     {
       "path": "src/lib/services/WorkspaceService.ts",
-      "accessCount": 49,
-      "lastAccessed": 1785382696387,
+      "accessCount": 52,
+      "lastAccessed": 1785388154952,
       "type": "file"
     },
     {
@@ -238,15 +238,15 @@
       "type": "file"
     },
     {
-      "path": "src/features/startup-workspace/Landing.tsx",
-      "accessCount": 8,
-      "lastAccessed": 1785383750077,
+      "path": "README.md",
+      "accessCount": 9,
+      "lastAccessed": 1785387981697,
       "type": "file"
     },
     {
-      "path": "README.md",
+      "path": "src/features/startup-workspace/Landing.tsx",
       "accessCount": 8,
-      "lastAccessed": 1785384184251,
+      "lastAccessed": 1785383750077,
       "type": "file"
     },
     {
@@ -269,8 +269,8 @@
     },
     {
       "path": "src/lib/services/AuthService.ts",
-      "accessCount": 6,
-      "lastAccessed": 1785338802538,
+      "accessCount": 7,
+      "lastAccessed": 1785387989420,
       "type": "file"
     },
     {
@@ -334,6 +334,12 @@
       "type": "file"
     },
     {
+      "path": "src/app/onboarding/page.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1785387944112,
+      "type": "file"
+    },
+    {
       "path": "src/features/expense-rules/planImport.ts",
       "accessCount": 3,
       "lastAccessed": 1785316545133,
@@ -364,12 +370,6 @@
       "type": "file"
     },
     {
-      "path": "src/app/onboarding/page.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1785381869912,
-      "type": "file"
-    },
-    {
       "path": "src/features/expense-rules/planImport.test.ts",
       "accessCount": 2,
       "lastAccessed": 1785316549709,
@@ -391,6 +391,18 @@
       "path": "src/app/api/admin/bootstrap-manager/route.ts",
       "accessCount": 2,
       "lastAccessed": 1785379172197,
+      "type": "file"
+    },
+    {
+      "path": "supabase/003-profile-role-lock.sql",
+      "accessCount": 2,
+      "lastAccessed": 1785388021859,
+      "type": "file"
+    },
+    {
+      "path": "vitest.config.ts",
+      "accessCount": 2,
+      "lastAccessed": 1785388088306,
       "type": "file"
     },
     {
@@ -421,18 +433,6 @@
       "path": "src/lib/ai/expenseJudge.test.ts",
       "accessCount": 1,
       "lastAccessed": 1785317053078,
-      "type": "file"
-    },
-    {
-      "path": "vitest.config.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785317099901,
-      "type": "file"
-    },
-    {
-      "path": "supabase/003-profile-role-lock.sql",
-      "accessCount": 1,
-      "lastAccessed": 1785318000806,
       "type": "file"
     },
     {

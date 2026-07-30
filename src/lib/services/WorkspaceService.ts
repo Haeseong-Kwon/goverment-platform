@@ -69,13 +69,28 @@ export async function completeOnboarding(input: OnboardingInput) {
   const client = requireClient();
   const { data: auth, error: authError } = await client.auth.getUser();
   if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
+  /**
+   * 프로필 행이 없을 수 있습니다. 가입(signUp) 직후의 프로필 INSERT는 이메일 인증이
+   * 걸린 프로젝트에서 세션이 없는 상태로 실행되므로 RLS(id = auth.uid())에 막히고,
+   * 그 실패는 경고만 남기고 지나갑니다. 그러면 프로필 없이 /onboarding까지 들어와
+   * 마지막 단계에서 PGRST116("대상을 찾지 못했습니다")으로 끝났습니다.
+   * 여기서는 로그인 상태이므로 없으면 만들어 온보딩을 이어갑니다.
+   */
   const { data: profile, error: profileError } = await client
     .from("startup_profiles")
     .select("role")
     .eq("id", auth.user.id)
-    .single();
+    .maybeSingle();
   if (profileError) throw profileError;
-  if (profile.role !== "pre_founder") throw new Error("창업자 준비 계정만 온보딩을 완료할 수 있습니다.");
+  if (!profile) {
+    // role은 003의 INSERT 트리거가 pre_founder로 고정합니다. 재시도 중복(23505)은 성공으로 봅니다.
+    const { error: createError } = await client
+      .from("startup_profiles")
+      .insert({ id: auth.user.id, role: "pre_founder", onboarding_complete: false });
+    if (createError && createError.code !== "23505") throw createError;
+  } else if (profile.role !== "pre_founder") {
+    throw new Error("창업자 준비 계정만 온보딩을 완료할 수 있습니다.");
+  }
 
   // 온보딩은 여러 번의 쓰기로 이뤄져 중간에 끊길 수 있습니다. 다시 시도할 때
   // 빈 팀이 계속 쌓이지 않도록, 내가 리더인 팀이 이미 있으면 그 팀을 이어서 씁니다.
