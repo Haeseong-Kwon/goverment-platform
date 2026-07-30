@@ -247,9 +247,10 @@ export function ManagerDashboard() {
         </section>
       )}
 
-      <section className="mt-6 grid gap-4 md:grid-cols-3">
+      <section className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {[
           { href: "/manager/review", title: "검토 큐", desc: `검증 통과 요청 ${summary.requestCount}건을 확인합니다.` },
+          { href: "/manager/plan-review", title: "사업비 계획 검토", desc: "집행 계획을 붙여 넣어 비목·한도를 일괄 판정합니다." },
           { href: "/manager/teams", title: "팀 관리", desc: "제출 이력이 있는 선정 팀만 봅니다." },
           { href: "/manager/reports", title: "리포트", desc: "실제 검토 요청 기준으로 집계합니다." },
         ].map((item) => (
