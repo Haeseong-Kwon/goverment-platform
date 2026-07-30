@@ -172,27 +172,27 @@
   },
   "hotPaths": [
     {
-      "path": "src/features/startup-workspace/components.tsx",
-      "accessCount": 39,
-      "lastAccessed": 1785379333793,
+      "path": "src/lib/services/WorkspaceService.ts",
+      "accessCount": 49,
+      "lastAccessed": 1785382696387,
       "type": "file"
     },
     {
-      "path": "src/lib/services/WorkspaceService.ts",
+      "path": "src/features/startup-workspace/components.tsx",
+      "accessCount": 41,
+      "lastAccessed": 1785381141825,
+      "type": "file"
+    },
+    {
+      "path": "src/features/startup-workspace/ManagerScreens.tsx",
       "accessCount": 30,
-      "lastAccessed": 1785379291119,
+      "lastAccessed": 1785381354944,
       "type": "file"
     },
     {
       "path": "src/features/startup-workspace/FounderPanels.tsx",
       "accessCount": 20,
       "lastAccessed": 1785378904709,
-      "type": "file"
-    },
-    {
-      "path": "src/features/startup-workspace/ManagerScreens.tsx",
-      "accessCount": 19,
-      "lastAccessed": 1785379555239,
       "type": "file"
     },
     {
@@ -238,6 +238,18 @@
       "type": "file"
     },
     {
+      "path": "src/features/startup-workspace/Landing.tsx",
+      "accessCount": 8,
+      "lastAccessed": 1785383750077,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 8,
+      "lastAccessed": 1785384184251,
+      "type": "file"
+    },
+    {
       "path": "src/features/startup-workspace/session.ts",
       "accessCount": 7,
       "lastAccessed": 1785338844047,
@@ -274,6 +286,18 @@
       "type": "file"
     },
     {
+      "path": "src/components/layout/AppChrome.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1785382956285,
+      "type": "file"
+    },
+    {
+      "path": "src/app/layout.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1785383625449,
+      "type": "file"
+    },
+    {
       "path": "src/features/expense-rules/engine.ts",
       "accessCount": 4,
       "lastAccessed": 1785316262325,
@@ -298,33 +322,21 @@
       "type": "file"
     },
     {
-      "path": "README.md",
+      "path": "supabase/startup-workspace.rls.test.sql",
       "accessCount": 4,
-      "lastAccessed": 1785379895052,
+      "lastAccessed": 1785381013700,
+      "type": "file"
+    },
+    {
+      "path": "src/app/not-found.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1785382978800,
       "type": "file"
     },
     {
       "path": "src/features/expense-rules/planImport.ts",
       "accessCount": 3,
       "lastAccessed": 1785316545133,
-      "type": "file"
-    },
-    {
-      "path": "supabase/startup-workspace.rls.test.sql",
-      "accessCount": 3,
-      "lastAccessed": 1785317416433,
-      "type": "file"
-    },
-    {
-      "path": "src/components/layout/AppChrome.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1785337095178,
-      "type": "file"
-    },
-    {
-      "path": "src/app/not-found.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1785341135903,
       "type": "file"
     },
     {
@@ -340,12 +352,6 @@
       "type": "file"
     },
     {
-      "path": "src/app/layout.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1785379009737,
-      "type": "file"
-    },
-    {
       "path": "src/lib/supabaseAdmin.ts",
       "accessCount": 3,
       "lastAccessed": 1785379229656,
@@ -355,6 +361,12 @@
       "path": "src/app/api/workspace/expenses/validate/route.ts",
       "accessCount": 3,
       "lastAccessed": 1785379277776,
+      "type": "file"
+    },
+    {
+      "path": "src/app/onboarding/page.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1785381869912,
       "type": "file"
     },
     {
@@ -373,12 +385,6 @@
       "path": "src/components/layout/Navbar.tsx",
       "accessCount": 2,
       "lastAccessed": 1785328033490,
-      "type": "file"
-    },
-    {
-      "path": "src/app/onboarding/page.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1785337411092,
       "type": "file"
     },
     {
@@ -445,12 +451,6 @@
       "path": "src/features/startup-workspace/rules.ts",
       "accessCount": 1,
       "lastAccessed": 1785336437013,
-      "type": "file"
-    },
-    {
-      "path": "src/features/startup-workspace/Landing.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1785336882526,
       "type": "file"
     },
     {

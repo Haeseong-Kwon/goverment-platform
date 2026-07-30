@@ -8,6 +8,7 @@ import type { ExpenseCategory, ExpenseInput, ExpenseVerdict, ItemFlag, Severity 
 import { getAuthHeaders } from "@/lib/services/WorkspaceService";
 import { Button, ChoiceChip, Field, Notice, Panel, StatusBadge, inputClass, textareaClass, type StatusTone } from "../startup-workspace/ui";
 import { cn } from "@/lib/utils";
+import { toMessage } from "@/lib/errors";
 
 interface AiJudgement {
   category: ExpenseCategory;
@@ -180,7 +181,7 @@ export function ExpenseValidator({
       if (!response.ok) throw new Error(data.error ?? "검증에 실패했습니다.");
       setRemote({ verdict: data.verdict, ai: data.ai, aiError: data.aiError });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "검증에 실패했습니다.");
+      setError(toMessage(reason, "검증에 실패했습니다."));
     } finally {
       setLoading(false);
     }

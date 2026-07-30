@@ -5,6 +5,7 @@ import { evaluateEligibility, recommendPrograms, STARTUP_PROGRAMS } from "./rule
 import type { EligibilityAnswers, EligibilityReport, EligibilityState } from "./domain";
 import { Button, ChoiceChip, Notice, Panel, StatusBadge, type StatusTone } from "./ui";
 import { getLatestEligibilityReport, saveEligibilityReport } from "@/lib/services/WorkspaceService";
+import { toMessage } from "@/lib/errors";
 
 const stateTone: Record<EligibilityState, StatusTone> = { eligible: "green", review: "amber", ineligible: "red", pending: "slate" };
 const stateLabel: Record<EligibilityState, string> = { eligible: "신청 가능", review: "확인 필요", ineligible: "신청 불가", pending: "룰셋 준비 중" };
@@ -151,7 +152,7 @@ export function EligibilityPanel() {
       await saveEligibilityReport(programId, answers, report);
       setStatus({ tone: "success", text: "진단 결과를 팀 보관함에 저장했습니다." });
     } catch (reason) {
-      setStatus({ tone: "error", text: reason instanceof Error ? reason.message : "저장하지 못했습니다." });
+      setStatus({ tone: "error", text: toMessage(reason, "저장하지 못했습니다.") });
     } finally {
       setSaving(false);
     }

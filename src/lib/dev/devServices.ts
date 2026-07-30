@@ -1,5 +1,5 @@
 import type { CalendarItem, ConversionCode, TeamInvite, TeamMember, TrackedSubmission, VaultDocument, VaultFolder } from "../services/FounderWorkspaceService";
-import type { ManagerReviewSubmission, PersistedTask, StartupProfile, SavedEligibilityReport } from "../services/WorkspaceService";
+import type { ManagerReviewSubmission, PersistedTask, StartupProfile, SavedEligibilityReport, SubmissionEvidenceFile } from "../services/WorkspaceService";
 import type { EligibilityAnswers, EligibilityReport } from "@/features/startup-workspace/domain";
 import {
   DEV_CONVERSION_CODES,
@@ -59,18 +59,30 @@ export function devUpdateTask(taskId: string, changes: Partial<Pick<PersistedTas
   return found;
 }
 
+/** 제출 건에 연결된 보관함 파일. 실제 스키마의 submission_evidence 조회와 같은 결과를 냅니다. */
+function devEvidenceFiles(submission: DevSubmission): SubmissionEvidenceFile[] {
+  const documents = devState().vault;
+  return (submission.documentIds ?? []).flatMap((documentId) => {
+    const document = documents.find((item) => item.id === documentId);
+    return document
+      ? [{ documentId: document.id, fileName: document.fileName, storagePath: document.storagePath, version: document.version }]
+      : [];
+  });
+}
+
 const toManagerRow = (submission: DevSubmission): ManagerReviewSubmission => ({
   id: submission.id,
   title: submission.title,
   team: submission.team,
   amount: won(submission.amount),
-  evidenceCount: submission.expense.evidence?.length ?? 0,
+  evidenceCount: devEvidenceFiles(submission).length,
   role: "founder",
   status: submission.status,
   validation: submission.validation,
   createdAt: submission.createdAt,
   verdict: devVerdict(submission),
   expense: submission.expense,
+  files: devEvidenceFiles(submission),
 });
 
 export function devManagerSubmissions(): ManagerReviewSubmission[] {
@@ -92,7 +104,7 @@ export function devTrackedSubmissions(): TrackedSubmission[] {
     }));
 }
 
-export function devRequestReview(input: { title: string; amount: number; expense: Record<string, unknown> }) {
+export function devRequestReview(input: { title: string; amount: number; expense: Record<string, unknown>; documentIds?: string[] }) {
   const created: DevSubmission = {
     id: nextId(),
     team: DEV_TEAM_NAME,
@@ -102,6 +114,7 @@ export function devRequestReview(input: { title: string; amount: number; expense
     validation: "passed",
     createdAt: new Date().toISOString(),
     expense: input.expense as unknown as DevSubmission["expense"],
+    documentIds: input.documentIds ?? [],
   };
   devUpdate((current) => ({ ...current, submissions: [created, ...current.submissions] }));
   return created.id;

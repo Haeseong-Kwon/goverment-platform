@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react";
+import { FAQ_ITEMS } from "@/lib/seo";
 import { getLandingNavigation, getStartupMilestones } from "./logic";
 import type { StartupMilestone } from "./types";
 import { LinkButton, StatusBadge, focusRing } from "./ui";
@@ -120,7 +121,8 @@ export function FounderLanding() {
         </div>
       </section>
 
-      <section id="features" className="border-t border-[#E2E8F0] bg-[#F8FAFC]">
+      {/* scroll-mt: 상단 고정 헤더가 제목을 덮지 않도록 앵커 이동 지점을 헤더 높이만큼 내립니다. */}
+      <section id="features" className="scroll-mt-20 border-t border-[#E2E8F0] bg-[#F8FAFC]">
         <div className="mx-auto max-w-7xl px-5 py-14 md:py-20">
           <h2 className="text-[26px] font-bold md:text-[32px]">준비부터 정산까지 한 워크스페이스에서</h2>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-[#475569] md:text-base">
@@ -136,9 +138,55 @@ export function FounderLanding() {
           </div>
         </div>
       </section>
+
+      <FaqSection />
     </main>
   );
 }
+
+/**
+ * 자주 묻는 질문.
+ *
+ * JSON-LD FAQPage와 같은 상수(FAQ_ITEMS)를 씁니다. 구조화 데이터에만 있고 화면에 없는
+ * FAQ는 검색엔진 정책 위반이며, 생성형 검색이 인용할 근거도 되지 못합니다.
+ * details/summary를 쓰면 접힌 내용도 크롤러와 스크린리더가 그대로 읽습니다.
+ */
+function FaqSection() {
+  return (
+    <section id="faq" className="scroll-mt-20 border-t border-[#E2E8F0]">
+      <div className="mx-auto max-w-3xl px-5 py-14 md:py-20">
+        <h2 className="text-[26px] font-bold md:text-[32px]">자주 묻는 질문</h2>
+        <div className="mt-8 divide-y divide-[#E2E8F0] border-y border-[#E2E8F0]">
+          {FAQ_ITEMS.map((item) => (
+            <details key={item.question} className="group py-4">
+              <summary
+                className={cn(
+                  "flex cursor-pointer list-none items-center justify-between gap-4 text-base font-bold text-[#0F172A]",
+                  focusRing,
+                )}
+              >
+                {item.question}
+                <ChevronRight size={18} className="shrink-0 text-[#94A3B8] transition-transform group-open:rotate-90" />
+              </summary>
+              <p className="mt-3 text-sm leading-7 text-[#475569]">{item.answer}</p>
+            </details>
+          ))}
+        </div>
+        <p className="mt-8 text-xs leading-6 text-[#94A3B8]">
+          자격 진단·사업비 판정·계산기 결과는 참고용입니다. 최종 기준은 각 사업 공고문과 관리지침이며,
+          승인·반려의 최종 결정 권한은 주관기관 담당자에게 있습니다.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/** 랜딩의 예시 화면입니다. 실제 큐와 같은 열 구성을 보여 주되 조작은 두지 않습니다. */
+const MANAGER_QUEUE_PREVIEW = [
+  { team: "성장하는 팀", title: "시제품 외관 목업 제작", amount: "24,200,000원", files: 3, waiting: 1 },
+  { team: "오르카랩스", title: "국내 전시회 부스 임차", amount: "5,500,000원", files: 1, waiting: 6 },
+  { team: "오르카랩스", title: "특허 출원 대리인 수수료", amount: "1,650,000원", files: 2, waiting: 2 },
+];
 
 const MANAGER_FEATURES = [
   { title: "검증 통과 건만 도착", desc: "창업자가 사전검증을 통과한 건만 큐에 올라옵니다. 형식 오류를 다시 짚을 필요가 없습니다." },
@@ -168,13 +216,43 @@ export function ManagerLanding() {
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          {MANAGER_FEATURES.map((item) => (
-            <article key={item.title} className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-5">
-              <h2 className="text-base font-bold">{item.title}</h2>
-              <p className="mt-2 text-sm leading-6 text-[#475569]">{item.desc}</p>
-            </article>
-          ))}
+        <div className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-5">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-bold md:text-xl">검토 큐 · 처리 대기 4건</h2>
+            <StatusBadge tone="slate">예시 화면</StatusBadge>
+          </div>
+          <div className="mt-4 space-y-2">
+            {MANAGER_QUEUE_PREVIEW.map((item) => (
+              <article key={item.title} className="flex items-center gap-3 rounded-xl bg-white p-3">
+                <div className="min-w-0 flex-1">
+                  <strong className="block truncate text-sm font-bold text-[#0F172A]">{item.team} · {item.title}</strong>
+                  <span className="text-xs text-[#94A3B8]">{item.amount} · 증빙 파일 {item.files}건</span>
+                </div>
+                <StatusBadge tone={item.waiting >= 3 ? "red" : "slate"}>대기 {item.waiting}일</StatusBadge>
+              </article>
+            ))}
+          </div>
+          <p className="mt-4 text-xs font-medium text-[#94A3B8]">
+            사전검증을 통과해 검토 요청된 건만 큐에 올라옵니다.
+          </p>
+        </div>
+      </section>
+
+      {/* 공용 헤더의 [기능] 링크가 가리키는 지점. 이 절이 없으면 링크가 아무 반응도 하지 않습니다. */}
+      <section id="features" className="scroll-mt-20 border-t border-[#E2E8F0] bg-[#F8FAFC]">
+        <div className="mx-auto max-w-7xl px-5 py-14 md:py-20">
+          <h2 className="text-[26px] font-bold md:text-[32px]">검토에 필요한 것만 남긴 기관 화면</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-[#475569] md:text-base">
+            창업자의 준비 데이터는 기관 화면에 표시되지 않습니다. 검토 요청된 정산 건과 팀이 첨부한 증빙만 열람합니다.
+          </p>
+          <div className="mt-8 grid gap-4 md:grid-cols-2">
+            {MANAGER_FEATURES.map((item) => (
+              <article key={item.title} className="rounded-2xl border border-[#E2E8F0] bg-white p-5 transition-[transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)]">
+                <h3 className="text-lg font-bold">{item.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-[#475569]">{item.desc}</p>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
     </main>

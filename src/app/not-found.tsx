@@ -2,7 +2,7 @@ import { LinkButton } from "@/features/startup-workspace/ui";
 
 export default function NotFound() {
   return (
-    <div className="grid min-h-screen place-items-center bg-[#F8FAFC] px-5 text-[#0F172A]">
+    <main className="grid min-h-screen place-items-center bg-[#F8FAFC] px-5 text-[#0F172A]">
       <div className="w-full max-w-md rounded-2xl border border-[#E2E8F0] bg-white p-8 text-center">
         <p className="text-sm font-bold tracking-widest text-[#2563EB]">404</p>
         <h1 className="mt-3 text-2xl font-bold">요청하신 화면을 찾을 수 없습니다</h1>
@@ -14,6 +14,6 @@ export default function NotFound() {
           <LinkButton href="/workspace-entry" variant="secondary">워크스페이스 진입</LinkButton>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

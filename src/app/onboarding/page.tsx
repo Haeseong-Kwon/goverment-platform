@@ -9,6 +9,7 @@ import { completeOnboarding } from "@/lib/services/WorkspaceService";
 import { STARTUP_PROGRAMS } from "@/features/startup-workspace/rules";
 import { Button, ChoiceChip, Field, Notice, StatusBadge, inputClass } from "@/features/startup-workspace/ui";
 import { cn } from "@/lib/utils";
+import { toMessage } from "@/lib/errors";
 
 const STEPS = [
   { title: "대표자 정보", hint: "누가 팀을 이끄는지 확인합니다." },
@@ -75,7 +76,7 @@ export default function OnboardingPage() {
       });
       router.replace(result.redirect);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "온보딩을 완료하지 못했습니다.");
+      setError(toMessage(reason, "온보딩을 완료하지 못했습니다."));
       setLoading(false);
     }
   };

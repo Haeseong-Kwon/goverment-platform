@@ -11,8 +11,9 @@ import {
   submitReviewDecision,
   type ManagerBootstrapResult,
   type ManagerReviewSubmission,
+  type SubmissionEvidenceFile,
 } from "@/lib/services/WorkspaceService";
-import { getConversionCodes, getInstitutionName, type ConversionCode } from "@/lib/services/FounderWorkspaceService";
+import { getConversionCodes, getInstitutionName, getVaultDownloadUrl, type ConversionCode } from "@/lib/services/FounderWorkspaceService";
 import { RejectionComposer } from "@/features/expense-rules/ManagerTools";
 import { PlanReviewBoard } from "@/features/expense-rules/ManagerTools";
 import { summarizeRejectionReasons } from "@/features/expense-rules/rejection";
@@ -22,6 +23,7 @@ import { canManagerSeeReviewItem, getManagerDashboardSummary } from "./logic";
 import { WorkspaceShell } from "./shell";
 import { Button, ChoiceChip, EmptyState, LinkButton, Notice, PageHeader, Panel, ProgressBar, Skeleton, StatusBadge, focusRing } from "./ui";
 import { cn } from "@/lib/utils";
+import { toMessage } from "@/lib/errors";
 
 type Summary = ReturnType<typeof getManagerDashboardSummary>;
 type ReasonDistribution = ReturnType<typeof summarizeRejectionReasons>;
@@ -51,12 +53,17 @@ function useReviewSubmissions(enabled = true) {
       setError(null);
     } catch (reason) {
       setSubmissions([]);
-      setError(reason instanceof Error ? reason.message : "검토 요청을 불러오지 못했습니다.");
+      setError(toMessage(reason, "검토 요청을 불러오지 못했습니다."));
     }
   }, [enabled]);
 
   useEffect(() => { void load(); }, [load]);
   return { submissions, loading: submissions === null, error, reload: load };
+}
+
+/** 쉼표·따옴표·줄바꿈이 든 값은 감싸야 열이 밀리지 않습니다. 사유 문구는 언제든 늘어납니다. */
+function csvCell(value: string) {
+  return /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
 /** 기관 리포트를 CSV로 내려받습니다. 상부·전담기관 보고 자료로 바로 씁니다. */
@@ -72,7 +79,7 @@ function exportManagerReport(summary: Summary, reasons: ReasonDistribution) {
     ["반려 사유코드", "사유", "건수", "비중"],
     ...reasons.map((item) => [item.code, item.label, String(item.count), `${item.share}%`]),
   ];
-  const csv = rows.map((row) => row.join(",")).join("\n");
+  const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;
@@ -122,7 +129,7 @@ function ManagerBootstrapCard({ onDone }: { onDone: () => void }) {
       setResult(await bootstrapManagerAccess());
       onDone();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "기관 계정 전환에 실패했습니다.");
+      setError(toMessage(reason, "기관 계정 전환에 실패했습니다."));
     } finally {
       setLoading(false);
     }
@@ -229,7 +236,7 @@ export function ManagerDashboard() {
                   >
                     <div className="min-w-0 flex-1">
                       <strong className="block truncate text-sm font-bold text-[#0F172A]">{row.team} · {row.title}</strong>
-                      <span className="text-xs text-[#94A3B8]">{row.amount} · 증빙 {row.evidenceCount}종</span>
+                      <span className="text-xs text-[#94A3B8]">{row.amount} · 증빙 파일 {row.evidenceCount}건</span>
                     </div>
                     <StatusBadge tone={days >= 3 ? "red" : "slate"}>대기 {days}일</StatusBadge>
                   </Link>
@@ -272,7 +279,7 @@ const yesNo = (value: boolean | null | undefined) => (value === true ? "예" : v
  * 매니저가 승인·반려를 누르기 전에 무엇을 판단하는지 볼 수 있어야 합니다.
  * 창업자가 제출 시 저장한 집행 내역을 그대로 펼쳐 보여 줍니다.
  */
-function ExpenseDetail({ expense, amount }: { expense: ExpenseInput; amount: string }) {
+function ExpenseDetail({ expense, amount, files }: { expense: ExpenseInput; amount: string; files: SubmissionEvidenceFile[] }) {
   const rows: Array<[string, string]> = [
     ["집행 금액", amount],
     ["집행일", expense.executionDate || "미입력"],
@@ -299,15 +306,17 @@ function ExpenseDetail({ expense, amount }: { expense: ExpenseInput; amount: str
       </dl>
 
       <div className="border-t border-[#F1F5F9] px-4 py-3">
-        <p className="text-xs font-bold text-[#475569]">첨부 증빙 {evidence.length}종</p>
+        <p className="text-xs font-bold text-[#475569]">팀이 신고한 증빙 유형 {evidence.length}종</p>
         {evidence.length === 0 ? (
-          <p className="mt-1.5 text-sm text-[#94A3B8]">제출된 증빙 유형이 없습니다.</p>
+          <p className="mt-1.5 text-sm text-[#94A3B8]">신고된 증빙 유형이 없습니다.</p>
         ) : (
           <ul className="mt-2 flex flex-wrap gap-1.5">
             {evidence.map((name) => <li key={name}><StatusBadge tone="slate">{name}</StatusBadge></li>)}
           </ul>
         )}
       </div>
+
+      <EvidenceFileList files={files} />
 
       {flags.length > 0 && (
         <div className="border-t border-[#F1F5F9] px-4 py-3">
@@ -317,6 +326,60 @@ function ExpenseDetail({ expense, amount }: { expense: ExpenseInput; amount: str
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * 첨부된 증빙 파일. 링크는 누를 때마다 새로 만들고 기본 5분 뒤 무효화되므로
+ * 화면에 URL을 담아 두지 않습니다.
+ */
+function EvidenceFileList({ files }: { files: SubmissionEvidenceFile[] }) {
+  const [error, setError] = useState<string | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+
+  const open = async (file: SubmissionEvidenceFile) => {
+    setOpeningId(file.documentId);
+    setError(null);
+    try {
+      const url = await getVaultDownloadUrl(file.storagePath);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (reason) {
+      setError(toMessage(reason, "증빙 링크를 만들지 못했습니다."));
+    } finally {
+      setOpeningId(null);
+    }
+  };
+
+  return (
+    <div className="border-t border-[#F1F5F9] px-4 py-3">
+      <p className="text-xs font-bold text-[#475569]">첨부 증빙 파일 {files.length}건</p>
+      {files.length === 0 ? (
+        <p className="mt-1.5 text-sm leading-6 text-[#B45309]">
+          첨부된 파일이 없습니다. 유형만 신고된 상태이므로, 원본 확인이 필요하면 팀에 증빙 첨부를 요청하세요.
+        </p>
+      ) : (
+        <div className="mt-2 space-y-2">
+          {files.map((file) => (
+            <div key={file.documentId} className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] p-2.5">
+              <FileText size={15} className="shrink-0 text-[#475569]" />
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#0F172A]">{file.fileName}</span>
+              <StatusBadge tone="slate">v{file.version}</StatusBadge>
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={openingId === file.documentId}
+                onClick={() => void open(file)}
+                icon={<Download size={12} />}
+              >
+                열기
+              </Button>
+            </div>
+          ))}
+          <p className="text-[11px] font-medium text-[#94A3B8]">열람 링크는 5분 후 만료됩니다.</p>
+        </div>
+      )}
+      {error && <div className="mt-2"><Notice tone="error" onDismiss={() => setError(null)}>{error}</Notice></div>}
     </div>
   );
 }
@@ -336,7 +399,7 @@ function ReviewPanel({ submission }: { submission?: ManagerReviewSubmission }) {
           검토 큐에서 요청을 선택하세요
         </div>
       ) : submission.expense ? (
-        <ExpenseDetail expense={submission.expense} amount={submission.amount} />
+        <ExpenseDetail expense={submission.expense} amount={submission.amount} files={submission.files ?? []} />
       ) : (
         <div className="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] p-4 text-sm font-semibold leading-6 text-[#B45309]">
           이 건은 집행 내역 원본이 저장되기 전에 제출되어 상세를 표시할 수 없습니다. 판정 근거만 확인한 뒤 필요하면 팀에 재제출을 요청하세요.
@@ -408,7 +471,7 @@ export function ManagerReviewQueuePage() {
       setMessage(decision === "approved" ? "승인 처리했습니다." : "반려 처리하고 안내문을 기록했습니다.");
       await reload();
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "처리에 실패했습니다.");
+      setMessage(toMessage(reason, "처리에 실패했습니다."));
     }
   };
 
@@ -445,7 +508,7 @@ export function ManagerReviewQueuePage() {
         <section className="grid gap-6 xl:grid-cols-[1fr_460px]">
           <div className="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white">
             <div className="grid grid-cols-[1.3fr_1.2fr_.9fr_.6fr_.6fr] border-b border-[#E2E8F0] px-5 py-3 text-xs font-bold text-[#475569]">
-              <span>팀</span><span>건명</span><span>상태</span><span className="text-right">증빙 유형</span><span className="text-right">대기</span>
+              <span>팀</span><span>건명</span><span>상태</span><span className="text-right">증빙 파일</span><span className="text-right">대기</span>
             </div>
             {rows.map((row) => {
               const waiting = waitingDays(row.createdAt);
@@ -462,7 +525,7 @@ export function ManagerReviewQueuePage() {
                   <strong className="truncate">{row.team}</strong>
                   <span className="truncate text-[#475569]">{row.title}</span>
                   <span><StatusBadge tone={statusTone(row.status)}>{STATUS_LABEL[row.status]}</StatusBadge></span>
-                  <span className="text-right tabular-nums text-[#475569]">{row.evidenceCount}종</span>
+                  <span className={cn("text-right tabular-nums", row.evidenceCount === 0 ? "text-[#B45309]" : "text-[#475569]")}>{row.evidenceCount}건</span>
                   <span className={cn("text-right text-xs font-bold tabular-nums", !isDecided(row.status) && waiting >= 3 ? "text-[#DC2626]" : "text-[#94A3B8]")}>
                     {waiting}일
                   </span>
@@ -600,7 +663,7 @@ function ManagerSettingsPanel() {
         const now = Date.now();
         if (mounted) setCodes(rows.map((row) => ({ ...row, expired: new Date(row.expiresAt).getTime() <= now })));
       })
-      .catch((reason) => { if (mounted) { setCodes([]); setError(reason instanceof Error ? reason.message : "전환 코드를 불러오지 못했습니다."); } });
+      .catch((reason) => { if (mounted) { setCodes([]); setError(toMessage(reason, "전환 코드를 불러오지 못했습니다.")); } });
     return () => { mounted = false; };
   }, []);
 

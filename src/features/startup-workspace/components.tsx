@@ -6,6 +6,7 @@ import { Check, EyeOff, Loader2, Mail, Plus, Sparkles } from "lucide-react";
 import { getDday, getFounderDashboardSummary, getMonthlyDiagnosticUsage } from "./logic";
 import { EligibilityPanel } from "./EligibilityPanel";
 import { CalendarPanel, IncorporationPanel, TeamSettingsPanel, TrackerPanel, VaultPanel } from "./FounderPanels";
+import { listVaultDocuments, type VaultDocument } from "@/lib/services/FounderWorkspaceService";
 import { RequireFounderSession, WorkspaceShell } from "./shell";
 import { calculateInsurance } from "./rules";
 import { DEV_BYPASS } from "@/lib/dev/devMode";
@@ -26,6 +27,7 @@ import { Button, EmptyState, Field, LinkButton, Notice, PageHeader, Panel, Skele
 import { ExpenseValidator } from "@/features/expense-rules/ExpenseValidator";
 import { PreDeliberationPanel } from "@/features/expense-rules/PreDeliberation";
 import { cn } from "@/lib/utils";
+import { toMessage } from "@/lib/errors";
 
 export const PRODUCT_NAME = "StartUp Pilot";
 
@@ -86,7 +88,7 @@ function useWorkspaceTasks() {
       setError(null);
     } catch (reason) {
       setTasks([]);
-      setError(reason instanceof Error ? reason.message : "TODO를 불러오지 못했습니다.");
+      setError(toMessage(reason, "TODO를 불러오지 못했습니다."));
     }
   }, []);
 
@@ -102,7 +104,7 @@ function useWorkspaceTasks() {
         return changed.is_hidden ? [] : [changed];
       }));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "상태를 바꾸지 못했습니다.");
+      setError(toMessage(reason, "상태를 바꾸지 못했습니다."));
     } finally {
       setPendingId(null);
     }
@@ -115,7 +117,7 @@ function useWorkspaceTasks() {
       setTasks((current) => [...(current ?? []), created]);
       return true;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "TODO를 추가하지 못했습니다.");
+      setError(toMessage(reason, "TODO를 추가하지 못했습니다."));
       return false;
     }
   }, []);
@@ -445,9 +447,75 @@ function FounderFeaturePage({ feature, founder = false }: { feature: FounderFeat
   );
 }
 
+/**
+ * 검토 요청에 붙일 실제 증빙 파일을 고릅니다.
+ * 증빙 '유형' 체크(룰 엔진 입력)와 달리, 여기서 고른 파일만 매니저가 열어 볼 수 있습니다.
+ */
+function EvidenceFilePicker({ selected, onToggle }: { selected: string[]; onToggle: (documentId: string) => void }) {
+  const [documents, setDocuments] = useState<VaultDocument[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    listVaultDocuments()
+      .then((rows) => { if (mounted) setDocuments(rows.filter((row) => row.folder === "evidence")); })
+      .catch((reason) => { if (mounted) { setDocuments([]); setError(toMessage(reason, "보관함을 불러오지 못했습니다.")); } });
+    return () => { mounted = false; };
+  }, []);
+
+  return (
+    <Panel
+      title="첨부할 증빙 파일"
+      action={<StatusBadge tone={selected.length ? "green" : "amber"}>{selected.length}개 선택</StatusBadge>}
+    >
+      <p className="mb-3 text-sm leading-6 text-[#475569]">
+        여기서 고른 파일만 매니저가 만료형 보안 링크로 열어 봅니다. 고르지 않으면 매니저는 판정 근거만 보고 판단해야 합니다.
+      </p>
+      {error && <div className="mb-3"><Notice tone="error">{error}</Notice></div>}
+      {documents === null ? (
+        <div className="space-y-2">{[0, 1].map((key) => <Skeleton key={key} className="h-12" />)}</div>
+      ) : documents.length === 0 ? (
+        <EmptyState
+          title="보관함에 증빙 파일이 없습니다"
+          description="서류 보관함의 '증빙서류' 폴더에 세금계산서·이체확인증 등을 올리면 여기에서 고를 수 있습니다."
+          action={<LinkButton href="/workspace/vault">서류 보관함 열기</LinkButton>}
+        />
+      ) : (
+        <div className="space-y-2">
+          {documents.map((document) => {
+            const checked = selected.includes(document.id);
+            return (
+              <button
+                key={document.id}
+                type="button"
+                onClick={() => onToggle(document.id)}
+                aria-pressed={checked}
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-xl border p-3 text-left",
+                  focusRing,
+                  "transition-colors",
+                  checked ? "border-[#16A34A] bg-[#F0FDF4]" : "border-[#E2E8F0] hover:border-[#CBD5E1] hover:bg-[#F8FAFC]",
+                )}
+              >
+                <span className={cn("grid h-5 w-5 shrink-0 place-items-center rounded border", checked ? "border-[#16A34A] bg-[#16A34A] text-white" : "border-[#CBD5E1]")}>
+                  {checked && <Check size={13} />}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#0F172A]">{document.fileName}</span>
+                <StatusBadge tone="slate">v{document.version}</StatusBadge>
+                <span className="hidden shrink-0 text-xs text-[#94A3B8] sm:inline">{document.createdAt.slice(0, 10)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 function PrecheckPanel() {
   const toast = useToast();
   const [submitted, setSubmitted] = useState(false);
+  const [documentIds, setDocumentIds] = useState<string[]>([]);
 
   const request = async (expense: Record<string, unknown>, verdict: { verdict: "pass" | "review" | "fail"; findings: unknown[]; missingEvidence: string[] }) => {
     try {
@@ -456,11 +524,17 @@ function PrecheckPanel() {
         amount: Number(expense.amount) || 0,
         verdict,
         expense,
+        documentIds,
       });
       setSubmitted(true);
-      toast.show("검토 요청이 매니저 큐로 전달되었습니다.");
+      setDocumentIds([]);
+      toast.show(
+        documentIds.length
+          ? `검토 요청과 증빙 ${documentIds.length}개를 매니저 큐로 전달했습니다.`
+          : "검토 요청이 매니저 큐로 전달되었습니다.",
+      );
     } catch (reason) {
-      toast.show(reason instanceof Error ? reason.message : "검토 요청에 실패했습니다.", "error");
+      toast.show(toMessage(reason, "검토 요청에 실패했습니다."), "error");
     }
   };
 
@@ -473,6 +547,12 @@ function PrecheckPanel() {
           <Link href="/workspace/tracker" className="underline underline-offset-2">상태 트래커에서 진행 상황 보기</Link>
         </Notice>
       )}
+      <EvidenceFilePicker
+        selected={documentIds}
+        onToggle={(documentId) =>
+          setDocumentIds((current) => (current.includes(documentId) ? current.filter((id) => id !== documentId) : [...current, documentId]))
+        }
+      />
       <ExpenseValidator
         onRequestReview={(expense, verdict) =>
           void request(expense as unknown as Record<string, unknown>, { verdict: verdict.verdict, findings: verdict.findings, missingEvidence: verdict.missingEvidence })
@@ -576,7 +656,7 @@ function EmailCaptureModal({ onClose }: { onClose: () => void }) {
       await captureLead(email, "calc_insurance");
       onClose();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "저장하지 못했습니다.");
+      setError(toMessage(reason, "저장하지 못했습니다."));
     } finally {
       setSaving(false);
     }
@@ -669,7 +749,7 @@ function AiDiagnosisRunner({ exhausted, onComplete }: { exhausted: boolean; onCo
       if (DEV_BYPASS) await trackWorkspaceEvent("bizplan_diagnosis", undefined, { model: data.model });
       onComplete();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "AI 진단에 실패했습니다.");
+      setError(toMessage(reason, "AI 진단에 실패했습니다."));
     } finally {
       setLoading(false);
     }
@@ -754,7 +834,7 @@ function ConnectCard() {
       await joinWaitlist(tab);
       setApplied((current) => (current.includes(tab) ? current : [...current, tab]));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "대기 신청을 저장하지 못했습니다.");
+      setError(toMessage(reason, "대기 신청을 저장하지 못했습니다."));
     } finally {
       setPending(null);
     }
@@ -806,7 +886,7 @@ function ConvertPage() {
       await convertPrepTeam(code);
       setDone(true);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "기관 코드 확인에 실패했습니다.");
+      setError(toMessage(reason, "기관 코드 확인에 실패했습니다."));
     } finally {
       setBusy(false);
     }

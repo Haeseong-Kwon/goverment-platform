@@ -2,13 +2,35 @@ begin;
 
 -- Run with two fixture users in a disposable Supabase project. The manager must
 -- never obtain preparation tasks, diagnostic details, or vault records.
-select plan(6);
+select plan(8);
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', true);
 select is((select count(*) from public.workspace_tasks), 0::bigint, 'manager cannot read preparation tasks');
 select is((select count(*) from public.diagnosis_reports), 0::bigint, 'manager cannot read preparation diagnoses');
-select is((select count(*) from public.vault_documents), 0::bigint, 'manager cannot read preparation vault documents');
+
+-- 006-submission-evidence.sql opens one narrow path: a vault document becomes
+-- visible only once it is attached to a submission this institution may review.
+-- Asserting the invariant (rather than count = 0) keeps the test meaningful when
+-- the fixture project does contain submitted evidence.
+select is(
+  (select count(*) from public.vault_documents d
+   where not exists (
+     select 1 from public.submission_evidence e
+     join public.settlement_submissions s on s.id = e.submission_id
+     where e.document_id = d.id
+       and s.status in ('validated', 'in_review', 'approved', 'rejected')
+   )),
+  0::bigint,
+  'manager sees only vault documents attached to a reviewable submission'
+);
+select is(
+  (select count(*) from public.submission_evidence e
+   join public.settlement_submissions s on s.id = e.submission_id
+   where s.status = 'draft'),
+  0::bigint,
+  'manager cannot read evidence attached to draft submissions'
+);
 
 -- 002-manager-review.sql: the manager sees converted teams only, and can never
 -- change a submission except through the audited review RPC.

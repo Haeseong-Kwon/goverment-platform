@@ -12,11 +12,13 @@ const PUBLIC_PAGES = ["/", "/manager/landing", "/workspace-entry"];
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
+  // 각 화면이 자기 <main>을 그리므로 여기서는 div로 감쌉니다.
+  // main을 중첩하면 문서에 main 랜드마크가 두 개 생겨 스크린리더 탐색이 어긋납니다.
   return (
     <>
-      <main className="min-h-screen overflow-x-clip" data-scroll-root>
+      <div className="min-h-screen overflow-x-clip" data-scroll-root>
         {children}
-      </main>
+      </div>
       {pathname !== null && PUBLIC_PAGES.includes(pathname) && <Footer />}
     </>
   );

@@ -18,6 +18,8 @@
 
 - 창업자의 준비 데이터(연습 진단, 초안, 팀 TODO)는 주관기관에 노출되지 않습니다.
 - 매니저는 사전검증을 통과해 **검토 요청된** 정산 건과 그 증빙만 열람합니다(`canManagerSeeReviewItem`).
+- 증빙 파일은 창업자가 제출 시 **직접 고른 보관함 파일만** 매니저에게 열립니다(`submission_evidence`).
+  고르지 않은 보관함 파일은 매니저에게 존재조차 보이지 않으며, 제출 후 첨부는 바꿀 수 없습니다.
 - 증빙 파일은 Supabase Storage 만료형 서명 링크(기본 5분)로만 열립니다.
 - AI를 호출하는 API(`/api/workspace/diagnoses/bizplan`, `/api/workspace/expenses/validate`)는 로그인 세션이 있어야 응답합니다.
   사업계획서 진단의 월 무료 횟수도 서버에서 세고 기록하므로 브라우저 우회로 늘릴 수 없습니다.
@@ -54,15 +56,32 @@ npm run lint      # eslint
 npm run build     # next build
 ```
 
+## 도메인 · SEO · 트래킹
+
+서비스 도메인은 `startuppilot.co.kr`입니다. 연결 절차와 검색 등록·트래킹 설정은
+[docs/도메인-연결과-검색등록.md](docs/도메인-연결과-검색등록.md)에 순서대로 있습니다.
+
+- 메타데이터·OG·sitemap·robots·JSON-LD는 모두 `src/lib/seo.ts` 한 곳을 봅니다.
+- OG 카드는 `app/opengraph-image.tsx`가 빌드 시 생성합니다(한글 렌더링을 위해 Pretendard를 내려받고, 실패하면 라틴 문자로 대체).
+- 로그인 이후 화면은 `robots: noindex`와 `robots.txt` 양쪽으로 막습니다.
+- 트래킹은 환경변수가 있을 때만, **프로덕션 빌드에서만** 삽입됩니다. 광고용 저장소는 기본 거부입니다.
+- Vercel 프리뷰 배포는 자동으로 색인 차단됩니다(중복 색인 방지).
+
 ## 데이터베이스
 
 `supabase/` 아래 스키마와 마이그레이션이 순서대로 있습니다.
 
 ```
 schema.sql → 002-manager-review.sql → 003-profile-role-lock.sql → 004-seed.sql → 005-vault-and-team.sql
+           → 006-submission-evidence.sql → 007-onboarding-team-read.sql
 ```
 
+`007`은 반드시 적용해야 합니다. 없으면 가입 후 온보딩 마지막 단계가 항상 실패합니다.
+
+인증 메일 문안은 코드가 아니라 Supabase 프로젝트 설정에 있습니다 → `supabase/email-templates/README.md`
+
 `startup-workspace.rls.test.sql`은 역할별 접근 분리를 검증합니다.
+매니저에게 열리는 증빙은 "검토 요청된 건에 첨부된 파일"뿐이라는 불변식을 함께 확인합니다.
 
 ## 판정의 성격
 

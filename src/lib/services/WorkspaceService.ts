@@ -77,23 +77,63 @@ export async function completeOnboarding(input: OnboardingInput) {
   if (profileError) throw profileError;
   if (profile.role !== "pre_founder") throw new Error("창업자 준비 계정만 온보딩을 완료할 수 있습니다.");
 
-  const { data: team, error: teamError } = await client
+  // 온보딩은 여러 번의 쓰기로 이뤄져 중간에 끊길 수 있습니다. 다시 시도할 때
+  // 빈 팀이 계속 쌓이지 않도록, 내가 리더인 팀이 이미 있으면 그 팀을 이어서 씁니다.
+  const { data: existingTeam, error: existingTeamError } = await client
     .from("prep_teams")
-    .insert({ name: input.teamName, item_summary: input.itemSummary, industry: input.industry, leader_id: auth.user.id })
     .select("id")
-    .single();
-  if (teamError) throw teamError;
+    .eq("leader_id", auth.user.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existingTeamError) throw existingTeamError;
 
+  let team = existingTeam;
+  if (team) {
+    const { error: renameError } = await client
+      .from("prep_teams")
+      .update({ name: input.teamName, item_summary: input.itemSummary, industry: input.industry })
+      .eq("id", team.id);
+    if (renameError) throw renameError;
+  } else {
+    const { data: created, error: teamError } = await client
+      .from("prep_teams")
+      .insert({ name: input.teamName, item_summary: input.itemSummary, industry: input.industry, leader_id: auth.user.id })
+      .select("id")
+      .single();
+    if (teamError) throw teamError;
+    team = created;
+  }
+
+  /**
+   * 리더 멤버 행. 여기서 upsert를 쓸 수 없습니다.
+   * ON CONFLICT는 충돌한 기존 행을 읽어야 하므로 SELECT 정책까지 통과해야 하는데,
+   * prep_team_members의 SELECT 정책은 `is_prep_team_member`라 "아직 멤버가 아닌"
+   * 이 시점에 거짓입니다. 그래서 DO NOTHING·DO UPDATE 모두 RLS에 막힙니다.
+   * 평범한 INSERT는 통과하므로, 재시도로 인한 중복(23505)만 성공으로 봅니다.
+   */
   const { error: memberError } = await client
     .from("prep_team_members")
     .insert({ prep_team_id: team.id, user_id: auth.user.id, member_role: "leader" });
-  if (memberError) throw memberError;
+  if (memberError && memberError.code !== "23505") throw memberError;
 
   if (input.programIds.length) {
-    const { error: projectError } = await client
+    // 재시도 시 UNIQUE (prep_team_id, program_id) 충돌로 멈추지 않게 이미 있는 건만 골라 넣습니다.
+    // (멤버 행이 생긴 뒤라 prep_projects는 SELECT가 열려 있어 미리 조회할 수 있습니다.)
+    const { data: linkedPrograms, error: linkedError } = await client
       .from("prep_projects")
-      .insert(input.programIds.map((programId) => ({ prep_team_id: team.id, program_id: programId })));
-    if (projectError) throw projectError;
+      .select("program_id")
+      .eq("prep_team_id", team.id);
+    if (linkedError) throw linkedError;
+    const alreadyLinked = new Set((linkedPrograms ?? []).map((row) => row.program_id));
+    const newProgramIds = input.programIds.filter((programId) => !alreadyLinked.has(programId));
+
+    if (newProgramIds.length) {
+      const { error: projectError } = await client
+        .from("prep_projects")
+        .insert(newProgramIds.map((programId) => ({ prep_team_id: team.id, program_id: programId })));
+      if (projectError && projectError.code !== "23505") throw projectError;
+    }
 
     const { data: projects, error: projectsError } = await client
       .from("prep_projects")
@@ -101,13 +141,22 @@ export async function completeOnboarding(input: OnboardingInput) {
       .eq("prep_team_id", team.id)
       .in("program_id", input.programIds);
     if (projectsError) throw projectsError;
+
+    // 자동 마일스톤은 프로젝트당 한 번만 만듭니다. 재시도해도 같은 할 일이 두 번 생기지 않습니다.
+    const { data: existingAutoTasks, error: existingTaskError } = await client
+      .from("workspace_tasks")
+      .select("prep_project_id")
+      .eq("prep_team_id", team.id)
+      .eq("task_type", "auto");
+    if (existingTaskError) throw existingTaskError;
+    const seeded = new Set((existingAutoTasks ?? []).map((task) => task.prep_project_id));
     const { data: programRows, error: programsError } = await client
       .from("programs")
       .select("id, deadline")
       .in("id", input.programIds);
     if (programsError) throw programsError;
     const deadlineByProgram = new Map((programRows ?? []).map((program) => [program.id, program.deadline]));
-    const automaticTasks = (projects ?? []).flatMap((project) => {
+    const automaticTasks = (projects ?? []).filter((project) => !seeded.has(project.id)).flatMap((project) => {
       const deadline = deadlineByProgram.get(project.program_id);
       return deadline ? createMilestones(project.id, new Date(`${deadline}T00:00:00Z`)).map((task) => ({
         prep_team_id: team.id,
@@ -121,7 +170,15 @@ export async function completeOnboarding(input: OnboardingInput) {
       const { error: taskError } = await client.from("workspace_tasks").insert(automaticTasks);
       if (taskError) throw taskError;
     }
-    const reports = (projects ?? []).map((project) => {
+    // 자동 자격 진단도 최초 1회만 남깁니다. 재시도가 진단 이력을 부풀리면 안 됩니다.
+    const { count: reportCount, error: reportCountError } = await client
+      .from("diagnosis_reports")
+      .select("id", { count: "exact", head: true })
+      .eq("prep_team_id", team.id)
+      .eq("report_type", "eligibility");
+    if (reportCountError) throw reportCountError;
+
+    const reports = (reportCount ?? 0) > 0 ? [] : (projects ?? []).map((project) => {
       const report = evaluateEligibility(project.program_id, { hasBusinessRegistration: null });
       return { prep_team_id: team.id, report_type: "eligibility", state: report.state, score: report.score, result: report, created_by: auth.user.id };
     });
@@ -199,8 +256,20 @@ export interface PersistedTask {
   is_hidden: boolean;
 }
 
+/** 제출 건에 첨부된 실제 증빙 파일. 매니저가 만료형 링크로 열 대상입니다. */
+export interface SubmissionEvidenceFile {
+  documentId: string;
+  fileName: string;
+  storagePath: string;
+  version: number;
+}
+
 /** 창업자가 제출 시 저장한 사전검증 결과와 집행 내역을 매니저 화면에서 그대로 재사용합니다. */
-export type ManagerReviewSubmission = ManagerSubmissionInput & { verdict?: ExpenseVerdict; expense?: ExpenseInput };
+export type ManagerReviewSubmission = ManagerSubmissionInput & {
+  verdict?: ExpenseVerdict;
+  expense?: ExpenseInput;
+  files?: SubmissionEvidenceFile[];
+};
 
 function getStoredVerdict(payload: Record<string, unknown> | null): ExpenseVerdict | undefined {
   const verdict = payload?.verdict as Partial<ExpenseVerdict> | undefined;
@@ -222,7 +291,23 @@ type RawSubmission = {
   payload: Record<string, unknown> | null;
   created_at: string;
   founder_teams?: unknown;
+  submission_evidence?: unknown;
 };
+
+/** 중첩 조회 결과는 관계에 따라 배열/객체로 오므로 한 곳에서 흡수합니다. */
+function getEvidenceFiles(raw: unknown): SubmissionEvidenceFile[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((link) => {
+    const document = firstObject((link as Record<string, unknown> | null)?.vault_documents);
+    if (!document || typeof document.storage_path !== "string") return [];
+    return [{
+      documentId: String(document.id ?? ""),
+      fileName: typeof document.file_name === "string" ? document.file_name : "이름 없는 파일",
+      storagePath: document.storage_path,
+      version: typeof document.version === "number" ? document.version : 1,
+    }];
+  });
+}
 
 function firstObject(value: unknown): Record<string, unknown> | null {
   if (Array.isArray(value)) return firstObject(value[0]);
@@ -233,14 +318,6 @@ function formatWon(value: number | string) {
   const numericValue = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(numericValue)) return String(value);
   return `${new Intl.NumberFormat("ko-KR").format(numericValue)}원`;
-}
-
-function getEvidenceCount(payload: Record<string, unknown> | null) {
-  if (!payload) return 0;
-  if (typeof payload.evidenceCount === "number") return payload.evidenceCount;
-  if (Array.isArray(payload.evidence)) return payload.evidence.length;
-  if (Array.isArray(payload.documents)) return payload.documents.length;
-  return 0;
 }
 
 function getTeamName(row: RawSubmission) {
@@ -278,23 +355,29 @@ export async function getManagerReviewSubmissions(): Promise<ManagerReviewSubmis
   const client = requireClient();
   const { data, error } = await client
     .from("settlement_submissions")
-    .select("id,title,requested_amount,validation_status,status,payload,created_at,founder_teams(prep_teams(name))")
+    // 한 줄 리터럴로 둡니다. 문자열을 이어 붙이면 supabase-js가 select를 타입으로 못 읽습니다.
+    .select("id,title,requested_amount,validation_status,status,payload,created_at,founder_teams(prep_teams(name)),submission_evidence(vault_documents(id,file_name,storage_path,version))")
     .order("created_at", { ascending: true });
   if (error) throw error;
 
-  return ((data ?? []) as RawSubmission[]).map((row) => ({
-    id: row.id,
-    title: row.title,
-    team: getTeamName(row),
-    amount: formatWon(row.requested_amount),
-    evidenceCount: getEvidenceCount(row.payload),
-    role: "founder",
-    status: row.status,
-    validation: row.validation_status,
-    createdAt: row.created_at,
-    verdict: getStoredVerdict(row.payload),
-    expense: getStoredExpense(row.payload),
-  }));
+  return ((data ?? []) as RawSubmission[]).map((row) => {
+    const files = getEvidenceFiles(row.submission_evidence);
+    return {
+      id: row.id,
+      title: row.title,
+      team: getTeamName(row),
+      amount: formatWon(row.requested_amount),
+      // 열어 볼 수 있는 파일 수입니다. 창업자가 체크한 증빙 '유형'과는 다른 값입니다.
+      evidenceCount: files.length,
+      role: "founder" as const,
+      status: row.status,
+      validation: row.validation_status,
+      createdAt: row.created_at,
+      verdict: getStoredVerdict(row.payload),
+      expense: getStoredExpense(row.payload),
+      files,
+    };
+  });
 }
 
 async function getCurrentFounderTeamId() {
@@ -312,6 +395,8 @@ export async function requestSettlementReview(input: {
   amount: number;
   verdict: { verdict: "pass" | "review" | "fail"; findings: unknown[]; missingEvidence: string[] };
   expense: Record<string, unknown>;
+  /** 이 집행 건을 뒷받침하는 보관함 증빙 파일. 매니저가 실제로 열어 보는 대상입니다. */
+  documentIds?: string[];
 }) {
   if (input.verdict.verdict === "fail") throw new Error("위반 항목이 남아 있어 검토를 요청할 수 없습니다.");
   if (DEV_BYPASS) return (await import("../dev/devServices")).devRequestReview(input);
@@ -319,6 +404,7 @@ export async function requestSettlementReview(input: {
   const { data: auth, error: authError } = await client.auth.getUser();
   if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
   const founderTeamId = await getCurrentFounderTeamId();
+  const documentIds = Array.from(new Set(input.documentIds ?? []));
   const { data, error } = await client
     .from("settlement_submissions")
     .insert({
@@ -327,13 +413,34 @@ export async function requestSettlementReview(input: {
       requested_amount: input.amount,
       validation_status: "passed",
       status: "validated",
-      payload: { expense: input.expense, verdict: input.verdict, evidenceCount: (input.expense.evidence as string[] | undefined)?.length ?? 0 },
+      payload: {
+        expense: input.expense,
+        verdict: input.verdict,
+        evidenceTypeCount: (input.expense.evidence as string[] | undefined)?.length ?? 0,
+        evidenceCount: documentIds.length,
+      },
       submitted_by: auth.user.id,
     })
     .select("id")
     .single();
   if (error) throw error;
-  await trackWorkspaceEvent("settlement_review_requested", undefined, { submissionId: data.id, verdict: input.verdict.verdict });
+
+  if (documentIds.length) {
+    const { error: attachError } = await client
+      .from("submission_evidence")
+      .insert(documentIds.map((documentId) => ({ submission_id: data.id, document_id: documentId, created_by: auth.user.id })));
+    // 첨부가 실패한 채로 큐에 남으면 매니저가 증빙 없는 건을 판정하게 됩니다. 제출을 되돌립니다.
+    if (attachError) {
+      await client.from("settlement_submissions").delete().eq("id", data.id);
+      throw new Error(`증빙 파일을 연결하지 못해 검토 요청을 취소했습니다. ${attachError.message}`);
+    }
+  }
+
+  await trackWorkspaceEvent("settlement_review_requested", undefined, {
+    submissionId: data.id,
+    verdict: input.verdict.verdict,
+    evidenceFiles: documentIds.length,
+  });
   return data.id as string;
 }
 

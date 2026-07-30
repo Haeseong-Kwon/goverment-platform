@@ -23,6 +23,7 @@ import {
 import { STARTUP_PROGRAMS } from "./rules";
 import { Button, ChoiceChip, EmptyState, LinkButton, Panel, Skeleton, StatusBadge, inputClass, type StatusTone } from "./ui";
 import { cn } from "@/lib/utils";
+import { toMessage } from "@/lib/errors";
 
 /** 서비스 호출 상태를 한 곳에서 다룹니다. 각 패널이 같은 방식으로 로딩·에러를 보여줍니다. */
 function useLoader<T>(load: () => Promise<T>, deps: unknown[] = []) {
@@ -34,7 +35,7 @@ function useLoader<T>(load: () => Promise<T>, deps: unknown[] = []) {
     setError(null);
     load()
       .then((value) => { if (mounted) setData(value); })
-      .catch((reason) => { if (mounted) setError(reason instanceof Error ? reason.message : "데이터를 불러오지 못했습니다."); });
+      .catch((reason) => { if (mounted) setError(toMessage(reason, "데이터를 불러오지 못했습니다.")); });
     return () => { mounted = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadKey, ...deps]);
@@ -225,7 +226,7 @@ export function VaultPanel() {
       await uploadVaultDocument(folder, file);
       reload();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "업로드에 실패했습니다.");
+      setError(toMessage(reason, "업로드에 실패했습니다."));
     } finally {
       setBusy(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -236,7 +237,7 @@ export function VaultPanel() {
     try {
       window.open(await getVaultDownloadUrl(document.storagePath), "_blank", "noopener,noreferrer");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "다운로드 링크를 만들지 못했습니다.");
+      setError(toMessage(reason, "다운로드 링크를 만들지 못했습니다."));
     }
   };
 
@@ -447,7 +448,7 @@ export function TeamSettingsPanel({ founder }: { founder: boolean }) {
       setMessage(`초대 코드 ${created.code} 를 발급했습니다.`);
       invite.reload();
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "초대 코드를 발급하지 못했습니다.");
+      setMessage(toMessage(reason, "초대 코드를 발급하지 못했습니다."));
     } finally {
       setBusy(false);
     }
@@ -462,7 +463,7 @@ export function TeamSettingsPanel({ founder }: { founder: boolean }) {
       setJoinCode("");
       members.reload();
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "합류하지 못했습니다.");
+      setMessage(toMessage(reason, "합류하지 못했습니다."));
     } finally {
       setBusy(false);
     }

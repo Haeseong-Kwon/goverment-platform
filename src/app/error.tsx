@@ -13,7 +13,7 @@ export default function RouteError({ error, reset }: { error: Error & { digest?:
   }, [error]);
 
   return (
-    <div className="grid min-h-screen place-items-center bg-[#F8FAFC] px-5 text-[#0F172A]">
+    <main className="grid min-h-screen place-items-center bg-[#F8FAFC] px-5 text-[#0F172A]">
       <div className="w-full max-w-md rounded-2xl border border-[#E2E8F0] bg-white p-8 text-center">
         <StatusBadge tone="red">화면 오류</StatusBadge>
         <h1 className="mt-4 text-2xl font-bold">화면을 표시하지 못했습니다</h1>
@@ -28,6 +28,6 @@ export default function RouteError({ error, reset }: { error: Error & { digest?:
           <LinkButton href="/" variant="secondary">홈으로</LinkButton>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

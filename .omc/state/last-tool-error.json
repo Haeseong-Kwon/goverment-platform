@@ -1,7 +1,0 @@
-{
-  "tool_name": "mcp__Claude_Browser__computer",
-  "tool_input_preview": "{\"action\":\"scroll\",\"coordinate\":[470,300],\"scroll_direction\":\"down\",\"scroll_amount\":10,\"repeat\":3}",
-  "error": "computer timed out after 30s. The Browser pane is currently hidden. The pane may be stuck (modal dialog, navigation hang, or unresponsive renderer). Check preview_console_logs for errors.",
-  "timestamp": "2026-07-30T02:49:20.065Z",
-  "retry_count": 2
-}

@@ -35,6 +35,8 @@ export interface DevSubmission {
   validation: ValidationStatus;
   createdAt: string;
   expense: ExpenseInput;
+  /** 첨부된 보관함 증빙의 문서 id. 실제 스키마의 submission_evidence와 같은 역할입니다. */
+  documentIds?: string[];
   review?: { decision: "approved" | "rejected"; reasonCode: string | null; feedback: string | null; createdAt: string };
 }
 
@@ -81,6 +83,7 @@ const seedSubmissions = (): DevSubmission[] => [
     status: "validated",
     validation: "passed",
     createdAt: iso(-1),
+    documentIds: ["v3", "v4"],
     expense: {
       ...agreement,
       category: "outsourcing",
