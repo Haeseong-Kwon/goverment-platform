@@ -8,10 +8,12 @@ import { EligibilityPanel } from "./EligibilityPanel";
 import { CalendarPanel, IncorporationPanel, TeamSettingsPanel, TrackerPanel, VaultPanel } from "./FounderPanels";
 import { RequireFounderSession, WorkspaceShell } from "./shell";
 import { calculateInsurance } from "./rules";
+import { DEV_BYPASS } from "@/lib/dev/devMode";
 import {
   captureLead,
   createWorkspaceTask,
   convertPrepTeam,
+  getAuthHeaders,
   getBizplanDiagnosisEvents,
   getWorkspaceTasks,
   joinWaitlist,
@@ -560,6 +562,13 @@ function EmailCaptureModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // 열린 대화상자는 Esc로 닫혀야 합니다. 바깥 클릭만으로는 키보드 사용자가 갇힙니다.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   const submit = async () => {
     setSaving(true);
     setError(null);
@@ -576,18 +585,21 @@ function EmailCaptureModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[80] grid place-items-center bg-black/40 p-4">
       <button type="button" aria-label="닫기" onClick={onClose} className="absolute inset-0" />
-      <div role="dialog" aria-modal="true" className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+      <div role="dialog" aria-modal="true" aria-labelledby="email-capture-title" className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
         <Mail className="text-[#2563EB]" />
-        <h2 className="mt-3 text-2xl font-bold">이메일로 자료 받기</h2>
+        <h2 id="email-capture-title" className="mt-3 text-2xl font-bold">이메일로 자료 받기</h2>
         <p className="mt-2 text-sm leading-6 text-[#475569]">계산 결과와 자료실 다운로드 이력을 기록합니다. 수신 동의 후 저장됩니다.</p>
-        <input
-          type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Enter") void submit(); }}
-          className={inputClass}
-          placeholder="founder@example.com"
-        />
+        <Field label="이메일 주소">
+          <input
+            type="email"
+            autoFocus
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") void submit(); }}
+            className={inputClass}
+            placeholder="founder@example.com"
+          />
+        </Field>
         {error && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>닫기</Button>
@@ -611,18 +623,30 @@ function BizPlanCard() {
       title="사업계획서 AI 진단"
       action={<StatusBadge tone={loading ? "slate" : usage.isExhausted ? "amber" : "blue"}>{loading ? "확인 중" : usage.isExhausted ? "이번 달 무료 소진" : `잔여 ${usage.remaining}/2회`}</StatusBadge>}
     >
-      {!loading && usage.isExhausted ? (
-        <EmptyState title="이번 달 무료 진단을 모두 사용했습니다" description="다음 달 1일에 2회로 초기화됩니다. 그동안은 자격 진단과 보관함을 활용해 주세요." />
-      ) : (
-        <AiDiagnosisRunner onComplete={reload} />
-      )}
+      {/* 소진 상태여도 실행기를 걷어내지 않습니다. 마지막 회차 결과가 그 자리에서 사라지면 안 됩니다. */}
+      <AiDiagnosisRunner exhausted={!loading && usage.isExhausted} onComplete={reload} />
     </Panel>
   );
 }
 
 const MIN_BIZPLAN_LENGTH = 100;
 
-function AiDiagnosisRunner({ onComplete }: { onComplete: () => void }) {
+/** 모델이 돌려주는 키는 영문입니다. 화면에는 공고문에서 쓰는 PSST 용어로 보여 줍니다. */
+const PSST_LABELS: Record<string, string> = {
+  problem: "문제인식 (Problem)",
+  solution: "실현가능성 (Solution)",
+  scale_up: "성장전략 (Scale-up)",
+  team: "팀구성 (Team)",
+};
+
+const SWOT_LABELS: Record<string, string> = {
+  strength: "강점",
+  weakness: "약점",
+  opportunity: "기회",
+  threat: "위협",
+};
+
+function AiDiagnosisRunner({ exhausted, onComplete }: { exhausted: boolean; onComplete: () => void }) {
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -635,13 +659,14 @@ function AiDiagnosisRunner({ onComplete }: { onComplete: () => void }) {
     try {
       const response = await fetch("/api/workspace/diagnoses/bizplan", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
         body: JSON.stringify({ text }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      if (!response.ok) throw new Error(data.error ?? "AI 진단에 실패했습니다.");
       setResult(data);
-      await trackWorkspaceEvent("bizplan_diagnosis", undefined, { model: data.model });
+      // 사용 이력은 서버가 남깁니다. 개발용 진입 모드에만 로컬 기록이 필요합니다.
+      if (DEV_BYPASS) await trackWorkspaceEvent("bizplan_diagnosis", undefined, { model: data.model });
       onComplete();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "AI 진단에 실패했습니다.");
@@ -652,14 +677,20 @@ function AiDiagnosisRunner({ onComplete }: { onComplete: () => void }) {
 
   return (
     <div className="space-y-4">
+      {exhausted && (
+        <Notice tone="warning">
+          이번 달 무료 진단을 모두 사용했습니다. 다음 달 1일에 초기화됩니다. 그동안은 자격 진단과 보관함을 활용해 주세요.
+        </Notice>
+      )}
       <textarea
         value={text}
+        disabled={exhausted}
         onChange={(event) => setText(event.target.value)}
         className={cn(textareaClass, "min-h-40")}
         placeholder="사업계획서 본문을 붙여 넣으세요. 문제인식·실현가능성·성장전략·팀구성 순서로 넣으면 판정이 정확해집니다."
       />
       <div className="flex flex-wrap items-center gap-3">
-        <Button loading={loading} disabled={short} onClick={() => void run()}>
+        <Button loading={loading} disabled={short || exhausted} onClick={() => void run()}>
           {loading ? "분석 중…" : "AI 진단 실행"}
         </Button>
         <span className={cn("text-xs font-semibold tabular-nums", short ? "text-[#B45309]" : "text-[#94A3B8]")}>
@@ -673,9 +704,9 @@ function AiDiagnosisRunner({ onComplete }: { onComplete: () => void }) {
         <div className="space-y-4 rounded-xl bg-[#F8FAFC] p-4">
           <StatusBadge tone="blue">{result.model} · AI 추정</StatusBadge>
           <div className="grid gap-2 sm:grid-cols-2">
-            {Object.entries(result.psst).map(([key, item]) => (
+            {Object.entries(result.psst ?? {}).map(([key, item]) => (
               <div key={key} className="rounded-lg bg-white p-3">
-                <strong className="text-sm">{key} {item.score}/25</strong>
+                <strong className="text-sm">{PSST_LABELS[key] ?? key} {item.score}/25</strong>
                 <div className="mt-2 h-2 rounded-full bg-[#EFF6FF]">
                   <div className="h-full rounded-full bg-[#2563EB]" style={{ width: `${Math.min(100, (item.score / 25) * 100)}%` }} />
                 </div>
@@ -686,13 +717,13 @@ function AiDiagnosisRunner({ onComplete }: { onComplete: () => void }) {
           <div>
             <strong className="text-sm">보완 액션</strong>
             <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-[#475569]">
-              {result.actions.map((action) => <li key={action}>{action}</li>)}
+              {(result.actions ?? []).map((action) => <li key={action}>{action}</li>)}
             </ul>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
-            {Object.entries(result.swot).map(([key, items]) => (
+            {Object.entries(result.swot ?? {}).map(([key, items]) => (
               <div key={key} className="rounded-lg bg-white p-3 text-sm">
-                <strong>{key.toUpperCase()}</strong>
+                <strong>{SWOT_LABELS[key] ?? key}</strong>
                 <p className="mt-1 leading-6 text-[#475569]">{items.join(" · ")}</p>
               </div>
             ))}

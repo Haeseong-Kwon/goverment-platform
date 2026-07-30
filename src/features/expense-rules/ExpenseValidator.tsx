@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Info, Sparkles } from "lucide-react";
 import { validateExpense } from "./engine";
 import { CATEGORIES, CATEGORY_LIST, FRAUD_WARNING, ITEM_FLAG_LABELS, REASON_CODES } from "./ruleset";
 import type { ExpenseCategory, ExpenseInput, ExpenseVerdict, ItemFlag, Severity } from "./types";
+import { getAuthHeaders } from "@/lib/services/WorkspaceService";
 import { Button, ChoiceChip, Field, Notice, Panel, StatusBadge, inputClass, textareaClass, type StatusTone } from "../startup-workspace/ui";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +20,8 @@ interface AiJudgement {
 const severityTone: Record<Severity, StatusTone> = { block: "red", warn: "amber", info: "blue" };
 const severityLabel: Record<Severity, string> = { block: "위반", warn: "확인 권고", info: "안내" };
 const verdictTone: Record<ExpenseVerdict["verdict"], StatusTone> = { pass: "green", review: "amber", fail: "red" };
-const verdictLabel: Record<ExpenseVerdict["verdict"], string> = { pass: "검증 통과 🟢", review: "보완 권장 🟡", fail: "제출 불가 🔴" };
+// 배지 색이 이미 심각도를 전달합니다. 이모지는 플랫폼마다 다르게 그려져 색과 어긋납니다.
+const verdictLabel: Record<ExpenseVerdict["verdict"], string> = { pass: "검증 통과", review: "보완 권장", fail: "제출 불가" };
 
 /** 비목별로 노출할 항목 특성 체크박스. 전부 보여주면 창업자가 읽지 않습니다. */
 const FLAGS_BY_CATEGORY: Record<ExpenseCategory, ItemFlag[]> = {
@@ -171,7 +173,7 @@ export function ExpenseValidator({
     try {
       const response = await fetch("/api/workspace/expenses/validate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
         body: JSON.stringify({ expense, description }),
       });
       const data = await response.json();

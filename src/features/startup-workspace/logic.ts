@@ -129,6 +129,9 @@ export function getStartupMilestones(program: string): StartupMilestone[] {
   }));
 }
 
+/** 사업계획서 AI 진단 무료 횟수. 화면 표시와 서버 강제가 같은 값을 봐야 합니다. */
+export const MONTHLY_DIAGNOSIS_LIMIT = 2;
+
 export function getMonthlyDiagnosticUsage(events: string[], now = new Date()) {
   const year = now.getUTCFullYear();
   const month = now.getUTCMonth();
@@ -136,7 +139,7 @@ export function getMonthlyDiagnosticUsage(events: string[], now = new Date()) {
     const date = new Date(event);
     return date.getUTCFullYear() === year && date.getUTCMonth() === month;
   }).length;
-  const remaining = Math.max(0, 2 - used);
+  const remaining = Math.max(0, MONTHLY_DIAGNOSIS_LIMIT - used);
   return { used, remaining, isExhausted: remaining === 0 };
 }
 

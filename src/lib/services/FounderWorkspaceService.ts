@@ -21,6 +21,9 @@ export interface VaultDocument {
 
 const BUCKET = "vault";
 
+/** 화면이 약속한 상한. 서버까지 보내고 나서 실패하면 대용량 업로드 시간이 통째로 낭비됩니다. */
+export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
 /** 같은 파일명은 버전을 올려 쌓습니다. 스키마의 (팀, 폴더, 파일명, 버전) 유니크 제약과 맞춥니다. */
 async function getNextVersion(teamId: string, folder: VaultFolder, fileName: string) {
   const client = requireClient();
@@ -58,6 +61,10 @@ export async function listVaultDocuments(): Promise<VaultDocument[]> {
 }
 
 export async function uploadVaultDocument(folder: VaultFolder, file: File): Promise<VaultDocument> {
+  if (file.size === 0) throw new Error("빈 파일은 올릴 수 없습니다.");
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error(`파일이 너무 큽니다. 최대 50MB까지 올릴 수 있습니다. (현재 ${(file.size / 1024 / 1024).toFixed(1)}MB)`);
+  }
   if (DEV_BYPASS) return (await import("../dev/devServices")).devUploadVaultDocument(folder, file);
   const client = requireClient();
   const { data: auth, error: authError } = await client.auth.getUser();

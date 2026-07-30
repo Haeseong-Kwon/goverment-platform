@@ -2,7 +2,7 @@ import { supabase } from "../supabase";
 import type { EligibilityAnswers, EligibilityReport, StartupRole } from "@/features/startup-workspace/domain";
 import type { TaskStatus } from "@/features/startup-workspace/domain";
 import type { ManagerSubmissionInput } from "@/features/startup-workspace/types";
-import type { ExpenseVerdict } from "@/features/expense-rules/types";
+import type { ExpenseInput, ExpenseVerdict } from "@/features/expense-rules/types";
 import { createMilestones, evaluateEligibility } from "../../features/startup-workspace/rules";
 import { DEV_BYPASS } from "../dev/devMode";
 
@@ -28,6 +28,15 @@ export const requireClient = () => {
   if (!supabase) throw new Error("Supabase 연결 정보가 없습니다. .env.local을 확인하세요.");
   return supabase;
 };
+
+/** 서버 라우트 호출에 붙일 인증 헤더. 개발용 진입 모드에는 세션이 없어 빈 헤더를 돌려줍니다. */
+export async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (DEV_BYPASS) return {};
+  const { data } = await requireClient().auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error("로그인이 필요합니다.");
+  return { Authorization: `Bearer ${token}` };
+}
 
 export function resolveWorkspaceDestination(profile: Pick<StartupProfile, "role" | "onboardingComplete">) {
   if (profile.role === "manager") return "/manager";
@@ -190,12 +199,18 @@ export interface PersistedTask {
   is_hidden: boolean;
 }
 
-/** 창업자가 제출 시 저장한 사전검증 결과를 매니저 화면에서 그대로 재사용합니다. */
-export type ManagerReviewSubmission = ManagerSubmissionInput & { verdict?: ExpenseVerdict };
+/** 창업자가 제출 시 저장한 사전검증 결과와 집행 내역을 매니저 화면에서 그대로 재사용합니다. */
+export type ManagerReviewSubmission = ManagerSubmissionInput & { verdict?: ExpenseVerdict; expense?: ExpenseInput };
 
 function getStoredVerdict(payload: Record<string, unknown> | null): ExpenseVerdict | undefined {
   const verdict = payload?.verdict as Partial<ExpenseVerdict> | undefined;
   return verdict && Array.isArray(verdict.findings) ? (verdict as ExpenseVerdict) : undefined;
+}
+
+/** 매니저가 무엇을 승인하는지 보려면 판정뿐 아니라 원본 집행 내역이 필요합니다. */
+function getStoredExpense(payload: Record<string, unknown> | null): ExpenseInput | undefined {
+  const expense = payload?.expense as Partial<ExpenseInput> | undefined;
+  return expense && typeof expense === "object" && typeof expense.category === "string" ? (expense as ExpenseInput) : undefined;
 }
 
 type RawSubmission = {
@@ -278,6 +293,7 @@ export async function getManagerReviewSubmissions(): Promise<ManagerReviewSubmis
     validation: row.validation_status,
     createdAt: row.created_at,
     verdict: getStoredVerdict(row.payload),
+    expense: getStoredExpense(row.payload),
   }));
 }
 
@@ -432,11 +448,7 @@ export interface ManagerBootstrapResult {
  * SQL 수동 실행 없이 기관 화면을 실제 데이터로 확인하기 위한 경로입니다.
  */
 export async function bootstrapManagerAccess(): Promise<ManagerBootstrapResult> {
-  const client = requireClient();
-  const { data } = await client.auth.getSession();
-  const token = data.session?.access_token;
-  if (!token) throw new Error("로그인이 필요합니다.");
-  const response = await fetch("/api/admin/bootstrap-manager", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+  const response = await fetch("/api/admin/bootstrap-manager", { method: "POST", headers: await getAuthHeaders() });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error ?? "기관 계정 전환에 실패했습니다.");
   return body as ManagerBootstrapResult;

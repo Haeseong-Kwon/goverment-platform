@@ -19,6 +19,8 @@
 - 창업자의 준비 데이터(연습 진단, 초안, 팀 TODO)는 주관기관에 노출되지 않습니다.
 - 매니저는 사전검증을 통과해 **검토 요청된** 정산 건과 그 증빙만 열람합니다(`canManagerSeeReviewItem`).
 - 증빙 파일은 Supabase Storage 만료형 서명 링크(기본 5분)로만 열립니다.
+- AI를 호출하는 API(`/api/workspace/diagnoses/bizplan`, `/api/workspace/expenses/validate`)는 로그인 세션이 있어야 응답합니다.
+  사업계획서 진단의 월 무료 횟수도 서버에서 세고 기록하므로 브라우저 우회로 늘릴 수 없습니다.
 - 접근 통제의 실제 경계는 Supabase RLS입니다. 화면의 진입 판단은 다음 행동을 안내하는 UX 장치입니다.
 
 ## 개발 환경

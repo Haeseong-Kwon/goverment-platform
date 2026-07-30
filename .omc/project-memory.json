@@ -173,32 +173,38 @@
   "hotPaths": [
     {
       "path": "src/features/startup-workspace/components.tsx",
-      "accessCount": 28,
-      "lastAccessed": 1785339132438,
+      "accessCount": 39,
+      "lastAccessed": 1785379333793,
       "type": "file"
     },
     {
       "path": "src/lib/services/WorkspaceService.ts",
-      "accessCount": 24,
-      "lastAccessed": 1785338738020,
+      "accessCount": 30,
+      "lastAccessed": 1785379291119,
       "type": "file"
     },
     {
       "path": "src/features/startup-workspace/FounderPanels.tsx",
-      "accessCount": 18,
-      "lastAccessed": 1785339779058,
-      "type": "file"
-    },
-    {
-      "path": "src/lib/services/FounderWorkspaceService.ts",
-      "accessCount": 14,
-      "lastAccessed": 1785338781995,
+      "accessCount": 20,
+      "lastAccessed": 1785378904709,
       "type": "file"
     },
     {
       "path": "src/features/startup-workspace/ManagerScreens.tsx",
+      "accessCount": 19,
+      "lastAccessed": 1785379555239,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/services/FounderWorkspaceService.ts",
+      "accessCount": 17,
+      "lastAccessed": 1785378894977,
+      "type": "file"
+    },
+    {
+      "path": "src/features/expense-rules/ExpenseValidator.tsx",
       "accessCount": 11,
-      "lastAccessed": 1785339708326,
+      "lastAccessed": 1785379301491,
       "type": "file"
     },
     {
@@ -220,15 +226,15 @@
       "type": "file"
     },
     {
-      "path": "src/features/startup-workspace/shell.tsx",
-      "accessCount": 8,
-      "lastAccessed": 1785339006688,
+      "path": "src/features/startup-workspace/ui.tsx",
+      "accessCount": 9,
+      "lastAccessed": 1785378317189,
       "type": "file"
     },
     {
-      "path": "src/features/startup-workspace/ui.tsx",
-      "accessCount": 8,
-      "lastAccessed": 1785340668655,
+      "path": "src/features/startup-workspace/shell.tsx",
+      "accessCount": 9,
+      "lastAccessed": 1785378331537,
       "type": "file"
     },
     {
@@ -238,15 +244,15 @@
       "type": "file"
     },
     {
-      "path": "src/features/expense-rules/ExpenseValidator.tsx",
-      "accessCount": 7,
-      "lastAccessed": 1785340543056,
-      "type": "file"
-    },
-    {
       "path": "src/features/expense-rules/PreDeliberation.tsx",
       "accessCount": 7,
       "lastAccessed": 1785340611127,
+      "type": "file"
+    },
+    {
+      "path": "src/features/startup-workspace/logic.ts",
+      "accessCount": 7,
+      "lastAccessed": 1785379245710,
       "type": "file"
     },
     {
@@ -259,12 +265,6 @@
       "path": "src/components/layout/Footer.tsx",
       "accessCount": 5,
       "lastAccessed": 1785338010662,
-      "type": "file"
-    },
-    {
-      "path": "src/features/startup-workspace/logic.ts",
-      "accessCount": 5,
-      "lastAccessed": 1785339651411,
       "type": "file"
     },
     {
@@ -298,6 +298,12 @@
       "type": "file"
     },
     {
+      "path": "README.md",
+      "accessCount": 4,
+      "lastAccessed": 1785379895052,
+      "type": "file"
+    },
+    {
       "path": "src/features/expense-rules/planImport.ts",
       "accessCount": 3,
       "lastAccessed": 1785316545133,
@@ -316,15 +322,39 @@
       "type": "file"
     },
     {
-      "path": "README.md",
-      "accessCount": 3,
-      "lastAccessed": 1785340071921,
-      "type": "file"
-    },
-    {
       "path": "src/app/not-found.tsx",
       "accessCount": 3,
       "lastAccessed": 1785341135903,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/ai/expenseJudge.ts",
+      "accessCount": 3,
+      "lastAccessed": 1785378794332,
+      "type": "file"
+    },
+    {
+      "path": "src/features/expense-rules/types.ts",
+      "accessCount": 3,
+      "lastAccessed": 1785378813974,
+      "type": "file"
+    },
+    {
+      "path": "src/app/layout.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1785379009737,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/supabaseAdmin.ts",
+      "accessCount": 3,
+      "lastAccessed": 1785379229656,
+      "type": "file"
+    },
+    {
+      "path": "src/app/api/workspace/expenses/validate/route.ts",
+      "accessCount": 3,
+      "lastAccessed": 1785379277776,
       "type": "file"
     },
     {
@@ -346,21 +376,15 @@
       "type": "file"
     },
     {
-      "path": "src/app/layout.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1785337070241,
-      "type": "file"
-    },
-    {
       "path": "src/app/onboarding/page.tsx",
       "accessCount": 2,
       "lastAccessed": 1785337411092,
       "type": "file"
     },
     {
-      "path": "src/features/expense-rules/types.ts",
+      "path": "src/app/api/admin/bootstrap-manager/route.ts",
       "accessCount": 2,
-      "lastAccessed": 1785338551414,
+      "lastAccessed": 1785379172197,
       "type": "file"
     },
     {
@@ -388,18 +412,6 @@
       "type": "file"
     },
     {
-      "path": "src/lib/ai/expenseJudge.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785316358820,
-      "type": "file"
-    },
-    {
-      "path": "src/app/api/workspace/expenses/validate/route.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785316373739,
-      "type": "file"
-    },
-    {
       "path": "src/lib/ai/expenseJudge.test.ts",
       "accessCount": 1,
       "lastAccessed": 1785317053078,
@@ -421,18 +433,6 @@
       "path": "supabase/004-seed.sql",
       "accessCount": 1,
       "lastAccessed": 1785318025484,
-      "type": "file"
-    },
-    {
-      "path": "src/lib/supabaseAdmin.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785319037258,
-      "type": "file"
-    },
-    {
-      "path": "src/app/api/admin/bootstrap-manager/route.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785319057010,
       "type": "file"
     },
     {

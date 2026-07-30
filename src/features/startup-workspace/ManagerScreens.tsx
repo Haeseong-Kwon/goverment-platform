@@ -16,10 +16,11 @@ import { getConversionCodes, getInstitutionName, type ConversionCode } from "@/l
 import { RejectionComposer } from "@/features/expense-rules/ManagerTools";
 import { PlanReviewBoard } from "@/features/expense-rules/ManagerTools";
 import { summarizeRejectionReasons } from "@/features/expense-rules/rejection";
-import type { ReasonCode } from "@/features/expense-rules/types";
+import { ITEM_FLAG_LABELS } from "@/features/expense-rules/ruleset";
+import type { ExpenseInput, ReasonCode } from "@/features/expense-rules/types";
 import { canManagerSeeReviewItem, getManagerDashboardSummary } from "./logic";
 import { WorkspaceShell } from "./shell";
-import { Button, ChoiceChip, EmptyState, Notice, PageHeader, Panel, ProgressBar, Skeleton, StatusBadge, focusRing } from "./ui";
+import { Button, ChoiceChip, EmptyState, LinkButton, Notice, PageHeader, Panel, ProgressBar, Skeleton, StatusBadge, focusRing } from "./ui";
 import { cn } from "@/lib/utils";
 
 type Summary = ReturnType<typeof getManagerDashboardSummary>;
@@ -175,6 +176,11 @@ export function ManagerDashboard() {
 
   const rows = submissions ?? [];
   const summary = getManagerDashboardSummary(rows);
+  // 대시보드에서 곧바로 다음에 처리할 건이 보여야 합니다. 이미 받아 온 목록을 다시 쓰므로 추가 조회가 없습니다.
+  const waiting = rows
+    .filter((row) => !isDecided(row.status))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .slice(0, 5);
 
   return (
     <WorkspaceShell role="manager">
@@ -206,6 +212,34 @@ export function ManagerDashboard() {
         </div>
       )}
 
+      {waiting.length > 0 && (
+        <section className="mt-6">
+          <Panel
+            title="가장 오래 기다린 요청"
+            action={<LinkButton href="/manager/review" variant="ghost" size="sm" className="text-[#2563EB]">검토 큐 열기</LinkButton>}
+          >
+            <div className="space-y-2">
+              {waiting.map((row) => {
+                const days = waitingDays(row.createdAt);
+                return (
+                  <Link
+                    key={row.id}
+                    href="/manager/review"
+                    className={cn("flex items-center gap-3 rounded-xl border border-[#E2E8F0] p-3", focusRing, "transition-colors hover:border-[#2563EB] hover:bg-[#F8FAFC]")}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <strong className="block truncate text-sm font-bold text-[#0F172A]">{row.team} · {row.title}</strong>
+                      <span className="text-xs text-[#94A3B8]">{row.amount} · 증빙 {row.evidenceCount}종</span>
+                    </div>
+                    <StatusBadge tone={days >= 3 ? "red" : "slate"}>대기 {days}일</StatusBadge>
+                  </Link>
+                );
+              })}
+            </div>
+          </Panel>
+        </section>
+      )}
+
       <section className="mt-6 grid gap-4 md:grid-cols-3">
         {[
           { href: "/manager/review", title: "검토 큐", desc: `검증 통과 요청 ${summary.requestCount}건을 확인합니다.` },
@@ -225,6 +259,68 @@ export function ManagerDashboard() {
   );
 }
 
+const VENDOR_LABEL: Record<string, string> = {
+  business: "사업자등록 업체",
+  individual: "개인(프리랜서)",
+  platform: "중계 플랫폼",
+  unknown: "확인 안 됨",
+};
+
+const yesNo = (value: boolean | null | undefined) => (value === true ? "예" : value === false ? "아니오" : "확인 안 됨");
+
+/**
+ * 매니저가 승인·반려를 누르기 전에 무엇을 판단하는지 볼 수 있어야 합니다.
+ * 창업자가 제출 시 저장한 집행 내역을 그대로 펼쳐 보여 줍니다.
+ */
+function ExpenseDetail({ expense, amount }: { expense: ExpenseInput; amount: string }) {
+  const rows: Array<[string, string]> = [
+    ["집행 금액", amount],
+    ["집행일", expense.executionDate || "미입력"],
+    ["납품·완료일", expense.deliveryDate || "미입력"],
+    ["협약 기간", `${expense.agreementStart} ~ ${expense.agreementEnd}`],
+    ["거래처 유형", VENDOR_LABEL[expense.vendor?.type ?? "unknown"]],
+    ["과업·업종 연관성", yesNo(expense.vendor?.industryRelated)],
+    ["주관기관 사전승인", yesNo(expense.hasPriorApproval)],
+  ];
+  if (expense.advancePayment) rows.splice(1, 0, ["선급금", `${new Intl.NumberFormat("ko-KR").format(expense.advancePayment)}원`]);
+
+  const flags = expense.itemFlags ?? [];
+  const evidence = expense.evidence ?? [];
+
+  return (
+    <div className="rounded-xl border border-[#E2E8F0]">
+      <dl className="divide-y divide-[#F1F5F9]">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex items-baseline justify-between gap-3 px-4 py-2.5 text-sm">
+            <dt className="shrink-0 text-[#475569]">{label}</dt>
+            <dd className="min-w-0 truncate text-right font-semibold tabular-nums text-[#0F172A]">{value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="border-t border-[#F1F5F9] px-4 py-3">
+        <p className="text-xs font-bold text-[#475569]">첨부 증빙 {evidence.length}종</p>
+        {evidence.length === 0 ? (
+          <p className="mt-1.5 text-sm text-[#94A3B8]">제출된 증빙 유형이 없습니다.</p>
+        ) : (
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {evidence.map((name) => <li key={name}><StatusBadge tone="slate">{name}</StatusBadge></li>)}
+          </ul>
+        )}
+      </div>
+
+      {flags.length > 0 && (
+        <div className="border-t border-[#F1F5F9] px-4 py-3">
+          <p className="text-xs font-bold text-[#475569]">신고된 항목 특성</p>
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {flags.map((flag) => <li key={flag}><StatusBadge tone="amber">{ITEM_FLAG_LABELS[flag]}</StatusBadge></li>)}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ReviewPanel({ submission }: { submission?: ManagerReviewSubmission }) {
   const verdict = submission?.verdict;
   const blocking = (verdict?.findings ?? []).filter((finding) => finding.severity !== "info");
@@ -234,10 +330,18 @@ function ReviewPanel({ submission }: { submission?: ManagerReviewSubmission }) {
       title={submission ? `${submission.team} · ${submission.title}` : "선택된 요청 없음"}
       action={submission && <StatusBadge tone="green">사전검증 통과</StatusBadge>}
     >
-      <div className="rounded-xl bg-[#F8FAFC] p-5 text-center text-sm text-[#94A3B8]">
-        <FileText className="mx-auto mb-2" />
-        {submission ? `${submission.evidenceCount}개 증빙 · ${submission.amount}` : "검토 큐에서 요청을 선택하세요"}
-      </div>
+      {!submission ? (
+        <div className="rounded-xl bg-[#F8FAFC] p-5 text-center text-sm text-[#94A3B8]">
+          <FileText className="mx-auto mb-2" />
+          검토 큐에서 요청을 선택하세요
+        </div>
+      ) : submission.expense ? (
+        <ExpenseDetail expense={submission.expense} amount={submission.amount} />
+      ) : (
+        <div className="rounded-xl border border-[#FDE68A] bg-[#FFFBEB] p-4 text-sm font-semibold leading-6 text-[#B45309]">
+          이 건은 집행 내역 원본이 저장되기 전에 제출되어 상세를 표시할 수 없습니다. 판정 근거만 확인한 뒤 필요하면 팀에 재제출을 요청하세요.
+        </div>
+      )}
       {verdict && (
         <div className="mt-4">
           <div className="flex flex-wrap gap-2">
@@ -341,7 +445,7 @@ export function ManagerReviewQueuePage() {
         <section className="grid gap-6 xl:grid-cols-[1fr_460px]">
           <div className="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white">
             <div className="grid grid-cols-[1.3fr_1.2fr_.9fr_.6fr_.6fr] border-b border-[#E2E8F0] px-5 py-3 text-xs font-bold text-[#475569]">
-              <span>팀</span><span>건명</span><span>상태</span><span className="text-right">증빙</span><span className="text-right">대기</span>
+              <span>팀</span><span>건명</span><span>상태</span><span className="text-right">증빙 유형</span><span className="text-right">대기</span>
             </div>
             {rows.map((row) => {
               const waiting = waitingDays(row.createdAt);
@@ -358,7 +462,7 @@ export function ManagerReviewQueuePage() {
                   <strong className="truncate">{row.team}</strong>
                   <span className="truncate text-[#475569]">{row.title}</span>
                   <span><StatusBadge tone={statusTone(row.status)}>{STATUS_LABEL[row.status]}</StatusBadge></span>
-                  <span className="text-right tabular-nums text-[#475569]">{row.evidenceCount}건</span>
+                  <span className="text-right tabular-nums text-[#475569]">{row.evidenceCount}종</span>
                   <span className={cn("text-right text-xs font-bold tabular-nums", !isDecided(row.status) && waiting >= 3 ? "text-[#DC2626]" : "text-[#94A3B8]")}>
                     {waiting}일
                   </span>

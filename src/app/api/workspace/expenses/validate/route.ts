@@ -3,6 +3,7 @@ import { validateExpense } from "@/features/expense-rules/engine";
 import { CATEGORIES } from "@/features/expense-rules/ruleset";
 import type { ExpenseCategory, ExpenseInput, ItemFlag } from "@/features/expense-rules/types";
 import { judgeExpenseDescription } from "@/lib/ai/expenseJudge";
+import { createUserClient, DEV_BYPASS_SERVER } from "@/lib/supabaseAdmin";
 
 const CATEGORY_IDS = Object.keys(CATEGORIES) as ExpenseCategory[];
 
@@ -30,6 +31,14 @@ export async function POST(request: NextRequest) {
     expense = parseInput(body.expense);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "입력이 올바르지 않습니다." }, { status: 400 });
+  }
+
+  // AI 판정은 호출마다 비용이 나갑니다. 익명 요청에는 열어 두지 않습니다.
+  if (!DEV_BYPASS_SERVER) {
+    const client = createUserClient(request);
+    if (!client) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+    const { data: auth, error: authError } = await client.auth.getUser();
+    if (authError || !auth.user) return NextResponse.json({ error: "세션이 유효하지 않습니다. 다시 로그인해 주세요." }, { status: 401 });
   }
 
   const description = typeof body.description === "string" ? body.description.trim() : "";

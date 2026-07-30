@@ -428,10 +428,15 @@ export function TeamSettingsPanel({ founder }: { founder: boolean }) {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // 클립보드는 보안 컨텍스트·권한에 따라 거부됩니다. 조용히 실패하면 사용자는 복사됐다고 믿습니다.
   const copyCode = async (code: string) => {
-    await navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setMessage(`클립보드에 복사하지 못했습니다. 코드를 직접 입력해 주세요: ${code}`);
+    }
   };
 
   const issue = async () => {

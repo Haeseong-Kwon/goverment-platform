@@ -7,6 +7,18 @@ export interface BizplanDiagnosis {
 const dimensions = ["problem", "solution", "scale_up", "team"] as const;
 const quadrants = ["strength", "weakness", "opportunity", "threat"] as const;
 
+/** 응답이 없으면 화면이 무한히 "분석 중"에 머뭅니다. 상한을 두고 사용자에게 되돌려 줍니다. */
+const TIMEOUT_MS = 60_000;
+
+const SYSTEM_PROMPT = [
+  "You diagnose Korean startup business plans. Return only JSON.",
+  "Score PSST dimensions 0-25 using supplied text evidence.",
+  "evidence: quote or paraphrase the sentence in the plan that justifies the score, in Korean.",
+  "actions: 2-4 Korean sentences. Each must be one concrete revision the founder should make to the plan text — never a bare section name.",
+  "swot: short Korean noun phrases grounded in the plan text.",
+  "Do not predict selection, eligibility, funding, or legal/tax outcomes.",
+].join(" ");
+
 export function parseDiagnosis(content: string): BizplanDiagnosis {
   let value: unknown;
   try { value = JSON.parse(content); } catch { throw new Error("AI 응답 형식이 올바르지 않습니다."); }
@@ -41,11 +53,16 @@ export async function runBizplanDiagnosis(text: string) {
     body: JSON.stringify({
       model: process.env.OPENROUTER_MODEL ?? "z-ai/glm-5.2", temperature: 0.2, stream: false,
       messages: [
-        { role: "system", content: "You diagnose Korean startup business plans. Return only JSON. Score PSST dimensions 0-25 using supplied text evidence. Do not predict selection, eligibility, funding, or legal/tax outcomes." },
+        { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: text },
       ],
       response_format: { type: "json_schema", json_schema: { name: "bizplan_diagnosis", strict: true, schema } },
     }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  }).catch((reason) => {
+    // 타임아웃은 DOMException으로 올라와 영문 메시지가 그대로 노출됩니다.
+    if (reason instanceof Error && reason.name === "TimeoutError") throw new Error("AI 진단이 시간 내에 끝나지 않았습니다. 잠시 후 다시 시도해 주세요.");
+    throw reason;
   });
   if (!response.ok) throw new Error("AI 진단 요청에 실패했습니다.");
   const body = await response.json() as { id?: string; model?: string; usage?: { prompt_tokens?: number; completion_tokens?: number }; choices?: Array<{ message?: { content?: string } }> };

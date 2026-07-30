@@ -70,6 +70,7 @@ const toManagerRow = (submission: DevSubmission): ManagerReviewSubmission => ({
   validation: submission.validation,
   createdAt: submission.createdAt,
   verdict: devVerdict(submission),
+  expense: submission.expense,
 });
 
 export function devManagerSubmissions(): ManagerReviewSubmission[] {

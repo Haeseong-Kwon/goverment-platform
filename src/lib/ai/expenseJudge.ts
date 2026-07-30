@@ -15,6 +15,9 @@ export interface ExpenseJudgement {
 const CATEGORY_IDS = Object.keys(CATEGORIES) as ExpenseCategory[];
 const FLAG_IDS = Object.keys(ITEM_FLAG_LABELS) as ItemFlag[];
 
+/** 사전검증은 규정 엔진만으로도 답이 나옵니다. AI가 늦으면 기다리지 않고 넘어갑니다. */
+const TIMEOUT_MS = 45_000;
+
 export function parseJudgement(content: string): ExpenseJudgement {
   let value: unknown;
   try {
@@ -84,6 +87,10 @@ export async function judgeExpenseDescription(description: string): Promise<Expe
       ],
       response_format: { type: "json_schema", json_schema: { name: "expense_judgement", strict: true, schema } },
     }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  }).catch((reason) => {
+    if (reason instanceof Error && reason.name === "TimeoutError") throw new Error("AI 비목 판정이 시간 내에 끝나지 않았습니다.");
+    throw reason;
   });
 
   if (!response.ok) throw new Error("AI 비목 판정 요청에 실패했습니다.");

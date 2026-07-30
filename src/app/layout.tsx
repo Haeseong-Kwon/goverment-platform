@@ -3,7 +3,11 @@ import "./globals.css";
 import { AppChrome } from "@/components/layout/AppChrome";
 
 export const metadata: Metadata = {
-  title: "StartUp Pilot | 정부 창업지원사업 행정 SaaS",
+  // 각 화면이 자기 제목을 붙입니다. 탭을 여러 개 열어 두는 매니저가 어느 화면인지 구분할 수 있어야 합니다.
+  title: {
+    default: "StartUp Pilot | 정부 창업지원사업 행정 SaaS",
+    template: "%s | StartUp Pilot",
+  },
   description: "창업자 전용 워크스페이스와 주관기관 매니저 대시보드를 하나의 규정 룰 엔진으로 연결하는 창업 행정 SaaS",
 };
 
