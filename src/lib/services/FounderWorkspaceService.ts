@@ -1,6 +1,7 @@
 import { supabase } from "../supabase";
 import { getCurrentPrepTeamId, requireClient } from "./WorkspaceService";
 import { DEV_BYPASS } from "../dev/devMode";
+import { getAuthUserId, invalidateTeamCache, requireAuthUserId } from "./sessionCache";
 
 export type VaultFolder = "bizplan" | "evidence" | "submission_archive";
 
@@ -79,8 +80,7 @@ export async function uploadVaultDocument(folder: VaultFolder, file: File): Prom
   }
   if (DEV_BYPASS) return (await import("../dev/devServices")).devUploadVaultDocument(folder, file);
   const client = requireClient();
-  const { data: auth, error: authError } = await client.auth.getUser();
-  if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
+  const userId = await requireAuthUserId();
   const teamId = await getCurrentPrepTeamId();
   const version = await getNextVersion(teamId, folder, file.name);
   const storagePath = `${teamId}/${folder}/v${version}-${file.name}`;
@@ -90,7 +90,7 @@ export async function uploadVaultDocument(folder: VaultFolder, file: File): Prom
 
   const { data, error } = await client
     .from("vault_documents")
-    .insert({ prep_team_id: teamId, folder, file_name: file.name, storage_path: storagePath, version, created_by: auth.user.id })
+    .insert({ prep_team_id: teamId, folder, file_name: file.name, storage_path: storagePath, version, created_by: userId })
     .select("id, folder, file_name, storage_path, version, created_at")
     .single();
   if (error) {
@@ -172,14 +172,13 @@ export async function getActiveTeamInvite(): Promise<TeamInvite | null> {
 export async function createTeamInvite(): Promise<TeamInvite> {
   if (DEV_BYPASS) return (await import("../dev/devServices")).devInvite();
   const client = requireClient();
-  const { data: auth, error: authError } = await client.auth.getUser();
-  if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
+  const userId = await requireAuthUserId();
   const teamId = await getCurrentPrepTeamId();
   const code = generateAccessCode();
   const expiresAt = new Date(Date.now() + 14 * 86_400_000).toISOString();
   const { data, error } = await client
     .from("prep_team_invites")
-    .insert({ prep_team_id: teamId, code, expires_at: expiresAt, created_by: auth.user.id })
+    .insert({ prep_team_id: teamId, code, expires_at: expiresAt, created_by: userId })
     .select("code, expires_at, use_count, max_uses")
     .single();
   if (error) throw error;
@@ -190,6 +189,7 @@ export async function joinTeamByInvite(code: string) {
   if (DEV_BYPASS) return code.trim().toUpperCase();
   const client = requireClient();
   const { data, error } = await client.rpc("join_prep_team", { input_code: code.trim() });
+  invalidateTeamCache();
   if (error) {
     throw new Error(error.message.includes("INVITE_CODE_INVALID") ? "초대 코드가 유효하지 않거나 만료되었습니다." : error.message);
   }
@@ -370,13 +370,13 @@ export const isSupabaseReady = () => Boolean(supabase);
 export async function getInstitutionName(): Promise<string | null> {
   if (DEV_BYPASS) return (await import("../dev/devServices")).devInstitutionName();
   const client = requireClient();
-  const { data: auth } = await client.auth.getUser();
-  if (!auth.user) return null;
+  const userId = await getAuthUserId();
+  if (!userId) return null;
 
   const { data: profile } = await client
     .from("startup_profiles")
     .select("institution_id, institutions(name)")
-    .eq("id", auth.user.id)
+    .eq("id", userId)
     .maybeSingle();
   const own = Array.isArray(profile?.institutions) ? profile?.institutions[0] : profile?.institutions;
   if ((own as { name?: string } | null)?.name) return (own as { name: string }).name;

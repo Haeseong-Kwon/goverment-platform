@@ -169,8 +169,8 @@
   "hotPaths": [
     {
       "path": "src/lib/services/WorkspaceService.ts",
-      "accessCount": 72,
-      "lastAccessed": 1785810730482,
+      "accessCount": 75,
+      "lastAccessed": 1785815434161,
       "type": "file"
     },
     {
@@ -193,8 +193,8 @@
     },
     {
       "path": "src/lib/services/FounderWorkspaceService.ts",
-      "accessCount": 27,
-      "lastAccessed": 1785811305941,
+      "accessCount": 29,
+      "lastAccessed": 1785815358913,
       "type": "file"
     },
     {
@@ -219,6 +219,12 @@
       "path": "src/features/startup-workspace/logic.ts",
       "accessCount": 14,
       "lastAccessed": 1785810802292,
+      "type": "file"
+    },
+    {
+      "path": "src/features/startup-workspace/session.ts",
+      "accessCount": 13,
+      "lastAccessed": 1785815635040,
       "type": "file"
     },
     {
@@ -264,21 +270,15 @@
       "type": "file"
     },
     {
-      "path": "src/features/startup-workspace/session.ts",
+      "path": "src/lib/services/AuthService.ts",
       "accessCount": 9,
-      "lastAccessed": 1785809616787,
+      "lastAccessed": 1785815669853,
       "type": "file"
     },
     {
       "path": "src/features/expense-rules/PreDeliberation.tsx",
       "accessCount": 8,
       "lastAccessed": 1785807829568,
-      "type": "file"
-    },
-    {
-      "path": "src/lib/services/AuthService.ts",
-      "accessCount": 7,
-      "lastAccessed": 1785387989420,
       "type": "file"
     },
     {

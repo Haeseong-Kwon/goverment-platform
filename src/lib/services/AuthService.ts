@@ -137,12 +137,23 @@ export const completeAuthFromUrl = async (params: URLSearchParams) => {
   return Boolean(data.session);
 };
 
+/**
+ * 현재 로그인 사용자.
+ *
+ * `getUser()`가 아니라 `getSession()`을 씁니다. 전자는 매번 인증 서버로 나가
+ * 실측 중앙값 525ms가 들고, 로그인·가입·온보딩 화면은 이 응답을 기다리느라
+ * 폼을 그리지 못한 채 스피너만 보여 주고 있었습니다.
+ * 후자는 로컬 토큰을 읽고 만료됐을 때만 네트워크를 씁니다.
+ *
+ * 이 값은 "이미 로그인했으니 워크스페이스로 보낼까"를 정하는 용도입니다.
+ * 실제 데이터 접근 권한은 서명된 토큰과 RLS가 판단하므로 판정이 약해지지 않습니다.
+ */
 export const getCurrentUser = async () => {
   if (DEV_BYPASS) return DEV_SESSION.user;
   if (!supabase) return null;
-  const { data, error } = await supabase.auth.getUser();
+  const { data, error } = await supabase.auth.getSession();
   if (error) return null;
-  return data.user;
+  return data.session?.user ?? null;
 };
 
 export const getSession = async () => {

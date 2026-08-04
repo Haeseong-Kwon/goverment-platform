@@ -5,6 +5,7 @@ import type { ManagerSubmissionInput } from "@/features/startup-workspace/types"
 import type { ExpenseInput, ExpenseVerdict } from "@/features/expense-rules/types";
 import { createMilestones, evaluateEligibility } from "../../features/startup-workspace/rules";
 import { DEV_BYPASS } from "../dev/devMode";
+import { cached, getAuthUserId, invalidateProfileCache, invalidateTeamCache, requireAuthUserId } from "./sessionCache";
 
 export interface StartupProfile {
   id: string;
@@ -46,29 +47,31 @@ export function resolveWorkspaceDestination(profile: Pick<StartupProfile, "role"
 
 export async function getStartupProfile(): Promise<StartupProfile | null> {
   if (DEV_BYPASS) return (await import("../dev/devServices")).devProfile();
-  const client = requireClient();
-  const { data: auth, error: authError } = await client.auth.getUser();
-  if (authError || !auth.user) return null;
-  const { data, error } = await client
-    .from("startup_profiles")
-    .select("id, role, onboarding_complete, institution_id")
-    .eq("id", auth.user.id)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  return {
-    id: data.id,
-    role: data.role as StartupRole,
-    onboardingComplete: data.onboarding_complete,
-    institutionId: data.institution_id,
-  };
+  // 한 화면에서 게이트와 사이드바가 각각 물어봅니다. 캐시하지 않으면 같은 조회가 2~3번 납니다.
+  return cached("startupProfile", async () => {
+    const client = requireClient();
+    const userId = await getAuthUserId();
+    if (!userId) return null;
+    const { data, error } = await client
+      .from("startup_profiles")
+      .select("id, role, onboarding_complete, institution_id")
+      .eq("id", userId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    return {
+      id: data.id,
+      role: data.role as StartupRole,
+      onboardingComplete: data.onboarding_complete,
+      institutionId: data.institution_id,
+    };
+  });
 }
 
 export async function completeOnboarding(input: OnboardingInput) {
   if (DEV_BYPASS) return (await import("../dev/devServices")).devCompleteOnboarding();
   const client = requireClient();
-  const { data: auth, error: authError } = await client.auth.getUser();
-  if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
+  const userId = await requireAuthUserId();
   /**
    * 프로필 행이 없을 수 있습니다. 가입(signUp) 직후의 프로필 INSERT는 이메일 인증이
    * 걸린 프로젝트에서 세션이 없는 상태로 실행되므로 RLS(id = auth.uid())에 막히고,
@@ -79,14 +82,14 @@ export async function completeOnboarding(input: OnboardingInput) {
   const { data: profile, error: profileError } = await client
     .from("startup_profiles")
     .select("role")
-    .eq("id", auth.user.id)
+    .eq("id", userId)
     .maybeSingle();
   if (profileError) throw profileError;
   if (!profile) {
     // role은 003의 INSERT 트리거가 pre_founder로 고정합니다. 재시도 중복(23505)은 성공으로 봅니다.
     const { error: createError } = await client
       .from("startup_profiles")
-      .insert({ id: auth.user.id, role: "pre_founder", onboarding_complete: false });
+      .insert({ id: userId, role: "pre_founder", onboarding_complete: false });
     if (createError && createError.code !== "23505") throw createError;
   } else if (profile.role !== "pre_founder") {
     throw new Error("창업자 준비 계정만 온보딩을 완료할 수 있습니다.");
@@ -97,7 +100,7 @@ export async function completeOnboarding(input: OnboardingInput) {
   const { data: existingTeam, error: existingTeamError } = await client
     .from("prep_teams")
     .select("id")
-    .eq("leader_id", auth.user.id)
+    .eq("leader_id", userId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -113,7 +116,7 @@ export async function completeOnboarding(input: OnboardingInput) {
   } else {
     const { data: created, error: teamError } = await client
       .from("prep_teams")
-      .insert({ name: input.teamName, item_summary: input.itemSummary, industry: input.industry, leader_id: auth.user.id })
+      .insert({ name: input.teamName, item_summary: input.itemSummary, industry: input.industry, leader_id: userId })
       .select("id")
       .single();
     if (teamError) throw teamError;
@@ -129,7 +132,7 @@ export async function completeOnboarding(input: OnboardingInput) {
    */
   const { error: memberError } = await client
     .from("prep_team_members")
-    .insert({ prep_team_id: team.id, user_id: auth.user.id, member_role: "leader" });
+    .insert({ prep_team_id: team.id, user_id: userId, member_role: "leader" });
   if (memberError && memberError.code !== "23505") throw memberError;
 
   if (input.programIds.length) {
@@ -204,7 +207,7 @@ export async function completeOnboarding(input: OnboardingInput) {
         state: report.state,
         score: report.score,
         result: { programId: project.program_id, answers, report },
-        created_by: auth.user.id,
+        created_by: userId,
       };
     });
     if (reports.length) {
@@ -214,10 +217,13 @@ export async function completeOnboarding(input: OnboardingInput) {
     }
   }
 
+  invalidateTeamCache();
+  invalidateProfileCache();
+
   const { error: updateError } = await client
     .from("startup_profiles")
     .update({ position: input.position, team_building_intent: input.teamBuildingIntent, desired_positions: input.desiredPositions, onboarding_complete: true })
-    .eq("id", auth.user.id);
+    .eq("id", userId);
   if (updateError) throw updateError;
 
   await trackWorkspaceEvent("onboarding_complete", team.id, { programIds: input.programIds });
@@ -227,10 +233,10 @@ export async function completeOnboarding(input: OnboardingInput) {
 export async function trackWorkspaceEvent(eventName: string, prepTeamId?: string, payload: Record<string, unknown> = {}) {
   if (DEV_BYPASS) return (await import("../dev/devServices")).devTrackEvent(eventName);
   const client = requireClient();
-  const { data: auth } = await client.auth.getUser();
-  if (!auth.user) return;
+  const userId = await getAuthUserId();
+  if (!userId) return;
   const { error } = await client.from("workspace_events").insert({
-    user_id: auth.user.id,
+    user_id: userId,
     prep_team_id: prepTeamId ?? null,
     event_name: eventName,
     payload,
@@ -241,9 +247,9 @@ export async function trackWorkspaceEvent(eventName: string, prepTeamId?: string
 export async function joinWaitlist(tab: "team_building" | "mentor" | "investment") {
   if (DEV_BYPASS) return (await import("../dev/devServices")).devWaitlistJoin(tab);
   const client = requireClient();
-  const { data: auth, error: authError } = await client.auth.getUser();
-  if (authError || !auth.user) throw new Error("대기 신청에는 로그인이 필요합니다.");
-  const { error } = await client.from("waitlist_entries").upsert({ user_id: auth.user.id, tab }, { onConflict: "user_id,tab" });
+  const userId = await getAuthUserId();
+  if (!userId) throw new Error("대기 신청에는 로그인이 필요합니다.");
+  const { error } = await client.from("waitlist_entries").upsert({ user_id: userId, tab }, { onConflict: "user_id,tab" });
   if (error) throw error;
   await trackWorkspaceEvent("waitlist_join", undefined, { tab });
 }
@@ -252,9 +258,9 @@ export async function joinWaitlist(tab: "team_building" | "mentor" | "investment
 export async function getWaitlistEntries(): Promise<string[]> {
   if (DEV_BYPASS) return (await import("../dev/devServices")).devWaitlist();
   const client = requireClient();
-  const { data: auth } = await client.auth.getUser();
-  if (!auth.user) return [];
-  const { data, error } = await client.from("waitlist_entries").select("tab").eq("user_id", auth.user.id);
+  const userId = await getAuthUserId();
+  if (!userId) return [];
+  const { data, error } = await client.from("waitlist_entries").select("tab").eq("user_id", userId);
   if (error) return [];
   return (data ?? []).map((row) => row.tab as string);
 }
@@ -264,12 +270,12 @@ export async function captureLead(email: string, source: string) {
   if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) throw new Error("유효한 이메일 주소를 입력해 주세요.");
   if (DEV_BYPASS) return;
   const client = requireClient();
-  const { data: auth } = await client.auth.getUser();
+  const userId = await getAuthUserId();
   const { error } = await client.from("leads").insert({
     email: normalizedEmail,
     source,
     consented_at: new Date().toISOString(),
-    user_id: auth.user?.id ?? null,
+    user_id: userId,
   });
   if (error) throw error;
   await trackWorkspaceEvent("calc_pdf_email_submitted", undefined, { source });
@@ -280,6 +286,8 @@ export async function convertPrepTeam(code: string) {
   const client = requireClient();
   const { data, error } = await client.rpc("convert_prep_team", { input_code: code.trim() });
   if (error) throw error;
+  invalidateTeamCache();
+  invalidateProfileCache();
   return data as string;
 }
 
@@ -368,23 +376,30 @@ function getTeamName(row: RawSubmission) {
   return "팀명 없음";
 }
 
+/**
+ * 현재 준비 팀 id.
+ *
+ * 화면 하나가 이 값을 5번 넘게 묻습니다(할 일·보관함·캘린더·진단·팀설정이 각자 호출).
+ * 매번 조회하면 같은 답을 받으려고 200ms씩 더 씁니다. 세션 동안 재사용합니다.
+ */
 export async function getCurrentPrepTeamId() {
   if (DEV_BYPASS) return "dev-team";
-  const client = requireClient();
-  const { data: auth, error: authError } = await client.auth.getUser();
-  if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
-  // 여러 팀에 속했다면 가장 먼저 합류한 팀으로 고정합니다.
-  // order 없이 limit(1)만 쓰면 요청마다 다른 팀이 나와 TODO·보관함·캘린더가 뒤바뀝니다.
-  const { data, error } = await client
-    .from("prep_team_members")
-    .select("prep_team_id, joined_at")
-    .eq("user_id", auth.user.id)
-    .order("joined_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) throw new Error("준비 팀을 먼저 설정해 주세요.");
-  return data.prep_team_id as string;
+  return cached("prepTeamId", async () => {
+    const client = requireClient();
+    const userId = await requireAuthUserId();
+    // 여러 팀에 속했다면 가장 먼저 합류한 팀으로 고정합니다.
+    // order 없이 limit(1)만 쓰면 요청마다 다른 팀이 나와 TODO·보관함·캘린더가 뒤바뀝니다.
+    const { data, error } = await client
+      .from("prep_team_members")
+      .select("prep_team_id, joined_at")
+      .eq("user_id", userId)
+      .order("joined_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) throw new Error("준비 팀을 먼저 설정해 주세요.");
+    return data.prep_team_id as string;
+  });
 }
 
 export async function getWorkspaceTasks() {
@@ -445,12 +460,14 @@ export async function getManagerReviewSubmissions(): Promise<ManagerReviewSubmis
 }
 
 async function getCurrentFounderTeamId() {
-  const client = requireClient();
-  const teamId = await getCurrentPrepTeamId();
-  const { data, error } = await client.from("founder_teams").select("id").eq("prep_team_id", teamId).maybeSingle();
-  if (error) throw error;
-  if (!data) throw new Error("협약 팀으로 전환된 뒤에 정산 검토를 요청할 수 있습니다.");
-  return data.id as string;
+  return cached("founderTeamId", async () => {
+    const client = requireClient();
+    const teamId = await getCurrentPrepTeamId();
+    const { data, error } = await client.from("founder_teams").select("id").eq("prep_team_id", teamId).maybeSingle();
+    if (error) throw error;
+    if (!data) throw new Error("협약 팀으로 전환된 뒤에 정산 검토를 요청할 수 있습니다.");
+    return data.id as string;
+  });
 }
 
 /** 사전검증을 통과한 집행 건을 매니저 검토 큐로 올립니다. */
@@ -465,8 +482,7 @@ export async function requestSettlementReview(input: {
   if (input.verdict.verdict === "fail") throw new Error("위반 항목이 남아 있어 검토를 요청할 수 없습니다.");
   if (DEV_BYPASS) return (await import("../dev/devServices")).devRequestReview(input);
   const client = requireClient();
-  const { data: auth, error: authError } = await client.auth.getUser();
-  if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
+  const userId = await requireAuthUserId();
   const founderTeamId = await getCurrentFounderTeamId();
   const documentIds = Array.from(new Set(input.documentIds ?? []));
   const { data, error } = await client
@@ -483,7 +499,7 @@ export async function requestSettlementReview(input: {
         evidenceTypeCount: (input.expense.evidence as string[] | undefined)?.length ?? 0,
         evidenceCount: documentIds.length,
       },
-      submitted_by: auth.user.id,
+      submitted_by: userId,
     })
     .select("id")
     .single();
@@ -492,7 +508,7 @@ export async function requestSettlementReview(input: {
   if (documentIds.length) {
     const { error: attachError } = await client
       .from("submission_evidence")
-      .insert(documentIds.map((documentId) => ({ submission_id: data.id, document_id: documentId, created_by: auth.user.id })));
+      .insert(documentIds.map((documentId) => ({ submission_id: data.id, document_id: documentId, created_by: userId })));
     // 첨부가 실패한 채로 큐에 남으면 매니저가 증빙 없는 건을 판정하게 됩니다. 제출을 되돌립니다.
     if (attachError) {
       await client.from("settlement_submissions").delete().eq("id", data.id);
@@ -564,8 +580,7 @@ export interface SavedEligibilityReport {
 export async function saveEligibilityReport(programId: string, answers: EligibilityAnswers, report: EligibilityReport) {
   if (DEV_BYPASS) return (await import("../dev/devServices")).devSaveEligibility(programId, answers, report);
   const client = requireClient();
-  const { data: auth, error: authError } = await client.auth.getUser();
-  if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
+  const userId = await requireAuthUserId();
   const teamId = await getCurrentPrepTeamId();
   const { error } = await client.from("diagnosis_reports").insert({
     prep_team_id: teamId,
@@ -573,7 +588,7 @@ export async function saveEligibilityReport(programId: string, answers: Eligibil
     state: report.state,
     score: report.score,
     result: { programId, answers, report },
-    created_by: auth.user.id,
+    created_by: userId,
   });
   if (error) throw error;
   await trackWorkspaceEvent("eligibility_diagnosis_saved", teamId, { programId, state: report.state });
@@ -607,12 +622,12 @@ export async function getLatestEligibilityReport(): Promise<SavedEligibilityRepo
 export async function getBizplanDiagnosisEvents(): Promise<string[]> {
   if (DEV_BYPASS) return (await import("../dev/devServices")).devBizplanEvents();
   const client = requireClient();
-  const { data: auth } = await client.auth.getUser();
-  if (!auth.user) return [];
+  const userId = await getAuthUserId();
+  if (!userId) return [];
   const { data, error } = await client
     .from("workspace_events")
     .select("created_at")
-    .eq("user_id", auth.user.id)
+    .eq("user_id", userId)
     .eq("event_name", "bizplan_diagnosis")
     .order("created_at", { ascending: false })
     .limit(50);
@@ -656,11 +671,10 @@ export async function addTaskComment(taskId: string, content: string): Promise<T
   if (!trimmed) throw new Error("코멘트 내용을 입력해 주세요.");
   if (DEV_BYPASS) return (await import("../dev/devServices")).devAddTaskComment(taskId, trimmed);
   const client = requireClient();
-  const { data: auth, error: authError } = await client.auth.getUser();
-  if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
+  const userId = await requireAuthUserId();
   const { data, error } = await client
     .from("task_comments")
-    .insert({ task_id: taskId, author_id: auth.user.id, content: trimmed })
+    .insert({ task_id: taskId, author_id: userId, content: trimmed })
     .select("id, task_id, author_id, content, created_at")
     .single();
   if (error) throw error;
@@ -701,9 +715,9 @@ export async function requestConsultation(input: {
   if (!input.contactName.trim()) throw new Error("연락받으실 이름을 입력해 주세요.");
   if (DEV_BYPASS) return;
   const client = requireClient();
-  const { data: auth } = await client.auth.getUser();
+  const userId = await getAuthUserId();
   const { error } = await client.from("consultation_requests").insert({
-    user_id: auth.user?.id ?? null,
+    user_id: userId,
     topic: input.topic,
     contact_email: email,
     contact_name: input.contactName.trim(),
@@ -782,6 +796,8 @@ export async function bootstrapManagerAccess(): Promise<ManagerBootstrapResult> 
   const response = await fetch("/api/admin/bootstrap-manager", { method: "POST", headers: await getAuthHeaders() });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error ?? "기관 계정 전환에 실패했습니다.");
+  // 역할이 manager로 바뀌었습니다. 캐시된 프로필을 그대로 두면 게이트가 계속 막습니다.
+  invalidateProfileCache();
   return body as ManagerBootstrapResult;
 }
 
