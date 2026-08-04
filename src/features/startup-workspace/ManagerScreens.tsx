@@ -5,9 +5,10 @@ import Link from "next/link";
 import { ChevronRight, Download, FileText, Inbox } from "lucide-react";
 import {
   bootstrapManagerAccess,
+  claimSubmissionForReview,
   getManagerReviewSubmissions,
   getRejectionReasonCodes,
-  getStartupProfile,
+  issueConversionCode,
   submitReviewDecision,
   type ManagerBootstrapResult,
   type ManagerReviewSubmission,
@@ -20,8 +21,9 @@ import { summarizeRejectionReasons } from "@/features/expense-rules/rejection";
 import { ITEM_FLAG_LABELS } from "@/features/expense-rules/ruleset";
 import type { ExpenseInput, ReasonCode } from "@/features/expense-rules/types";
 import { canManagerSeeReviewItem, getManagerDashboardSummary } from "./logic";
-import { WorkspaceShell } from "./shell";
-import { Button, ChoiceChip, EmptyState, LinkButton, Notice, PageHeader, Panel, ProgressBar, Skeleton, StatusBadge, focusRing } from "./ui";
+import { STARTUP_PROGRAMS } from "./rules";
+import { RequireManagerSession, WorkspaceShell } from "./shell";
+import { Button, ChoiceChip, EmptyState, LinkButton, Notice, PageHeader, Panel, ProgressBar, Skeleton, StatusBadge, focusRing, inputClass } from "./ui";
 import { cn } from "@/lib/utils";
 import { toMessage } from "@/lib/errors";
 
@@ -117,7 +119,7 @@ function StatRow({ summary, loading }: { summary: Summary; loading: boolean }) {
 }
 
 /** 아직 기관 계정이 아닌 경우, 실제 기관·전환 코드를 만들어 검토 큐를 돌려볼 수 있게 합니다. */
-function ManagerBootstrapCard({ onDone }: { onDone: () => void }) {
+function ManagerBootstrapCard() {
   const [result, setResult] = useState<ManagerBootstrapResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -127,7 +129,8 @@ function ManagerBootstrapCard({ onDone }: { onDone: () => void }) {
     setError(null);
     try {
       setResult(await bootstrapManagerAccess());
-      onDone();
+      // 프로필 역할이 바뀌었으므로 세션 판단을 처음부터 다시 하게 합니다.
+      window.location.reload();
     } catch (reason) {
       setError(toMessage(reason, "기관 계정 전환에 실패했습니다."));
     } finally {
@@ -151,11 +154,11 @@ function ManagerBootstrapCard({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <section className="mb-6 rounded-2xl border border-[#FDE68A] bg-[#FFFBEB] p-5">
-      <StatusBadge tone="amber">기관 계정 아님</StatusBadge>
-      <h2 className="mt-3 text-xl font-bold">기관 데이터가 연결되지 않았습니다</h2>
+    <section className="rounded-2xl border border-[#FDE68A] bg-[#FFFBEB] p-5">
+      <StatusBadge tone="amber">기관 담당자이신가요?</StatusBadge>
+      <h2 className="mt-3 text-lg font-bold">기관 계정 활성화</h2>
       <p className="mt-2 text-sm leading-6 text-[#475569]">
-        현재 계정은 기관 소속이 아니라 검토 큐가 비어 있습니다. 허용목록에 등록된 계정이면 아래 버튼으로 기관과 합격 전환 코드를 생성할 수 있습니다.
+        기관 담당자로 사전 등록된 계정만 전환됩니다. 등록되지 않은 계정은 눌러도 거절됩니다.
       </p>
       <Button className="mt-4" loading={loading} onClick={() => void run()}>기관 계정 활성화</Button>
       {error && <div className="mt-3"><Notice tone="error" onDismiss={() => setError(null)}>{error}</Notice></div>}
@@ -164,17 +167,17 @@ function ManagerBootstrapCard({ onDone }: { onDone: () => void }) {
 }
 
 export function ManagerDashboard() {
+  return (
+    <RequireManagerSession deniedFallback={<ManagerBootstrapCard />}>
+      <ManagerDashboardBody />
+    </RequireManagerSession>
+  );
+}
+
+function ManagerDashboardBody() {
   const { submissions, loading, error } = useReviewSubmissions();
-  const [isManager, setIsManager] = useState<boolean | null>(null);
   const [reasonCodes, setReasonCodes] = useState<ReasonCode[]>([]);
 
-  const loadProfile = useCallback(() => {
-    getStartupProfile()
-      .then((profile) => setIsManager(profile?.role === "manager" && Boolean(profile.institutionId)))
-      .catch(() => setIsManager(false));
-  }, []);
-
-  useEffect(() => { loadProfile(); }, [loadProfile]);
   useEffect(() => {
     let mounted = true;
     getRejectionReasonCodes().then((codes) => { if (mounted) setReasonCodes(codes as ReasonCode[]); }).catch(() => undefined);
@@ -206,7 +209,6 @@ export function ManagerDashboard() {
         }
       />
 
-      {isManager === false && <ManagerBootstrapCard onDone={loadProfile} />}
       <StatRow summary={summary} loading={loading} />
 
       {error && <div className="mt-6"><Notice tone="error">{error}</Notice></div>}
@@ -442,9 +444,18 @@ function waitingDays(createdAt: string) {
 }
 
 export function ManagerReviewQueuePage() {
+  return (
+    <RequireManagerSession deniedFallback={<ManagerBootstrapCard />}>
+      <ManagerReviewQueueBody />
+    </RequireManagerSession>
+  );
+}
+
+function ManagerReviewQueueBody() {
   const { submissions, loading, error, reload } = useReviewSubmissions();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  // 성공과 실패를 같은 상태에 담되 색을 나눕니다. 하나로 합쳐 두면 실패가 초록 성공 박스로 뜹니다.
+  const [message, setMessage] = useState<{ text: string; tone: "success" | "error" } | null>(null);
   const [filter, setFilter] = useState<(typeof QUEUE_FILTERS)[number]["key"]>("pending");
   const [institution, setInstitution] = useState<string | null>(null);
   const all = submissions ?? [];
@@ -469,12 +480,20 @@ export function ManagerReviewQueuePage() {
     if (!selected) return;
     try {
       await submitReviewDecision(selected.id, decision, payload);
-      setMessage(decision === "approved" ? "승인 처리했습니다." : "반려 처리하고 안내문을 기록했습니다.");
+      setMessage({ text: decision === "approved" ? "승인 처리했습니다." : "반려 처리하고 안내문을 기록했습니다.", tone: "success" });
       await reload();
     } catch (reason) {
-      setMessage(toMessage(reason, "처리에 실패했습니다."));
+      setMessage({ text: toMessage(reason, "처리에 실패했습니다."), tone: "error" });
     }
   };
+
+  // 큐에서 건을 열면 '검토 중'으로 표시해 다른 매니저가 중복으로 붙지 않게 합니다.
+  // 실패해도 판정 자체에는 지장이 없으므로 조용히 넘어갑니다.
+  useEffect(() => {
+    if (!selected || selected.status !== "validated") return;
+    void claimSubmissionForReview(selected.id).then(reload).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
 
   return (
     <WorkspaceShell role="manager">
@@ -485,7 +504,7 @@ export function ManagerReviewQueuePage() {
       />
 
       {error && <div className="mb-6"><Notice tone="error">{error}</Notice></div>}
-      {message && <div className="mb-6"><Notice tone="success" onDismiss={() => setMessage(null)}>{message}</Notice></div>}
+      {message && <div className="mb-6"><Notice tone={message.tone} onDismiss={() => setMessage(null)}>{message.text}</Notice></div>}
 
       <div className="mb-4 flex flex-wrap gap-2">
         {QUEUE_FILTERS.map((option) => {
@@ -568,6 +587,35 @@ const FEATURE_META: Record<ManagerFeature, { title: string; description: string 
 };
 
 export function ManagerFeaturePage({ feature }: { feature: ManagerFeature }) {
+  return (
+    <RequireManagerSession deniedFallback={<ManagerBootstrapCard />}>
+      <ManagerFeatureBody feature={feature} />
+    </RequireManagerSession>
+  );
+}
+
+/** 제출 건 목록을 팀 단위로 접습니다. 접지 않으면 한 팀이 5건 내면 팀 관리에 5행이 뜹니다. */
+function groupByTeam(rows: ManagerReviewSubmission[]) {
+  const byTeam = rows.reduce<Record<string, ManagerReviewSubmission[]>>(
+    (acc, row) => ({ ...acc, [row.team]: [...(acc[row.team] ?? []), row] }),
+    {},
+  );
+  return Object.entries(byTeam)
+    .map(([team, items]) => {
+      const sorted = [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      return {
+        team,
+        latest: sorted[0],
+        total: items.length,
+        pending: items.filter((item) => !isDecided(item.status)).length,
+        approved: items.filter((item) => item.status === "approved").length,
+        rejected: items.filter((item) => item.status === "rejected").length,
+      };
+    })
+    .sort((a, b) => b.pending - a.pending || b.latest.createdAt.localeCompare(a.latest.createdAt));
+}
+
+function ManagerFeatureBody({ feature }: { feature: ManagerFeature }) {
   const needsSubmissions = feature === "teams" || feature === "reports";
   const { submissions, loading, error } = useReviewSubmissions(needsSubmissions);
   const [reasonCodes, setReasonCodes] = useState<ReasonCode[]>([]);
@@ -594,14 +642,23 @@ export function ManagerFeaturePage({ feature }: { feature: ManagerFeature }) {
           <EmptyState title="표시할 선정 팀이 없습니다" description="팀이 검토를 요청하면 제출 이력과 함께 나타납니다." />
         ) : (
           <section className="overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white">
-            <div className="grid grid-cols-[1.2fr_1fr_.8fr] border-b border-[#E2E8F0] px-5 py-3 text-xs font-bold text-[#475569]">
-              <span>팀</span><span>최근 제출</span><span className="text-right">상태</span>
+            <div className="grid grid-cols-[1.2fr_1.2fr_.6fr_.8fr] border-b border-[#E2E8F0] px-5 py-3 text-xs font-bold text-[#475569]">
+              <span>팀</span><span>최근 제출</span><span className="text-right">제출</span><span className="text-right">최근 상태</span>
             </div>
-            {rows.map((item) => (
-              <div key={item.id} className="grid min-h-14 grid-cols-[1.2fr_1fr_.8fr] items-center gap-2 border-b border-[#F1F5F9] px-5 py-3 text-sm">
-                <strong className="truncate">{item.team}</strong>
-                <span className="truncate">{item.title}</span>
-                <span className="text-right"><StatusBadge tone={statusTone(item.status)}>{STATUS_LABEL[item.status]}</StatusBadge></span>
+            {groupByTeam(rows).map((group) => (
+              <div key={group.team} className="grid min-h-14 grid-cols-[1.2fr_1.2fr_.6fr_.8fr] items-center gap-2 border-b border-[#F1F5F9] px-5 py-3 text-sm">
+                <div className="min-w-0">
+                  <strong className="block truncate">{group.team}</strong>
+                  <span className="text-xs text-[#94A3B8]">
+                    {group.pending > 0 ? `대기 ${group.pending}건 · ` : ""}승인 {group.approved} · 반려 {group.rejected}
+                  </span>
+                </div>
+                <div className="min-w-0">
+                  <span className="block truncate">{group.latest.title}</span>
+                  <span className="text-xs text-[#94A3B8]">{group.latest.createdAt.slice(0, 10)}</span>
+                </div>
+                <span className="text-right tabular-nums text-[#475569]">{group.total}건</span>
+                <span className="text-right"><StatusBadge tone={statusTone(group.latest.status)}>{STATUS_LABEL[group.latest.status]}</StatusBadge></span>
               </div>
             ))}
           </section>
@@ -655,18 +712,37 @@ function ManagerSettingsPanel() {
   const [institution, setInstitution] = useState<string | null>(null);
   const [codes, setCodes] = useState<Array<ConversionCode & { expired: boolean }> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [issuing, setIssuing] = useState(false);
+  const [programId, setProgramId] = useState<string>(STARTUP_PROGRAMS[0].id);
+
+  const loadCodes = useCallback(() => {
+    getConversionCodes()
+      .then((rows) => {
+        const now = Date.now();
+        setCodes(rows.map((row) => ({ ...row, expired: new Date(row.expiresAt).getTime() <= now })));
+      })
+      .catch((reason) => { setCodes([]); setError(toMessage(reason, "전환 코드를 불러오지 못했습니다.")); });
+  }, []);
+
+  const issue = async () => {
+    setIssuing(true);
+    setError(null);
+    try {
+      await issueConversionCode(programId);
+      loadCodes();
+    } catch (reason) {
+      setError(toMessage(reason, "전환 코드를 발급하지 못했습니다."));
+    } finally {
+      setIssuing(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
     getInstitutionName().then((name) => { if (mounted) setInstitution(name); }).catch(() => undefined);
-    getConversionCodes()
-      .then((rows) => {
-        const now = Date.now();
-        if (mounted) setCodes(rows.map((row) => ({ ...row, expired: new Date(row.expiresAt).getTime() <= now })));
-      })
-      .catch((reason) => { if (mounted) { setCodes([]); setError(toMessage(reason, "전환 코드를 불러오지 못했습니다.")); } });
+    loadCodes();
     return () => { mounted = false; };
-  }, []);
+  }, [loadCodes]);
 
   return (
     <div className="space-y-5">
@@ -675,12 +751,24 @@ function ManagerSettingsPanel() {
         <strong className="mt-1 block text-lg text-[#0F172A]">{institution ?? "연결된 기관이 없습니다"}</strong>
       </Panel>
 
-      <Panel title="합격 전환 코드">
-        <p className="mb-3 text-sm text-[#475569]">선정 팀이 이 코드를 입력하면 기관 워크스페이스로 연결됩니다.</p>
+      <Panel
+        title="합격 전환 코드"
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={programId} onChange={(event) => setProgramId(event.target.value)} className={cn(inputClass, "h-9 w-auto py-0 text-sm")}>
+              {STARTUP_PROGRAMS.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
+            </select>
+            <Button size="sm" loading={issuing} onClick={() => void issue()}>새 코드 발급</Button>
+          </div>
+        }
+      >
+        <p className="mb-3 text-sm text-[#475569]">
+          선정 팀이 이 코드를 입력하면 기관 워크스페이스로 연결됩니다. 코드는 발급일로부터 90일간 유효합니다.
+        </p>
         {error && <p className="mb-3 rounded-xl bg-[#FEF2F2] p-3 text-sm font-semibold text-[#DC2626]">{error}</p>}
         {codes === null && <Skeleton className="h-16" />}
         {codes?.length === 0 && !error && (
-          <EmptyState title="발급된 코드가 없습니다" description="대시보드에서 기관 계정을 활성화하면 첫 전환 코드가 만들어집니다." />
+          <EmptyState title="발급된 코드가 없습니다" description="위에서 지원사업을 고르고 [새 코드 발급]을 누르면 만들어집니다." />
         )}
         <div className="space-y-2">
           {(codes ?? []).map((item) => (

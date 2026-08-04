@@ -240,9 +240,12 @@ export const CATEGORY_LIST = Object.values(CATEGORIES);
 export const FRAUD_WARNING =
   "부정한 방법으로 정부지원사업비를 사용하는 경우 공공재정환수법에 따라 사업비 전액 환수, 참여제한 5년, 최대 5배의 제재부가금이 부과될 수 있습니다.";
 
-/** 오분류 감지용 — 이 플래그가 붙은 항목이 가야 할 비목. */
+/**
+ * 오분류 감지용 — 이 플래그가 붙은 항목이 가야 할 비목.
+ * office_furniture는 여기 두지 않습니다. 사무공간용 집기·가구는 어느 비목으로도 집행할 수 없어
+ * "기계장치비로 옮기라"고 안내하면 EQP-03에 다시 걸리는 막다른 길이 됩니다(COM-06에서 직접 차단).
+ */
 export const FLAG_CORRECT_CATEGORY: Partial<Record<ItemFlag, ExpenseCategory>> = {
-  office_furniture: "equipment",
   general_software: "equipment",
   communication_device: "equipment",
 };

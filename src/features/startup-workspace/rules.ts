@@ -124,6 +124,95 @@ export function calculateInsurance({ monthlySalary, people, accidentRate }: Insu
   };
 }
 
+/**
+ * 인건비 총부담액 — 급여에 사업주 4대보험과 퇴직급여 충당을 더한 실제 지출.
+ * 퇴직급여는 1년 이상 근속 시 30일분 이상이므로 월 급여의 1/12을 적립분으로 봅니다(근로자퇴직급여보장법 제8조).
+ */
+export function calculateTotalLaborCost({ monthlySalary, people, accidentRate, includeSeverance = true }: InsuranceInput & { includeSeverance?: boolean }) {
+  const insurance = calculateInsurance({ monthlySalary, people, accidentRate });
+  const grossSalary = Math.max(0, monthlySalary) * Math.max(1, people);
+  const severanceReserve = includeSeverance ? Math.round(grossSalary / 12) : 0;
+  const monthlyTotal = grossSalary + insurance.employerTotal + severanceReserve;
+  return {
+    grossSalary,
+    employerInsurance: insurance.employerTotal,
+    severanceReserve,
+    monthlyTotal,
+    yearlyTotal: monthlyTotal * 12,
+    // 급여 1원당 실제로 나가는 돈. 채용 판단에서 가장 자주 묻는 값입니다.
+    burdenRatio: grossSalary > 0 ? Math.round((monthlyTotal / grossSalary) * 1000) / 1000 : 0,
+  };
+}
+
+/** 2026년 종합소득세 누진세율 (지방소득세 10% 별도). */
+const INCOME_TAX_BRACKETS = [
+  { upTo: 14_000_000, rate: 0.06, deduction: 0 },
+  { upTo: 50_000_000, rate: 0.15, deduction: 1_260_000 },
+  { upTo: 88_000_000, rate: 0.24, deduction: 5_760_000 },
+  { upTo: 150_000_000, rate: 0.35, deduction: 15_440_000 },
+  { upTo: 300_000_000, rate: 0.38, deduction: 19_940_000 },
+  { upTo: 500_000_000, rate: 0.40, deduction: 25_940_000 },
+  { upTo: 1_000_000_000, rate: 0.42, deduction: 35_940_000 },
+  { upTo: Number.POSITIVE_INFINITY, rate: 0.45, deduction: 65_940_000 },
+] as const;
+
+/** 2026년 법인세율 (지방소득세 10% 별도). */
+const CORPORATE_TAX_BRACKETS = [
+  { upTo: 200_000_000, rate: 0.09, deduction: 0 },
+  { upTo: 20_000_000_000, rate: 0.19, deduction: 20_000_000 },
+  { upTo: 300_000_000_000, rate: 0.21, deduction: 420_000_000 },
+  { upTo: Number.POSITIVE_INFINITY, rate: 0.24, deduction: 9_420_000_000 },
+] as const;
+
+const applyBrackets = (base: number, brackets: readonly { upTo: number; rate: number; deduction: number }[]) => {
+  if (base <= 0) return 0;
+  const bracket = brackets.find((item) => base <= item.upTo) ?? brackets[brackets.length - 1];
+  return Math.max(0, Math.round(base * bracket.rate - bracket.deduction));
+};
+
+export interface TaxComparisonInput {
+  /** 연 매출에서 필요경비를 뺀 이익(원) */
+  annualProfit: number;
+  /** 법인일 때 대표가 가져갈 연 급여(원). 이 금액은 법인 비용으로 빠지고 대표 근로소득이 됩니다. */
+  ownerSalary: number;
+}
+
+/**
+ * 법인 vs 개인사업자 세부담 비교.
+ *
+ * 참고용 추정입니다. 각종 공제·감면·성실신고 요건을 반영하지 않으므로
+ * 실제 신고는 세무 전문가 확인이 필요합니다(세무사법 경계).
+ */
+export function compareBusinessTax({ annualProfit, ownerSalary }: TaxComparisonInput) {
+  const profit = Math.max(0, annualProfit);
+  const salary = Math.min(Math.max(0, ownerSalary), profit);
+  const LOCAL_TAX_RATE = 0.1;
+
+  const soleIncomeTax = applyBrackets(profit, INCOME_TAX_BRACKETS);
+  const sole = { incomeTax: soleIncomeTax, localTax: Math.round(soleIncomeTax * LOCAL_TAX_RATE) };
+
+  // 대표 급여는 법인 손금이라 과세표준에서 빠지고, 대신 대표 개인의 근로소득세가 붙습니다.
+  const corporateBase = Math.max(0, profit - salary);
+  const corporateTax = applyBrackets(corporateBase, CORPORATE_TAX_BRACKETS);
+  const salaryTax = applyBrackets(salary, INCOME_TAX_BRACKETS);
+  const corporate = {
+    corporateTax,
+    corporateLocalTax: Math.round(corporateTax * LOCAL_TAX_RATE),
+    salaryIncomeTax: salaryTax,
+    salaryLocalTax: Math.round(salaryTax * LOCAL_TAX_RATE),
+  };
+
+  const soleTotal = sole.incomeTax + sole.localTax;
+  const corporateTotal = corporate.corporateTax + corporate.corporateLocalTax + corporate.salaryIncomeTax + corporate.salaryLocalTax;
+
+  return {
+    sole: { ...sole, total: soleTotal },
+    corporate: { ...corporate, total: corporateTotal },
+    difference: Math.abs(soleTotal - corporateTotal),
+    cheaper: soleTotal === corporateTotal ? ("equal" as const) : soleTotal < corporateTotal ? ("sole" as const) : ("corporate" as const),
+  };
+}
+
 export function getDiagnosisCreditBalance({ used, acceptedInvites }: { used: number; acceptedInvites: number }) {
   const total = 2 + Math.max(0, acceptedInvites);
   return { total, remaining: Math.max(0, total - Math.max(0, used)) };

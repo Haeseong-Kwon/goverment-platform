@@ -116,6 +116,20 @@ function checkCommon(input: ExpenseInput, collect: FindingCollector) {
     if (!attached.has(name)) collect.missingEvidence(name);
   }
 
+  // 비목과 무관하게 금지되는 항목. 비목 변경으로는 해소되지 않으므로 오분류 안내보다 먼저 세웁니다.
+  if (hasFlag(input, "office_furniture")) {
+    collect.add(
+      rule(
+        "COM-06",
+        "block",
+        "E-101",
+        "사무 공간용 집기·가구·기구 구입비는 어떤 비목으로도 집행할 수 없습니다.",
+        "사무 공간에 들어가는 집기, 가구, 기구 등 구입비로는 집행 불가",
+        "해당 품목을 정산 대상에서 제외하거나, 창업아이템과 직접 관련된 품목으로 교체하세요.",
+      ),
+    );
+  }
+
   const misplaced = (input.itemFlags ?? []).find((flag) => {
     const target = FLAG_CORRECT_CATEGORY[flag];
     return target && target !== input.category;
@@ -220,7 +234,8 @@ function checkOutsourcing(input: ExpenseInput, collect: FindingCollector) {
   if (hasFlag(input, "penalty_or_damages")) {
     collect.add(rule("OUT-08", "block", "E-101", "위약금·손해배상금·지체상금은 사업비로 집행할 수 없습니다.", "창업기업의 귀책사유로 인한 용역계약 파기 시 발생하는 위약금·손해배상금·지체상금 등은 사업비로 집행 불가", "해당 금액을 정산 대상에서 제외하세요."));
   }
-  if (input.amount > POLICY.outsourcingDeliberationOver) {
+  // "이상"이므로 경계값 자체가 대상입니다. 사전심의 화면(PreDeliberation)과 같은 부등호를 씁니다.
+  if (input.amount >= POLICY.outsourcingDeliberationOver) {
     collect.add(
       rule(
         "OUT-09",
@@ -260,9 +275,6 @@ function checkEquipment(input: ExpenseInput, collect: FindingCollector) {
         "제품 제작과의 필요연관성을 기재한 사전검토 요청서를 제출하세요.",
       ),
     );
-  }
-  if (hasFlag(input, "office_furniture")) {
-    collect.add(rule("EQP-03", "block", "E-101", "사무 공간용 집기·가구·기구 구입비는 집행할 수 없습니다.", "사무 공간에 들어가는 집기, 가구, 기구 등 구입비로는 집행 불가", "창업아이템과 직접 관련된 PC·복합기 등으로 품목을 조정하세요."));
   }
   if (hasFlag(input, "communication_device")) {
     collect.when(
@@ -459,11 +471,35 @@ function summarize(verdict: ExpenseVerdict["verdict"], blocks: number, warns: nu
   return "규정 위반이 발견되지 않았습니다. 검토 요청을 진행할 수 있습니다.";
 }
 
+/**
+ * 비목별 배정 잔액 대비 초과 여부.
+ *
+ * 반려 사유 중 "한도 초과"는 규정 위반이 아니라 예산 소진이라 룰만으로는 잡히지 않습니다.
+ * 배정액이 등록된 팀에만 적용하고, 없으면 조용히 건너뜁니다(정보 부재를 위반으로 만들지 않습니다).
+ */
+function checkBudget(input: ExpenseInput, collect: FindingCollector) {
+  const budget = input.budget;
+  if (!budget || !Number.isFinite(budget.allocated) || budget.allocated <= 0) return;
+  const remaining = budget.allocated - (budget.executed ?? 0);
+  if (input.amount <= remaining) return;
+  collect.add(
+    rule(
+      "BUD-01",
+      "block",
+      "E-103",
+      `${CATEGORIES[input.category].name} 배정 잔액을 ${won(input.amount - remaining)} 초과합니다.`,
+      "사업비는 비목별 배정액 범위에서 집행하며, 초과분은 자기부담",
+      `집행 금액을 ${won(Math.max(0, remaining))} 이하로 줄이거나, 주관기관과 비목 변경(감액·증액)을 협의하세요.`,
+    ),
+  );
+}
+
 /** 비목 규정 기반 결정론적 판정. AI 없이도 동일한 결과를 냅니다. */
 export function validateExpense(input: ExpenseInput): ExpenseVerdict {
   const collect = new FindingCollector();
   checkCommon(input, collect);
   CHECKS[input.category]?.(input, collect);
+  checkBudget(input, collect);
 
   const { findings, missing, unknowns } = collect.result();
   const blocks = findings.filter((finding) => finding.severity === "block").length;

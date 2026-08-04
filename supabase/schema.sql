@@ -228,11 +228,14 @@ CREATE TABLE IF NOT EXISTS programs (
   is_active BOOLEAN NOT NULL DEFAULT true
 );
 
-INSERT INTO programs (id, name, year, ruleset_version, requires_no_business_registration, blocks_prior_benefit)
+-- deadline은 반드시 채웁니다. NULL이면 자동 마일스톤도 캘린더 공고 마감도 만들어지지 않아
+-- 사용자는 지원사업을 골라도 빈 보드를 받게 됩니다(실패 표시도 없습니다).
+-- 사업마다 다른 날짜여야 "복수 지원사업의 마감 충돌"을 한 화면에서 볼 수 있습니다.
+INSERT INTO programs (id, name, year, ruleset_version, requires_no_business_registration, blocks_prior_benefit, deadline)
 VALUES
-  ('yechang-2026', '2026 예비창업패키지', 2026, 'v1', true, true),
-  ('chocang-2026', '2026 초기창업패키지', 2026, 'v1', false, true),
-  ('modu-2026', '2026 모두의창업', 2026, 'v1', false, false)
+  ('yechang-2026', '2026 예비창업패키지', 2026, 'v1', true, true, DATE '2026-03-31'),
+  ('chocang-2026', '2026 초기창업패키지', 2026, 'v1', false, true, DATE '2026-04-24'),
+  ('modu-2026', '2026 모두의창업', 2026, 'v1', false, false, DATE '2026-05-29')
 ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS prep_teams (

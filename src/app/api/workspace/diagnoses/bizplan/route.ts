@@ -1,14 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runBizplanDiagnosis } from "@/lib/ai/openrouter";
 import { createUserClient, DEV_BYPASS_SERVER } from "@/lib/supabaseAdmin";
-import { MONTHLY_DIAGNOSIS_LIMIT } from "@/features/startup-workspace/logic";
+import { getDiagnosisCreditBalance } from "@/features/startup-workspace/rules";
 
 const EVENT_NAME = "bizplan_diagnosis";
 
+/**
+ * 무료 횟수 집계 기준이 되는 이번 달 시작. 한국 시간 1일 00:00입니다.
+ * UTC로 자르면 안내 문구("다음 달 1일 초기화")보다 9시간 늦게 리셋됩니다.
+ */
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const monthStart = () => {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const kstNow = new Date(Date.now() + KST_OFFSET_MS);
+  const kstMonthStart = Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth(), 1);
+  return new Date(kstMonthStart - KST_OFFSET_MS).toISOString();
 };
+
+/** 진단 리포트를 붙일 준비 팀. 팀이 없으면 저장만 건너뜁니다. */
+async function getPrepTeamId(client: NonNullable<ReturnType<typeof createUserClient>>, userId: string) {
+  const { data } = await client
+    .from("prep_team_members")
+    .select("prep_team_id")
+    .eq("user_id", userId)
+    .order("joined_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return (data?.prep_team_id as string | undefined) ?? null;
+}
+
+/** 팀 초대 코드로 실제 합류한 인원 수. 진단 무료 횟수의 보너스 근거입니다. */
+async function countAcceptedInvites(client: NonNullable<ReturnType<typeof createUserClient>>, teamId: string | null) {
+  if (!teamId) return 0;
+  const { data } = await client.from("prep_team_invites").select("use_count").eq("prep_team_id", teamId);
+  return (data ?? []).reduce((sum, row) => sum + (Number(row.use_count) || 0), 0);
+}
 
 /**
  * 무료 횟수는 서버에서 셉니다. 브라우저에서만 막으면 요청을 직접 보내는 것으로
@@ -37,9 +62,13 @@ export async function POST(request: NextRequest) {
       .eq("event_name", EVENT_NAME)
       .gte("created_at", monthStart());
     if (countError) return NextResponse.json({ error: "사용 이력을 확인하지 못했습니다." }, { status: 500 });
-    if ((count ?? 0) >= MONTHLY_DIAGNOSIS_LIMIT) {
+
+    // 초대 보너스도 서버에서 셉니다. 화면 뱃지만 늘려 두면 실제 상한과 어긋납니다.
+    const teamId = await getPrepTeamId(client, userId);
+    const { total } = getDiagnosisCreditBalance({ used: count ?? 0, acceptedInvites: await countAcceptedInvites(client, teamId) });
+    if ((count ?? 0) >= total) {
       return NextResponse.json(
-        { error: `이번 달 무료 진단 ${MONTHLY_DIAGNOSIS_LIMIT}회를 모두 사용했습니다. 다음 달 1일에 초기화됩니다.` },
+        { error: `이번 달 무료 진단 ${total}회를 모두 사용했습니다. 팀원을 초대하면 1회씩 늘어나며, 다음 달 1일에 초기화됩니다.` },
         { status: 429 },
       );
     }
@@ -47,12 +76,30 @@ export async function POST(request: NextRequest) {
 
   try {
     const { report, model, generationId } = await runBizplanDiagnosis(text);
+    // PSST 4축이 각 0~25점이므로 합이 그대로 100점 만점 "합격 준비도 점수"가 됩니다.
+    const totalScore = Object.values(report.psst).reduce((sum, section) => sum + section.score, 0);
+
     // 사용 이력은 서버가 남깁니다. 클라이언트가 기록을 건너뛰어 횟수를 늘릴 수 없어야 합니다.
     if (client && userId) {
-      await client.from("workspace_events").insert({ user_id: userId, event_name: EVENT_NAME, payload: { model, generationId } });
+      await client.from("workspace_events").insert({ user_id: userId, event_name: EVENT_NAME, payload: { model, generationId, totalScore } });
+
+      // 리포트 본문을 남겨야 버전별 점수 추이를 볼 수 있습니다.
+      // 저장에 실패해도 진단 자체는 이미 비용을 치렀으므로 결과는 돌려줍니다.
+      const teamId = await getPrepTeamId(client, userId);
+      if (teamId) {
+        const { error: saveError } = await client.from("diagnosis_reports").insert({
+          prep_team_id: teamId,
+          report_type: "bizplan",
+          state: totalScore >= 70 ? "eligible" : totalScore >= 40 ? "review" : "ineligible",
+          score: totalScore,
+          result: { ...report, model, totalScore },
+          created_by: userId,
+        });
+        if (saveError) console.error("bizplan 진단 저장 실패:", saveError.message);
+      }
     }
     // 토큰 사용량·비용은 내부 지표라 브라우저로 내보내지 않습니다.
-    return NextResponse.json({ ...report, model }, { status: 200 });
+    return NextResponse.json({ ...report, model, totalScore }, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "AI 진단에 실패했습니다.";
     return NextResponse.json({ error: message }, { status: 502 });

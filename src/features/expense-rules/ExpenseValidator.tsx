@@ -69,7 +69,7 @@ function FindingRow({ finding }: { finding: ExpenseVerdict["findings"][number] }
   );
 }
 
-export function VerdictReport({ verdict, ai, onRequestReview }: { verdict: ExpenseVerdict; ai?: AiJudgement | null; onRequestReview?: () => void }) {
+export function VerdictReport({ verdict, ai, onRequestReview, requestPending = false }: { verdict: ExpenseVerdict; ai?: AiJudgement | null; onRequestReview?: () => void; requestPending?: boolean }) {
   return (
     <div className="space-y-5">
       <Panel>
@@ -79,8 +79,9 @@ export function VerdictReport({ verdict, ai, onRequestReview }: { verdict: Expen
           {verdict.preApprovalRequired && <StatusBadge tone="amber">사전승인 필요</StatusBadge>}
         </div>
         <p className="mt-3 text-sm font-semibold leading-6 text-[#475569]">{verdict.summary}</p>
+        {/* requestPending: 전송 중 재클릭을 막습니다. 두 번 누르면 매니저 큐에 같은 건이 두 번 쌓입니다. */}
         {onRequestReview && (
-          <Button onClick={onRequestReview} disabled={verdict.verdict === "fail"} className="mt-4">
+          <Button onClick={onRequestReview} loading={requestPending} disabled={verdict.verdict === "fail" || requestPending} className="mt-4">
             {verdict.verdict === "fail" ? "위반 항목을 먼저 수정하세요" : "매니저에게 검토 요청"}
           </Button>
         )}
@@ -145,10 +146,15 @@ export function ExpenseValidator({
   agreementStart = `${currentYear()}-04-01`,
   agreementEnd = `${currentYear()}-12-31`,
   onRequestReview,
+  requestPending = false,
+  budgetLines = [],
 }: {
   agreementStart?: string;
   agreementEnd?: string;
   onRequestReview?: (input: ExpenseInput, verdict: ExpenseVerdict) => void;
+  requestPending?: boolean;
+  /** 비목별 배정·집행 누계. 있으면 한도 초과를 함께 판정합니다. */
+  budgetLines?: Array<{ category: string; allocated: number; executed: number }>;
 }) {
   const [expense, setExpense] = useState<ExpenseInput>(() => emptyExpense(agreementStart, agreementEnd));
   const [description, setDescription] = useState("");
@@ -157,7 +163,12 @@ export function ExpenseValidator({
   const [error, setError] = useState<string | null>(null);
 
   const spec = CATEGORIES[expense.category];
-  const localVerdict = useMemo(() => validateExpense(expense), [expense]);
+  // 선택한 비목의 배정액을 입력에 얹어 판정합니다. 등록된 배정이 없으면 한도 판정은 건너뜁니다.
+  const withBudget = useMemo(() => {
+    const line = budgetLines.find((item) => item.category === expense.category);
+    return line ? { ...expense, budget: { allocated: line.allocated, executed: line.executed } } : expense;
+  }, [expense, budgetLines]);
+  const localVerdict = useMemo(() => validateExpense(withBudget), [withBudget]);
   const shown = remote?.verdict ?? localVerdict;
 
   const patch = (changes: Partial<ExpenseInput>) => {
@@ -175,7 +186,7 @@ export function ExpenseValidator({
       const response = await fetch("/api/workspace/expenses/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
-        body: JSON.stringify({ expense, description }),
+        body: JSON.stringify({ expense: withBudget, description }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "검증에 실패했습니다.");
@@ -302,6 +313,46 @@ export function ExpenseValidator({
                   <option value="first">First</option>
                 </select>
               </Field>
+              {/* TRV-03·TRV-04가 요구하는 입력입니다. 없으면 여비는 영구히 '확인 필요'에 머뭅니다. */}
+              <Field label="대중교통 이용 여부">
+                <select
+                  value={expense.travel?.isPublicTransport === true ? "yes" : expense.travel?.isPublicTransport === false ? "no" : ""}
+                  onChange={(event) => patch({ travel: { ...expense.travel, isPublicTransport: event.target.value === "" ? null : event.target.value === "yes" } })}
+                  className={inputClass}
+                >
+                  <option value="">확인 필요</option>
+                  <option value="yes">대중교통</option>
+                  <option value="no">자가용 등</option>
+                </select>
+              </Field>
+              <Field label="출장자 4대보험 가입 여부">
+                <select
+                  value={expense.labor?.insuranceEnrolled === true ? "yes" : expense.labor?.insuranceEnrolled === false ? "no" : ""}
+                  onChange={(event) => patch({ labor: { ...expense.labor, insuranceEnrolled: event.target.value === "" ? null : event.target.value === "yes" } })}
+                  className={inputClass}
+                >
+                  <option value="">확인 필요</option>
+                  <option value="yes">가입</option>
+                  <option value="no">미가입</option>
+                </select>
+              </Field>
+            </div>
+          )}
+
+          {expense.category === "training" && (
+            <div className="mt-4 grid gap-4 rounded-xl bg-[#F8FAFC] p-4 sm:grid-cols-2">
+              {/* TRN-01이 요구하는 입력입니다. */}
+              <Field label="교육 대상자 4대보험 가입 여부">
+                <select
+                  value={expense.labor?.insuranceEnrolled === true ? "yes" : expense.labor?.insuranceEnrolled === false ? "no" : ""}
+                  onChange={(event) => patch({ labor: { ...expense.labor, insuranceEnrolled: event.target.value === "" ? null : event.target.value === "yes" } })}
+                  className={inputClass}
+                >
+                  <option value="">확인 필요</option>
+                  <option value="yes">가입</option>
+                  <option value="no">미가입</option>
+                </select>
+              </Field>
             </div>
           )}
 
@@ -392,7 +443,7 @@ export function ExpenseValidator({
       </div>
 
       <div className="space-y-5">
-        <VerdictReport verdict={shown} ai={remote?.ai} onRequestReview={onRequestReview ? () => onRequestReview(expense, shown) : undefined} />
+        <VerdictReport verdict={shown} ai={remote?.ai} requestPending={requestPending} onRequestReview={onRequestReview ? () => onRequestReview(expense, shown) : undefined} />
         <Panel title={`${spec.name} 규정 요약`}>
           <p className="text-sm leading-6 text-[#475569]">{spec.definition}</p>
           <ul className="mt-3 space-y-2 text-sm leading-6 text-[#475569]">

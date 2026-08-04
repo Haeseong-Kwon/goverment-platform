@@ -21,6 +21,18 @@ export interface VaultDocument {
 
 const BUCKET = "vault";
 
+/**
+ * 팀 접근 권한을 여는 코드라 예측 가능한 난수를 쓰면 안 됩니다.
+ * Math.random()은 시드 복원이 가능해 다른 팀의 초대 코드를 추측할 수 있습니다.
+ * 혼동하기 쉬운 글자(0/O, 1/I)는 빼서 구두 전달 오류도 줄입니다.
+ */
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+export function generateAccessCode(length = 8) {
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
+  return Array.from(bytes, (byte) => CODE_ALPHABET[byte % CODE_ALPHABET.length]).join("");
+}
+
 /** 화면이 약속한 상한. 서버까지 보내고 나서 실패하면 대용량 업로드 시간이 통째로 낭비됩니다. */
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
@@ -163,7 +175,7 @@ export async function createTeamInvite(): Promise<TeamInvite> {
   const { data: auth, error: authError } = await client.auth.getUser();
   if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
   const teamId = await getCurrentPrepTeamId();
-  const code = Math.random().toString(36).slice(2, 10).toUpperCase();
+  const code = generateAccessCode();
   const expiresAt = new Date(Date.now() + 14 * 86_400_000).toISOString();
   const { data, error } = await client
     .from("prep_team_invites")
@@ -227,6 +239,95 @@ export async function getCalendarItems(): Promise<CalendarItem[]> {
   });
 
   return [...taskItems, ...programItems].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export interface BudgetLine {
+  category: string;
+  allocated: number;
+  executed: number;
+  remaining: number;
+}
+
+/**
+ * 비목별 배정액과 집행 누계.
+ *
+ * 집행 누계는 반려되지 않은 제출 건의 합입니다. 반려 건까지 세면 고쳐서 다시 낼 여지가 사라집니다.
+ */
+export async function getBudgetLines(): Promise<BudgetLine[]> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devBudgetLines();
+  const client = requireClient();
+  const teamId = await getCurrentPrepTeamId();
+  const { data: founderTeam } = await client.from("founder_teams").select("id").eq("prep_team_id", teamId).maybeSingle();
+  if (!founderTeam) return [];
+
+  const [{ data: allocations }, { data: submissions }] = await Promise.all([
+    client.from("budget_allocations").select("category, allocated_amount").eq("founder_team_id", founderTeam.id),
+    client.from("settlement_submissions").select("requested_amount, status, payload").eq("founder_team_id", founderTeam.id).neq("status", "rejected"),
+  ]);
+
+  const executedByCategory = (submissions ?? []).reduce<Record<string, number>>((acc, row) => {
+    const payload = row.payload as { expense?: { category?: string } } | null;
+    const category = payload?.expense?.category;
+    if (!category) return acc;
+    return { ...acc, [category]: (acc[category] ?? 0) + (Number(row.requested_amount) || 0) };
+  }, {});
+
+  return (allocations ?? []).map((row) => {
+    const category = row.category as string;
+    const allocated = Number(row.allocated_amount) || 0;
+    const executed = executedByCategory[category] ?? 0;
+    return { category, allocated, executed, remaining: allocated - executed };
+  });
+}
+
+export async function saveBudgetAllocation(category: string, allocatedAmount: number) {
+  if (!Number.isFinite(allocatedAmount) || allocatedAmount < 0) throw new Error("배정액을 0 이상의 숫자로 입력해 주세요.");
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devSaveBudget(category, allocatedAmount);
+  const client = requireClient();
+  const teamId = await getCurrentPrepTeamId();
+  const { data: founderTeam } = await client.from("founder_teams").select("id").eq("prep_team_id", teamId).maybeSingle();
+  if (!founderTeam) throw new Error("협약 팀으로 전환된 뒤에 배정액을 등록할 수 있습니다.");
+  const { error } = await client
+    .from("budget_allocations")
+    .upsert(
+      { founder_team_id: founderTeam.id, category, allocated_amount: Math.round(allocatedAmount), updated_at: new Date().toISOString() },
+      { onConflict: "founder_team_id,category" },
+    );
+  if (error) throw error;
+}
+
+/** 전체 지원사업의 공고 마감일. 추천 카드가 "언제 마감인지"를 함께 보여주기 위한 값입니다. */
+export async function getProgramDeadlines(): Promise<Record<string, string | null>> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devProgramDeadlines();
+  const client = requireClient();
+  const { data, error } = await client.from("programs").select("id, deadline").eq("is_active", true);
+  if (error) return {};
+  return Object.fromEntries((data ?? []).map((row) => [row.id as string, (row.deadline as string | null) ?? null]));
+}
+
+export interface SelectedProgram {
+  id: string;
+  name: string;
+  deadline: string | null;
+}
+
+/**
+ * 팀이 온보딩에서 실제로 고른 지원사업.
+ *
+ * 법인 설립 경고와 홈 히어로 카드가 이 값을 봐야 합니다.
+ * 배열 첫 항목으로 고정하면 초창패만 준비하는 팀에게 예창패 경고를 띄우게 됩니다.
+ */
+export async function getSelectedPrograms(): Promise<SelectedProgram[]> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devSelectedPrograms();
+  const client = requireClient();
+  const teamId = await getCurrentPrepTeamId();
+  const { data, error } = await client.from("prep_projects").select("programs(id, name, deadline)").eq("prep_team_id", teamId);
+  if (error) throw error;
+  return (data ?? []).flatMap((row) => {
+    const program = (Array.isArray(row.programs) ? row.programs[0] : row.programs) as { id?: string; name?: string; deadline?: string } | null;
+    if (!program?.id || !program.name) return [];
+    return [{ id: program.id, name: program.name, deadline: program.deadline ?? null }];
+  });
 }
 
 export interface TrackedSubmission {

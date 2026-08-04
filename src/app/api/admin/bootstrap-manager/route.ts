@@ -4,7 +4,10 @@ import { createAdminClient, getManagerAllowlist } from "@/lib/supabaseAdmin";
 const DEFAULT_INSTITUTION = process.env.MANAGER_INSTITUTION_NAME?.trim() || "기본 주관기관";
 const DEFAULT_PROGRAM = "modu-2026";
 
-const makeCode = () => Math.random().toString(36).slice(2, 10).toUpperCase();
+/** 기관 승격을 여는 코드입니다. 예측 가능한 난수를 쓰면 안 됩니다. */
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const makeCode = () =>
+  Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) => CODE_ALPHABET[byte % CODE_ALPHABET.length]).join("");
 
 /**
  * 허용목록에 있는 계정을 기관 매니저로 승격하고, 검토 큐를 실제로 돌려보는 데

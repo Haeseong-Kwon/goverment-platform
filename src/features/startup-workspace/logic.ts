@@ -6,7 +6,8 @@ const sidebarByRole: Record<StartupRole, Array<{ label: string; href: string }>>
     { label: "팀 TODO", href: "/founder/todo" },
     { label: "마감 캘린더", href: "/founder/calendar" },
     { label: "AI 진단", href: "/founder/diagnostics" },
-    { label: "계산기", href: "/founder/calculator" },
+    { label: "계산기", href: "/calculator" },
+    { label: "무료 자료실", href: "/library" },
     { label: "법인 설립", href: "/founder/incorporation" },
     { label: "커넥트", href: "/founder/connect" },
     { label: "서류 보관함", href: "/founder/vault" },
@@ -37,15 +38,27 @@ export function getDdayTone(dday: number) {
 }
 
 /**
- * 남은 일수. 시각이 아니라 날짜(UTC 자정)끼리 빼서 오늘 마감이 항상 0이 되게 합니다.
+ * 한국 시간 기준 날짜 키(YYYY-MM-DD).
+ *
+ * 공고 마감일은 한국 날짜로 적혀 있는데 `toISOString()`은 UTC 날짜를 줍니다.
+ * 그대로 쓰면 KST 00:00~08:59 사이에 "오늘"이 하루 전으로 잡혀 모든 D-day가 +1로 어긋납니다.
+ * 사용자·기관·공고가 전부 한국 기준인 제품이라 고정 오프셋으로 충분합니다(한국은 서머타임 없음).
+ */
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+export function toKstDateKey(date: Date = new Date()): string {
+  return new Date(date.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+/**
+ * 남은 일수. 시각이 아니라 날짜끼리 빼서 오늘 마감이 항상 0이 되게 합니다.
  * 마감일이 없으면 null이며, 지난 마감은 음수입니다.
  */
 export function getDday(dueDate: string | null | undefined, now = new Date()): number | null {
   if (!dueDate) return null;
   const due = Date.parse(`${dueDate}T00:00:00Z`);
   if (!Number.isFinite(due)) return null;
-  const todayKey = now.toISOString().slice(0, 10);
-  return Math.round((due - Date.parse(`${todayKey}T00:00:00Z`)) / 86_400_000);
+  return Math.round((due - Date.parse(`${toKstDateKey(now)}T00:00:00Z`)) / 86_400_000);
 }
 
 export function getSidebarItems(role: StartupRole) {
@@ -132,15 +145,21 @@ export function getStartupMilestones(program: string): StartupMilestone[] {
 /** 사업계획서 AI 진단 무료 횟수. 화면 표시와 서버 강제가 같은 값을 봐야 합니다. */
 export const MONTHLY_DIAGNOSIS_LIMIT = 2;
 
-export function getMonthlyDiagnosticUsage(events: string[], now = new Date()) {
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth();
+/**
+ * 이번 달 사용량. 달 경계는 한국 시간 기준입니다.
+ * UTC로 자르면 "다음 달 1일 초기화" 안내보다 9시간 늦게 리셋되어 화면과 서버가 어긋납니다.
+ *
+ * acceptedInvites는 초대로 합류한 팀원 수이며, 서버(bizplan 라우트)와 같은 공식을 씁니다.
+ */
+export function getMonthlyDiagnosticUsage(events: string[], now = new Date(), acceptedInvites = 0) {
+  const monthKey = toKstDateKey(now).slice(0, 7);
   const used = events.filter((event) => {
-    const date = new Date(event);
-    return date.getUTCFullYear() === year && date.getUTCMonth() === month;
+    const parsed = new Date(event);
+    return !Number.isNaN(parsed.getTime()) && toKstDateKey(parsed).slice(0, 7) === monthKey;
   }).length;
-  const remaining = Math.max(0, MONTHLY_DIAGNOSIS_LIMIT - used);
-  return { used, remaining, isExhausted: remaining === 0 };
+  const total = MONTHLY_DIAGNOSIS_LIMIT + Math.max(0, acceptedInvites);
+  const remaining = Math.max(0, total - used);
+  return { used, total, remaining, isExhausted: remaining === 0 };
 }
 
 export function canManagerSeeReviewItem(item: ReviewVisibilityInput) {

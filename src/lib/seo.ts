@@ -63,6 +63,9 @@ export const absoluteUrl = (path = "/") => `${SITE_URL}${path.startsWith("/") ? 
 export const PUBLIC_ROUTES = [
   { path: "/", changeFrequency: "weekly" as const, priority: 1 },
   { path: "/manager/landing", changeFrequency: "monthly" as const, priority: 0.8 },
+  // 계산기·자료실은 로그인 없이 쓰는 검색 착지 페이지입니다. 색인되어야 유입이 생깁니다.
+  { path: "/calculator", changeFrequency: "monthly" as const, priority: 0.9 },
+  { path: "/library", changeFrequency: "weekly" as const, priority: 0.8 },
   { path: "/workspace-entry", changeFrequency: "monthly" as const, priority: 0.6 },
 ];
 

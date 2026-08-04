@@ -24,14 +24,27 @@ describe("getDdayTone", () => {
 
 describe("getDday", () => {
   it("counts whole days from today, so a deadline today is D-0", () => {
-    const now = new Date("2026-07-30T15:20:00.000Z");
+    // KST 2026-07-30 15:20 (마감일과 같은 한국 날짜)
+    const now = new Date("2026-07-30T06:20:00.000Z");
     expect(getDday("2026-07-30", now)).toBe(0);
     expect(getDday("2026-07-31", now)).toBe(1);
     expect(getDday("2026-08-31", now)).toBe(32);
   });
 
+  it("한국 시간 이른 아침에도 오늘 마감은 D-0이다", () => {
+    // KST 00:00~08:59는 UTC로 전날입니다. UTC 날짜를 쓰면 모든 D-day가 하루 커집니다.
+    expect(getDday("2026-07-30", new Date("2026-07-29T15:00:00.000Z"))).toBe(0); // KST 07-30 00:00
+    expect(getDday("2026-07-30", new Date("2026-07-29T23:00:00.000Z"))).toBe(0); // KST 07-30 08:00
+    expect(getDday("2026-07-31", new Date("2026-07-29T23:00:00.000Z"))).toBe(1);
+  });
+
+  it("한국 시간 자정 직전에는 다음 날로 넘어가지 않는다", () => {
+    expect(getDday("2026-07-30", new Date("2026-07-30T14:59:00.000Z"))).toBe(0); // KST 07-30 23:59
+    expect(getDday("2026-07-30", new Date("2026-07-30T15:00:00.000Z"))).toBe(-1); // KST 07-31 00:00
+  });
+
   it("returns a negative number for a deadline that already passed", () => {
-    expect(getDday("2026-07-28", new Date("2026-07-30T00:00:00.000Z"))).toBe(-2);
+    expect(getDday("2026-07-28", new Date("2026-07-30T03:00:00.000Z"))).toBe(-2);
   });
 
   it("returns null when there is no usable deadline", () => {
@@ -59,7 +72,24 @@ describe("getMonthlyDiagnosticUsage", () => {
         ["2026-07-01T09:00:00.000Z", "2026-07-20T09:00:00.000Z", "2026-06-30T09:00:00.000Z"],
         new Date("2026-07-24T00:00:00.000Z"),
       ),
-    ).toEqual({ used: 2, remaining: 0, isExhausted: true });
+    ).toEqual({ used: 2, total: 2, remaining: 0, isExhausted: true });
+  });
+
+  it("초대로 합류한 팀원 수만큼 무료 횟수가 늘어난다", () => {
+    expect(
+      getMonthlyDiagnosticUsage(["2026-07-01T09:00:00.000Z", "2026-07-20T09:00:00.000Z"], new Date("2026-07-24T00:00:00.000Z"), 2),
+    ).toEqual({ used: 2, total: 4, remaining: 2, isExhausted: false });
+  });
+
+  it("달 경계는 한국 시간 기준이다", () => {
+    // 2026-06-30T16:00Z = KST 7월 1일 01:00 → 7월 사용분으로 세야 합니다.
+    expect(
+      getMonthlyDiagnosticUsage(["2026-06-30T16:00:00.000Z"], new Date("2026-07-05T00:00:00.000Z")).used,
+    ).toBe(1);
+    // 2026-06-30T14:00Z = KST 6월 30일 23:00 → 6월 사용분입니다.
+    expect(
+      getMonthlyDiagnosticUsage(["2026-06-30T14:00:00.000Z"], new Date("2026-07-05T00:00:00.000Z")).used,
+    ).toBe(0);
   });
 });
 
@@ -87,7 +117,9 @@ describe("getSidebarLinks", () => {
       "/founder/todo",
       "/founder/calendar",
       "/founder/diagnostics",
-      "/founder/calculator",
+      // 계산기·자료실은 로그인 없이 쓰는 공개 도구라 /founder 밖에 있습니다.
+      "/calculator",
+      "/library",
       "/founder/incorporation",
       "/founder/connect",
       "/founder/vault",

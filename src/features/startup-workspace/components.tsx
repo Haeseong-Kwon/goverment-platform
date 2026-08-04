@@ -2,36 +2,41 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, EyeOff, Loader2, Mail, Plus, Sparkles } from "lucide-react";
+import { Check, EyeOff, Loader2, MessageSquare, Plus, Sparkles, TrendingUp } from "lucide-react";
 import { getDday, getFounderDashboardSummary, getMonthlyDiagnosticUsage } from "./logic";
 import { EligibilityPanel } from "./EligibilityPanel";
 import { CalendarPanel, IncorporationPanel, TeamSettingsPanel, TrackerPanel, VaultPanel } from "./FounderPanels";
-import { listVaultDocuments, type VaultDocument } from "@/lib/services/FounderWorkspaceService";
+import { getSelectedPrograms, getTeamMembers, listVaultDocuments, type BudgetLine, type SelectedProgram, type TeamMember, type VaultDocument } from "@/lib/services/FounderWorkspaceService";
 import { RequireFounderSession, WorkspaceShell } from "./shell";
-import { calculateInsurance } from "./rules";
 import { DEV_BYPASS } from "@/lib/dev/devMode";
 import {
-  captureLead,
+  addTaskComment,
+  assignTask,
   createWorkspaceTask,
   convertPrepTeam,
+  getAcceptedInviteCount,
   getAuthHeaders,
   getBizplanDiagnosisEvents,
+  getBizplanHistory,
+  getTaskComments,
+  getWaitlistEntries,
   getWorkspaceTasks,
+  trackWorkspaceEvent,
   joinWaitlist,
   requestSettlementReview,
-  trackWorkspaceEvent,
   updateWorkspaceTask,
+  type BizplanHistoryEntry,
   type PersistedTask,
+  type TaskComment,
 } from "@/lib/services/WorkspaceService";
 import { Button, EmptyState, Field, LinkButton, Notice, PageHeader, Panel, Skeleton, StatusBadge, focusRing, inputClass, textareaClass, useToast } from "./ui";
 import { ExpenseValidator } from "@/features/expense-rules/ExpenseValidator";
+import { BudgetPanel } from "@/features/expense-rules/BudgetPanel";
 import { PreDeliberationPanel } from "@/features/expense-rules/PreDeliberation";
 import { cn } from "@/lib/utils";
 import { toMessage } from "@/lib/errors";
 
 export const PRODUCT_NAME = "StartUp Pilot";
-
-const won = (value: number) => new Intl.NumberFormat("ko-KR").format(value);
 
 /** 완료된 할 일에는 남은 일수를 표시하지 않습니다. 이미 끝난 일에 "9일 지남"은 잘못된 경고입니다. */
 function DdayBadge({ dueDate, done = false }: { dueDate: string | null; done?: boolean }) {
@@ -122,7 +127,20 @@ function useWorkspaceTasks() {
     }
   }, []);
 
-  return { tasks, loading: tasks === null, error, pendingId, reload: load, mutate, add, clearError: () => setError(null) };
+  const assign = useCallback(async (taskId: string, assigneeId: string | null) => {
+    setPendingId(taskId);
+    setError(null);
+    try {
+      await assignTask(taskId, assigneeId);
+      setTasks((current) => (current ?? []).map((item) => (item.id === taskId ? { ...item, assignee_id: assigneeId } : item)));
+    } catch (reason) {
+      setError(toMessage(reason, "담당자를 지정하지 못했습니다."));
+    } finally {
+      setPendingId(null);
+    }
+  }, []);
+
+  return { tasks, loading: tasks === null, error, pendingId, reload: load, mutate, add, assign, clearError: () => setError(null) };
 }
 
 function TaskRow({
@@ -153,22 +171,94 @@ function TaskRow({
 }
 
 /** 칸반 열은 폭이 좁습니다. 제목을 자르는 대신 줄바꿈하고 이동 버튼을 카드 안에 둡니다. */
+/**
+ * 할 일 코멘트 스레드.
+ *
+ * 실시간 채팅 대신 업무 객체에 붙습니다. 열었을 때만 조회해 목록 로딩을 무겁게 하지 않습니다.
+ */
+function TaskCommentThread({ taskId, onAdded }: { taskId: string; onAdded: () => void }) {
+  const [comments, setComments] = useState<TaskComment[] | null>(null);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    getTaskComments(taskId)
+      .then((rows) => { if (mounted) setComments(rows); })
+      .catch((reason) => { if (mounted) { setComments([]); setError(toMessage(reason, "코멘트를 불러오지 못했습니다.")); } });
+    return () => { mounted = false; };
+  }, [taskId]);
+
+  const submit = async () => {
+    if (saving || !draft.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const created = await addTaskComment(taskId, draft);
+      setComments((current) => [...(current ?? []), created]);
+      setDraft("");
+      onAdded();
+    } catch (reason) {
+      setError(toMessage(reason, "코멘트를 남기지 못했습니다."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 space-y-2 rounded-lg bg-[#F8FAFC] p-3">
+      {comments === null && <p className="text-xs text-[#94A3B8]">불러오는 중…</p>}
+      {comments?.length === 0 && <p className="text-xs text-[#94A3B8]">첫 코멘트를 남겨 보세요.</p>}
+      {comments?.map((comment) => (
+        <div key={comment.id} className="rounded-lg bg-white p-2.5">
+          <div className="flex items-baseline justify-between gap-2">
+            <strong className="text-xs font-bold text-[#0F172A]">{comment.authorName}</strong>
+            <span className="shrink-0 text-[11px] text-[#94A3B8]">{comment.createdAt.slice(0, 10)}</span>
+          </div>
+          <p className="mt-1 break-keep text-xs leading-5 text-[#475569]">{comment.content}</p>
+        </div>
+      ))}
+      {error && <p className="text-xs font-semibold text-[#DC2626]">{error}</p>}
+      <div className="flex gap-1.5">
+        <input
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => { if (event.key === "Enter") void submit(); }}
+          placeholder="코멘트 남기기"
+          aria-label="코멘트 입력"
+          className={cn(inputClass, "h-9 text-xs")}
+        />
+        <Button size="sm" loading={saving} disabled={!draft.trim()} onClick={() => void submit()}>등록</Button>
+      </div>
+    </div>
+  );
+}
+
 function TaskCard({
   task,
   pending,
   moves,
+  members,
   onToggle,
   onMove,
   onHide,
+  onAssign,
+  onCommentAdded,
 }: {
   task: PersistedTask;
   pending: boolean;
   moves: ReadonlyArray<{ status: PersistedTask["status"]; label: string }>;
+  members: TeamMember[];
   onToggle: () => void;
   onMove: (status: PersistedTask["status"]) => void;
   onHide: () => void;
+  onAssign: (assigneeId: string | null) => void;
+  onCommentAdded: () => void;
 }) {
+  const [threadOpen, setThreadOpen] = useState(false);
   const done = task.status === "done";
+
   return (
     <article className={cn("rounded-xl border p-3", done ? "border-[#BBF7D0] bg-[#F0FDF4]" : "border-[#E2E8F0] bg-white")}>
       <div className="flex items-start gap-2.5">
@@ -185,6 +275,28 @@ function TaskCard({
         {task.task_type === "auto" && <span className="text-xs text-[#94A3B8]">· 자동 생성</span>}
       </div>
 
+      <div className="mt-2.5 flex flex-wrap items-center gap-2 pl-[34px]">
+        <select
+          value={task.assignee_id ?? ""}
+          onChange={(event) => onAssign(event.target.value || null)}
+          disabled={pending}
+          aria-label={`${task.title} 담당자`}
+          className={cn(inputClass, "h-8 w-auto min-w-[7.5rem] py-0 text-xs")}
+        >
+          <option value="">담당자 없음</option>
+          {members.map((member) => <option key={member.userId} value={member.userId}>{member.fullName}</option>)}
+        </select>
+        <button
+          type="button"
+          onClick={() => setThreadOpen((open) => !open)}
+          aria-expanded={threadOpen}
+          className={cn("flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold text-[#475569]", focusRing, "transition-colors hover:bg-[#F1F5F9]")}
+        >
+          <MessageSquare size={13} />
+          코멘트 {task.comment_count > 0 ? task.comment_count : ""}
+        </button>
+      </div>
+
       <div className="mt-3 flex gap-1 pl-[34px]">
         {moves.map((move) => (
           <button
@@ -197,15 +309,25 @@ function TaskCard({
           </button>
         ))}
       </div>
+
+      {threadOpen && <TaskCommentThread taskId={task.id} onAdded={onCommentAdded} />}
     </article>
   );
 }
 
 function TaskBoard() {
-  const { tasks, loading, error, pendingId, mutate, add } = useWorkspaceTasks();
+  const { tasks, loading, error, pendingId, mutate, add, reload, assign } = useWorkspaceTasks();
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [members, setMembers] = useState<TeamMember[]>([]);
   const rows = tasks ?? [];
+
+  // 담당자 드롭다운 후보. 실패해도 보드 자체는 동작해야 하므로 조용히 비웁니다.
+  useEffect(() => {
+    let mounted = true;
+    getTeamMembers().then((rows) => { if (mounted) setMembers(rows); }).catch(() => undefined);
+    return () => { mounted = false; };
+  }, []);
 
   const submit = async () => {
     if (!title.trim()) return;
@@ -266,10 +388,13 @@ function TaskBoard() {
                       key={task.id}
                       task={task}
                       pending={pendingId === task.id}
+                      members={members}
                       moves={columns.filter((next) => next.status !== column.status).map((next) => ({ status: next.status, label: `${next.label}로` }))}
                       onToggle={() => void mutate(task, { status: task.status === "done" ? "todo" : "done" })}
                       onMove={(status) => void mutate(task, { status })}
                       onHide={() => void mutate(task, { is_hidden: true })}
+                      onAssign={(assigneeId) => void assign(task.id, assigneeId)}
+                      onCommentAdded={() => void reload()}
                     />
                   ))}
                   {items.length === 0 && <p className="py-6 text-center text-sm text-[#94A3B8]">항목이 없습니다.</p>}
@@ -295,9 +420,23 @@ function StatTile({ label, value, hint }: { label: string; value: string; hint?:
 
 function FounderHome({ founder }: { founder: boolean }) {
   const { tasks, loading, error, pendingId, mutate } = useWorkspaceTasks();
+  const [programs, setPrograms] = useState<SelectedProgram[]>([]);
   const rows = tasks ?? [];
   const summary = getFounderDashboardSummary(rows);
   const nextDday = getDday(summary.nextDueDate);
+
+  // 히어로는 "가장 임박한 공고"를 보여야 합니다. TODO 마감만 보면 정작 공고 마감일이 홈에 안 뜹니다.
+  useEffect(() => {
+    if (founder) return;
+    let mounted = true;
+    getSelectedPrograms().then((rows) => { if (mounted) setPrograms(rows); }).catch(() => undefined);
+    return () => { mounted = false; };
+  }, [founder]);
+
+  const nextProgram = programs
+    .filter((program) => program.deadline && (getDday(program.deadline) ?? -1) >= 0)
+    .sort((a, b) => (a.deadline ?? "").localeCompare(b.deadline ?? ""))[0] ?? null;
+  const programDday = getDday(nextProgram?.deadline);
   const overdueCount = rows.filter((task) => task.status !== "done" && (getDday(task.due_date) ?? 0) < 0).length;
   const overdue = overdueCount > 0;
   const upcoming = rows
@@ -326,17 +465,40 @@ function FounderHome({ founder }: { founder: boolean }) {
       ) : (
         <section className="grid gap-4 md:grid-cols-4">
           <div className={cn("rounded-2xl p-5 text-white md:col-span-2", overdue ? "bg-[#DC2626]" : "bg-[#2563EB]")}>
-            <p className="text-sm font-semibold opacity-90">{overdue ? "기한이 지난 할 일" : "다음 마감"}</p>
-            <h2 className="mt-2 text-2xl font-bold">
-              {summary.nextDueDate
-                ? `${summary.nextDueDate}${nextDday === null ? "" : nextDday < 0 ? ` · ${Math.abs(nextDday)}일 지남` : nextDday === 0 ? " · 오늘" : ` · D-${nextDday}`}`
-                : "등록된 마감 없음"}
-            </h2>
-            <p className="mt-2 text-sm opacity-90">
-              {overdue
-                ? `지난 마감 ${overdueCount}건을 먼저 처리하거나 마감일을 조정하세요.`
-                : `마감일이 있는 할 일 ${rows.filter((task) => task.due_date && task.status !== "done").length}건 기준 · 자동 생성 ${summary.automaticTasks}건`}
-            </p>
+            {overdue ? (
+              <>
+                <p className="text-sm font-semibold opacity-90">기한이 지난 할 일</p>
+                <h2 className="mt-2 text-2xl font-bold">
+                  {summary.nextDueDate}
+                  {nextDday !== null && nextDday < 0 && ` · ${Math.abs(nextDday)}일 지남`}
+                </h2>
+                <p className="mt-2 text-sm opacity-90">지난 마감 {overdueCount}건을 먼저 처리하거나 마감일을 조정하세요.</p>
+              </>
+            ) : nextProgram ? (
+              <>
+                <p className="text-sm font-semibold opacity-90">가장 임박한 공고 마감</p>
+                <h2 className="mt-2 text-2xl font-bold">
+                  {nextProgram.name}
+                  {programDday !== null && (programDday === 0 ? " · 오늘" : ` · D-${programDday}`)}
+                </h2>
+                <p className="mt-2 text-sm opacity-90">
+                  {nextProgram.deadline} 마감
+                  {summary.nextDueDate && ` · 다음 할 일 ${summary.nextDueDate}`}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-semibold opacity-90">다음 마감</p>
+                <h2 className="mt-2 text-2xl font-bold">
+                  {summary.nextDueDate
+                    ? `${summary.nextDueDate}${nextDday === null ? "" : nextDday === 0 ? " · 오늘" : ` · D-${nextDday}`}`
+                    : "등록된 마감 없음"}
+                </h2>
+                <p className="mt-2 text-sm opacity-90">
+                  마감일이 있는 할 일 {rows.filter((task) => task.due_date && task.status !== "done").length}건 기준 · 자동 생성 {summary.automaticTasks}건
+                </p>
+              </>
+            )}
           </div>
           <StatTile label="남은 TODO" value={`${summary.remainingTasks}건`} hint={`전체 ${rows.length}건`} />
           <StatTile label="팀 진행률" value={`${summary.completionRate}%`} hint={`완료 ${rows.length - summary.remainingTasks}건`} />
@@ -409,13 +571,12 @@ function FounderCore({ founder = false }: { founder?: boolean }) {
   );
 }
 
-type FounderFeature = "todo" | "calendar" | "diagnostics" | "calculator" | "incorporation" | "connect" | "vault" | "settings" | "precheck" | "predeliberation" | "tracker";
+type FounderFeature = "todo" | "calendar" | "diagnostics" | "incorporation" | "connect" | "vault" | "settings" | "precheck" | "predeliberation" | "tracker";
 
 const FEATURE_META: Record<FounderFeature, { title: string; description: string }> = {
   todo: { title: "팀 TODO", description: "공고 마감 기준 자동 마일스톤과 직접 추가한 할 일을 함께 관리합니다." },
   calendar: { title: "마감 캘린더", description: "선택한 지원사업 공고 마감과 팀 할 일 마감을 한 달력에서 확인합니다." },
   diagnostics: { title: "AI 진단", description: "자격 요건을 룰셋으로 판정하고 사업계획서를 PSST 구조로 점검합니다." },
-  calculator: { title: "4대보험 계산기", description: "인건비 집행 전 사업주 부담액을 미리 확인합니다." },
   incorporation: { title: "법인 설립", description: "사업별 설립 타이밍과 절차를 확인합니다. 순서를 잘못 밟으면 자격이 사라집니다." },
   connect: { title: "커넥트", description: "팀빌딩·멘토·투자 연결 대기 신청을 접수합니다." },
   vault: { title: "서류 보관함", description: "같은 이름으로 올리면 버전이 쌓이고, 열람은 만료형 보안 링크로만 이뤄집니다." },
@@ -434,7 +595,6 @@ function FounderFeaturePage({ feature, founder = false }: { feature: FounderFeat
         {feature === "todo" && <TaskBoard />}
         {feature === "calendar" && <CalendarPanel />}
         {feature === "diagnostics" && <div className="space-y-6"><EligibilityPanel /><BizPlanCard /></div>}
-        {feature === "calculator" && <CalculatorCard />}
         {feature === "incorporation" && <IncorporationPanel />}
         {feature === "connect" && <ConnectCard />}
         {feature === "vault" && <VaultPanel />}
@@ -516,8 +676,14 @@ function PrecheckPanel() {
   const toast = useToast();
   const [submitted, setSubmitted] = useState(false);
   const [documentIds, setDocumentIds] = useState<string[]>([]);
+  // 비목별 배정 잔액을 검증기에 넘겨 "한도 초과"를 제출 전에 잡습니다.
+  const [budgetLines, setBudgetLines] = useState<BudgetLine[]>([]);
+  // 전송 중 재클릭 차단. 없으면 같은 집행 건이 매니저 큐에 두 번 쌓입니다.
+  const [requesting, setRequesting] = useState(false);
 
   const request = async (expense: Record<string, unknown>, verdict: { verdict: "pass" | "review" | "fail"; findings: unknown[]; missingEvidence: string[] }) => {
+    if (requesting) return;
+    setRequesting(true);
     try {
       await requestSettlementReview({
         title: (expense.title as string) || "정산 건",
@@ -535,6 +701,8 @@ function PrecheckPanel() {
       );
     } catch (reason) {
       toast.show(toMessage(reason, "검토 요청에 실패했습니다."), "error");
+    } finally {
+      setRequesting(false);
     }
   };
 
@@ -547,6 +715,7 @@ function PrecheckPanel() {
           <Link href="/workspace/tracker" className="underline underline-offset-2">상태 트래커에서 진행 상황 보기</Link>
         </Notice>
       )}
+      <BudgetPanel onChange={setBudgetLines} />
       <EvidenceFilePicker
         selected={documentIds}
         onToggle={(documentId) =>
@@ -554,6 +723,8 @@ function PrecheckPanel() {
         }
       />
       <ExpenseValidator
+        budgetLines={budgetLines}
+        requestPending={requesting}
         onRequestReview={(expense, verdict) =>
           void request(expense as unknown as Record<string, unknown>, { verdict: verdict.verdict, findings: verdict.findings, missingEvidence: verdict.missingEvidence })
         }
@@ -562,150 +733,82 @@ function PrecheckPanel() {
   );
 }
 
-function ContributionBars({ items }: { items: Array<{ label: string; value: number; max: number }> }) {
-  return (
-    <div className="space-y-3">
-      {items.map((item) => (
-        <div key={item.label}>
-          <div className="mb-1 flex items-center justify-between gap-3 text-sm">
-            <span className="font-semibold text-[#0F172A]">{item.label}</span>
-            <span className="shrink-0 tabular-nums text-[#475569]">{won(item.value)}원</span>
-          </div>
-          <div className="h-2.5 rounded-full bg-[#EFF6FF]">
-            <div className="h-full rounded-full bg-[#2563EB]" style={{ width: `${Math.min(100, (item.value / Math.max(1, item.max)) * 100)}%` }} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-const INSURANCE_LABELS: Record<string, string> = {
-  nationalPension: "국민연금",
-  healthInsurance: "건강보험",
-  longTermCare: "장기요양",
-  employmentInsurance: "고용보험",
-  accidentInsurance: "산재보험",
-};
-
-function CalculatorCard() {
-  const [emailOpen, setEmailOpen] = useState(false);
-  const [salary, setSalary] = useState(3_000_000);
-  const [people, setPeople] = useState(1);
-  const result = calculateInsurance({ monthlySalary: salary, people, accidentRate: 0.007 });
+/** 버전별 점수 추이. 개선이 눈에 보여야 다시 진단할 이유가 생깁니다. */
+function BizPlanHistory({ entries }: { entries: BizplanHistoryEntry[] }) {
+  if (entries.length === 0) return null;
+  const best = Math.max(...entries.map((entry) => entry.score), 1);
+  const latest = entries[entries.length - 1];
+  const previous = entries.length > 1 ? entries[entries.length - 2] : null;
+  const delta = previous ? latest.score - previous.score : null;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-      <Panel title="입력">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="월 급여 (1인)">
-            <input type="number" min={0} step={100_000} value={salary || ""} onChange={(event) => setSalary(Math.max(0, Number(event.target.value)))} className={inputClass} />
-          </Field>
-          <Field label="인원">
-            <input type="number" min={1} value={people} onChange={(event) => setPeople(Math.max(1, Number(event.target.value)))} className={inputClass} />
-          </Field>
-        </div>
-        <p className="mt-3 text-sm text-[#475569]">과세 대상 급여 총액 <strong className="tabular-nums text-[#0F172A]">{won(salary * people)}원</strong></p>
-        <p className="mt-4 rounded-xl bg-[#FEF2F2] p-3 text-[13px] font-semibold leading-6 text-[#DC2626]">
-          산재보험료율은 업종별로 달라 0.7%를 가정했습니다. 실제 신고 전 전문가 확인이 필요합니다.
-        </p>
-      </Panel>
-
-      <div className="space-y-5">
-        <Panel title="사업주 월 부담" action={<StatusBadge tone="blue">참고용 추정</StatusBadge>}>
-          <strong className="block text-3xl font-bold tabular-nums text-[#0F172A]">{won(result.employerTotal)}원</strong>
-          <div className="mt-5">
-            <ContributionBars
-              items={Object.entries(result.employer).map(([key, value]) => ({
-                label: INSURANCE_LABELS[key] ?? key,
-                value,
-                max: result.employerTotal,
-              }))}
+    <Panel
+      title="진단 이력"
+      action={
+        delta !== null ? (
+          <StatusBadge tone={delta > 0 ? "green" : delta < 0 ? "red" : "slate"}>
+            {delta > 0 ? `+${delta}점` : delta < 0 ? `${delta}점` : "변화 없음"}
+          </StatusBadge>
+        ) : undefined
+      }
+    >
+      <div className="flex items-end gap-2">
+        {entries.map((entry, index) => (
+          <div key={entry.createdAt} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+            <span className="text-xs font-bold tabular-nums text-[#0F172A]">{entry.score}</span>
+            <div
+              className={cn("w-full rounded-t-md", index === entries.length - 1 ? "bg-[#2563EB]" : "bg-[#BFDBFE]")}
+              style={{ height: `${Math.max(8, (entry.score / best) * 96)}px` }}
             />
+            <span className="w-full truncate text-center text-[11px] text-[#94A3B8]">v{index + 1}</span>
+            <span className="w-full truncate text-center text-[11px] text-[#94A3B8]">{entry.createdAt.slice(5, 10)}</span>
           </div>
-        </Panel>
-
-        <Panel title="근로자 월 공제">
-          <strong className="block text-2xl font-bold tabular-nums text-[#0F172A]">{won(result.workerTotal)}원</strong>
-          <p className="mt-2 text-sm text-[#475569]">실수령액 추정 <strong className="tabular-nums text-[#0F172A]">{won(Math.max(0, salary * people - result.workerTotal))}원</strong></p>
-          <Button className="mt-5" onClick={() => setEmailOpen(true)} icon={<Mail size={14} />}>계산 결과 이메일로 받기</Button>
-        </Panel>
+        ))}
       </div>
-
-      {emailOpen && <EmailCaptureModal onClose={() => setEmailOpen(false)} />}
-    </div>
-  );
-}
-
-function EmailCaptureModal({ onClose }: { onClose: () => void }) {
-  const [email, setEmail] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  // 열린 대화상자는 Esc로 닫혀야 합니다. 바깥 클릭만으로는 키보드 사용자가 갇힙니다.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
-  const submit = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      await captureLead(email, "calc_insurance");
-      onClose();
-    } catch (reason) {
-      setError(toMessage(reason, "저장하지 못했습니다."));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[80] grid place-items-center bg-black/40 p-4">
-      <button type="button" aria-label="닫기" onClick={onClose} className="absolute inset-0" />
-      <div role="dialog" aria-modal="true" aria-labelledby="email-capture-title" className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-        <Mail className="text-[#2563EB]" />
-        <h2 id="email-capture-title" className="mt-3 text-2xl font-bold">이메일로 자료 받기</h2>
-        <p className="mt-2 text-sm leading-6 text-[#475569]">계산 결과와 자료실 다운로드 이력을 기록합니다. 수신 동의 후 저장됩니다.</p>
-        <Field label="이메일 주소">
-          <input
-            type="email"
-            autoFocus
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter") void submit(); }}
-            className={inputClass}
-            placeholder="founder@example.com"
-          />
-        </Field>
-        {error && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>닫기</Button>
-          <Button loading={saving} disabled={!email.trim()} onClick={() => void submit()}>받기</Button>
-        </div>
-      </div>
-    </div>
+      <p className="mt-4 flex items-center gap-1.5 text-sm text-[#475569]">
+        <TrendingUp size={14} className="text-[#2563EB]" />
+        최근 진단 <strong className="tabular-nums text-[#0F172A]">{latest.score}점</strong>
+        {delta !== null && delta !== 0 && <span>· 직전 대비 {delta > 0 ? "상승" : "하락"}</span>}
+      </p>
+    </Panel>
   );
 }
 
 function BizPlanCard() {
   const [events, setEvents] = useState<string[] | null>(null);
-  const reload = useCallback(() => { getBizplanDiagnosisEvents().then(setEvents).catch(() => setEvents([])); }, []);
+  const [invites, setInvites] = useState(0);
+  const [history, setHistory] = useState<BizplanHistoryEntry[]>([]);
+
+  const reload = useCallback(() => {
+    getBizplanDiagnosisEvents().then(setEvents).catch(() => setEvents([]));
+    getAcceptedInviteCount().then(setInvites).catch(() => setInvites(0));
+    getBizplanHistory().then(setHistory).catch(() => setHistory([]));
+  }, []);
   useEffect(() => { reload(); }, [reload]);
 
-  const usage = getMonthlyDiagnosticUsage(events ?? []);
+  const usage = getMonthlyDiagnosticUsage(events ?? [], undefined, invites);
   const loading = events === null;
 
   return (
-    <Panel
-      title="사업계획서 AI 진단"
-      action={<StatusBadge tone={loading ? "slate" : usage.isExhausted ? "amber" : "blue"}>{loading ? "확인 중" : usage.isExhausted ? "이번 달 무료 소진" : `잔여 ${usage.remaining}/2회`}</StatusBadge>}
-    >
-      {/* 소진 상태여도 실행기를 걷어내지 않습니다. 마지막 회차 결과가 그 자리에서 사라지면 안 됩니다. */}
-      <AiDiagnosisRunner exhausted={!loading && usage.isExhausted} onComplete={reload} />
-    </Panel>
+    <div className="space-y-5">
+      <Panel
+        title="사업계획서 AI 진단"
+        action={
+          <StatusBadge tone={loading ? "slate" : usage.isExhausted ? "amber" : "blue"}>
+            {loading ? "확인 중" : usage.isExhausted ? "이번 달 무료 소진" : `잔여 ${usage.remaining}/${usage.total}회`}
+          </StatusBadge>
+        }
+      >
+        {invites > 0 && (
+          <p className="mb-3 rounded-xl bg-[#F0FDF4] p-3 text-sm font-semibold text-[#16A34A]">
+            팀원 {invites}명이 초대로 합류해 이번 달 진단이 {invites}회 늘었습니다.
+          </p>
+        )}
+        {/* 소진 상태여도 실행기를 걷어내지 않습니다. 마지막 회차 결과가 그 자리에서 사라지면 안 됩니다. */}
+        <AiDiagnosisRunner exhausted={!loading && usage.isExhausted} onComplete={reload} />
+      </Panel>
+      <BizPlanHistory entries={history} />
+    </div>
   );
 }
 
@@ -826,6 +929,13 @@ function ConnectCard() {
   const [applied, setApplied] = useState<string[]>([]);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // 이미 신청한 탭을 복원합니다. 없으면 새로고침마다 "신청 완료"가 사라져 다시 누르게 됩니다.
+  useEffect(() => {
+    let mounted = true;
+    getWaitlistEntries().then((rows) => { if (mounted) setApplied(rows); }).catch(() => undefined);
+    return () => { mounted = false; };
+  }, []);
 
   const apply = async (tab: (typeof CONNECT_TABS)[number]["tab"]) => {
     setPending(tab);

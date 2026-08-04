@@ -99,6 +99,8 @@ export interface ExpenseInput {
     applicantIsSelf?: boolean | null;
   };
   itemFlags?: ItemFlag[];
+  /** 이 비목의 협약 배정액과 기집행 누계(원). 없으면 한도 판정을 건너뜁니다. */
+  budget?: { allocated: number; executed?: number };
   memo?: string;
 }
 

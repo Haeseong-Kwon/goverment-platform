@@ -7,6 +7,7 @@ import {
   createTeamInvite,
   getActiveTeamInvite,
   getCalendarItems,
+  getSelectedPrograms,
   getTeamMembers,
   getTrackedSubmissions,
   getVaultDownloadUrl,
@@ -20,8 +21,10 @@ import {
   type VaultDocument,
   type VaultFolder,
 } from "@/lib/services/FounderWorkspaceService";
+import { requestConsultation } from "@/lib/services/WorkspaceService";
+import { getDday, toKstDateKey } from "./logic";
 import { STARTUP_PROGRAMS } from "./rules";
-import { Button, ChoiceChip, EmptyState, LinkButton, Panel, Skeleton, StatusBadge, inputClass, type StatusTone } from "./ui";
+import { Button, ChoiceChip, EmptyState, Field, LinkButton, Notice, Panel, Skeleton, StatusBadge, inputClass, type StatusTone } from "./ui";
 import { cn } from "@/lib/utils";
 import { toMessage } from "@/lib/errors";
 
@@ -66,6 +69,7 @@ function LoadState({
 // ---------------------------------------------------------------- 마감 캘린더
 
 const MS_DAY = 86_400_000;
+// 달력 격자는 UTC 자정으로 만든 날짜라 그대로, "오늘"과 D-day만 한국 날짜로 판단합니다.
 const toKey = (date: Date) => date.toISOString().slice(0, 10);
 
 const itemTone = (item: CalendarItem) =>
@@ -90,13 +94,13 @@ export function CalendarPanel() {
       label: `${view.getUTCFullYear()}년 ${view.getUTCMonth() + 1}월`,
       cells: Array.from({ length: 42 }, (_, index) => {
         const date = new Date(start.getTime() + index * MS_DAY);
-        return { key: toKey(date), day: date.getUTCDate(), inMonth: date.getUTCMonth() === view.getUTCMonth(), isToday: toKey(date) === toKey(base) };
+        return { key: toKey(date), day: date.getUTCDate(), inMonth: date.getUTCMonth() === view.getUTCMonth(), isToday: toKey(date) === toKstDateKey(base) };
       }).slice(0, firstWeekday + daysInMonth > 35 ? 42 : 35),
     };
   }, [monthOffset]);
 
   const byDate = useMemo(() => items.reduce<Record<string, CalendarItem[]>>((acc, item) => ({ ...acc, [item.date]: [...(acc[item.date] ?? []), item] }), {}), [items]);
-  const upcoming = items.filter((item) => item.date >= toKey(new Date())).slice(0, 6);
+  const upcoming = items.filter((item) => item.date >= toKstDateKey()).slice(0, 6);
 
   return (
     <div className="space-y-5">
@@ -192,7 +196,8 @@ export function CalendarPanel() {
         />
         <div className="space-y-2">
           {upcoming.map((item) => {
-            const dday = Math.ceil((new Date(`${item.date}T00:00:00Z`).getTime() - Date.now()) / MS_DAY);
+            // 다른 화면과 같은 규칙으로 셉니다. 실시간 밀리초로 빼면 "오늘"이 화면마다 달라집니다.
+            const dday = getDday(item.date) ?? 0;
             return (
               <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#E2E8F0] p-3">
                 <div className="min-w-0">
@@ -537,26 +542,41 @@ const INCORPORATION_STEPS = [
   { label: "주금 납입", note: "잔액증명서는 지급수수료(법인설립비)로 집행 가능합니다." },
   { label: "설립 등기", note: "등록면허세·등기수수료도 법인설립비 범위입니다." },
   { label: "사업자등록", note: "이 시점부터 '예비창업자' 자격은 사라집니다." },
+  { label: "4대보험 사업장 성립신고", note: "직원 채용 전이라도 대표자 1인 사업장 신고가 필요합니다. 부담액은 계산기에서 확인하세요." },
 ];
 
 export function IncorporationPanel() {
-  const [programId, setProgramId] = useState<string>(STARTUP_PROGRAMS[0].id);
+  const { data: selected } = useLoader(getSelectedPrograms);
+  const [programId, setProgramId] = useState<string | null>(null);
   const [done, setDone] = useState<number[]>([]);
-  const program = STARTUP_PROGRAMS.find((item) => item.id === programId)!;
+
+  // 팀이 실제로 고른 사업만 후보로 둡니다. 아직 못 읽었으면 전체 목록을 보여 줍니다.
+  const candidates = selected?.length
+    ? STARTUP_PROGRAMS.filter((item) => selected.some((row) => row.id === item.id))
+    : [];
+  const options = candidates.length ? candidates : STARTUP_PROGRAMS;
+  const program = options.find((item) => item.id === programId) ?? options[0];
+  const isTeamProgram = candidates.some((item) => item.id === program.id);
 
   return (
     <div className="space-y-5">
       <Panel title="설립 타이밍 확인">
         <div className="flex flex-wrap gap-2">
-          {STARTUP_PROGRAMS.map((item) => (
-            <ChoiceChip key={item.id} selected={programId === item.id} onClick={() => setProgramId(item.id)}>
+          {options.map((item) => (
+            <ChoiceChip key={item.id} selected={program.id === item.id} onClick={() => setProgramId(item.id)}>
               {item.name}
             </ChoiceChip>
           ))}
         </div>
+        {candidates.length === 0 && (
+          <p className="mt-3 text-xs font-medium text-[#94A3B8]">
+            준비 중인 사업을 아직 읽지 못했습니다. 아래 경고는 선택한 사업 기준이며, 최종 기준은 각 공고문입니다.
+          </p>
+        )}
         {program.requiresNoBusinessRegistration ? (
           <p className="mt-4 rounded-xl bg-[#FEF2F2] p-4 text-sm font-semibold leading-6 text-[#DC2626]">
-            {program.name}은 신청일 기준 사업자등록이 없어야 합니다. <strong>선정 통보 이후에 설립</strong>하세요. 지금 5단계를 끝내면 신청 자격이 사라집니다.
+            {program.name}은 신청일 기준 사업자등록이 없어야 합니다. <strong>선정 통보 이후에 설립</strong>하세요. 지금 절차를 끝내면 신청 자격이 사라집니다.
+            {isTeamProgram && " 팀이 준비 중인 사업입니다."}
           </p>
         ) : (
           <p className="mt-4 rounded-xl bg-[#F0FDF4] p-4 text-sm font-semibold leading-6 text-[#16A34A]">
@@ -587,6 +607,97 @@ export function IncorporationPanel() {
         </div>
         <p className="mt-4 text-xs font-medium text-[#94A3B8]">체크 상태는 이 화면에서만 유지되는 참고용입니다. 최종 기준은 각 사업 공고문입니다.</p>
       </Panel>
+
+      <ConsultationForm defaultTopic="incorporation" />
     </div>
+  );
+}
+
+const CONSULTATION_TOPICS = [
+  { id: "incorporation" as const, label: "법인 설립" },
+  { id: "contract" as const, label: "계약서 검토" },
+  { id: "ip" as const, label: "특허·상표" },
+  { id: "labor" as const, label: "인사·노무" },
+];
+
+/**
+ * 제휴 법무법인 상담 신청.
+ *
+ * 변호사법 제34조상 소개 대가를 받을 수 없어 중개나 매칭이 아니라 신청 접수만 합니다.
+ * 광고 표기를 지우지 마세요. 연결 여부와 비용은 제휴처가 직접 안내합니다.
+ */
+export function ConsultationForm({ defaultTopic }: { defaultTopic: "incorporation" | "contract" | "ip" | "labor" }) {
+  const [topic, setTopic] = useState(defaultTopic);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await requestConsultation({ topic, contactEmail: email, contactName: name, message });
+      setDone(true);
+    } catch (reason) {
+      setError(toMessage(reason, "상담 신청을 접수하지 못했습니다."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (done) {
+    return (
+      <Panel title="상담 신청 접수됨">
+        <p className="text-sm leading-6 text-[#475569]">
+          신청을 접수했습니다. 제휴 법무법인이 남겨 주신 주소로 직접 연락드리며, 상담 진행 여부와 비용은 제휴처가 안내합니다.
+        </p>
+        <Button className="mt-4" variant="secondary" size="sm" onClick={() => { setDone(false); setName(""); setEmail(""); setMessage(""); }}>
+          다른 주제로 다시 신청
+        </Button>
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel title="제휴 법무법인 상담 신청" action={<StatusBadge tone="slate">광고</StatusBadge>}>
+      <p className="mb-4 text-sm leading-6 text-[#475569]">
+        StartUp Pilot은 변호사를 소개하고 대가를 받지 않습니다. 신청 내용을 제휴 법무법인에 전달만 하며, 상담 진행과 비용은 제휴처가 직접 안내합니다.
+      </p>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {CONSULTATION_TOPICS.map((item) => (
+          <ChoiceChip key={item.id} selected={topic === item.id} onClick={() => setTopic(item.id)}>{item.label}</ChoiceChip>
+        ))}
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="이름">
+          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="홍길동" className={inputClass} />
+        </Field>
+        <Field label="이메일">
+          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" className={inputClass} />
+        </Field>
+      </div>
+      <div className="mt-4">
+        <Field label="상담 내용" hint="선택 항목입니다">
+          <textarea
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            rows={3}
+            placeholder="예) 예비창업패키지 선정 후 법인 전환 시점을 상담하고 싶습니다."
+            className={cn(inputClass, "h-auto py-3")}
+          />
+        </Field>
+      </div>
+      {error && <div className="mt-3"><Notice tone="error" onDismiss={() => setError(null)}>{error}</Notice></div>}
+      <p className="mt-3 text-xs leading-5 text-[#94A3B8]">
+        입력하신 이름·이메일·상담 내용은 상담 연결 목적으로만 제휴 법무법인에 전달됩니다.
+      </p>
+      <Button className="mt-4" loading={saving} disabled={!name.trim() || !email.trim()} onClick={() => void submit()}>
+        상담 신청
+      </Button>
+    </Panel>
   );
 }

@@ -34,8 +34,15 @@ describe("공통 규정", () => {
   });
 
   it("비목 오분류를 감지하고 올바른 비목을 제시한다", () => {
-    const result = validateExpense(base({ category: "material", itemFlags: ["office_furniture"], evidence: CATEGORIES.material.requiredEvidence }));
+    const result = validateExpense(base({ category: "material", itemFlags: ["general_software"], evidence: CATEGORIES.material.requiredEvidence }));
     expect(result.findings.find((finding) => finding.code === "COM-05")?.fix).toContain("기계장치비");
+  });
+
+  it("사무공간용 집기·가구는 비목 변경이 아니라 집행 불가로 안내한다", () => {
+    // 기계장치비로 옮기라고 안내하면 EQP-03에 다시 걸려 빠져나갈 수 없었습니다.
+    const result = validateExpense(base({ category: "material", itemFlags: ["office_furniture"], evidence: CATEGORIES.material.requiredEvidence }));
+    expect(result.findings.find((finding) => finding.code === "COM-06")?.severity).toBe("block");
+    expect(result.findings.some((finding) => finding.code === "COM-05")).toBe(false);
   });
 
   it("페이백 정황은 부정집행으로 차단한다", () => {

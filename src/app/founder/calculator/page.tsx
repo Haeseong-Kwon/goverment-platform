@@ -1,12 +1,9 @@
-import { FounderFeaturePage } from "@/features/startup-workspace/components";
+import { redirect } from "next/navigation";
 
-export const metadata = {
-  title: "4대보험 계산기",
-  description: "인건비 집행 전 사업주 부담액을 미리 확인합니다.",
-  // 로그인 이후 화면입니다. 색인되면 검색 결과에 빈 화면이 남고 크롤러가 인증 흐름을 건드립니다.
-  robots: { index: false, follow: false },
-};
-
+/**
+ * 계산기는 로그인 없이 쓰는 공개 도구로 옮겼습니다(/calculator).
+ * 사이드바 링크와 기존 북마크가 끊기지 않도록 여기서 넘겨 줍니다.
+ */
 export default function FounderCalculatorPage() {
-  return <FounderFeaturePage feature="calculator" />;
+  redirect("/calculator");
 }

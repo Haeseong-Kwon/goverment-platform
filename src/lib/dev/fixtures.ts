@@ -24,6 +24,17 @@ export interface DevTask {
   status: "todo" | "in_progress" | "done";
   task_type: "auto" | "custom";
   is_hidden: boolean;
+  assignee_id: string | null;
+  comment_count: number;
+}
+
+export interface DevComment {
+  id: string;
+  taskId: string;
+  authorId: string;
+  authorName: string;
+  content: string;
+  createdAt: string;
 }
 
 export interface DevSubmission {
@@ -54,6 +65,9 @@ interface DevState {
   submissions: DevSubmission[];
   vault: DevVaultDoc[];
   waitlist: string[];
+  conversionCodes: Array<{ code: string; programId: string | null; expiresAt: string; useCount: number; maxUses: number }>;
+  comments: DevComment[];
+  budgets: Record<string, number>;
   bizplanEvents: string[];
   eligibility: { programId: string; answers: EligibilityAnswers; report: EligibilityReport; createdAt: string } | null;
   converted: boolean;
@@ -62,15 +76,21 @@ interface DevState {
 const agreement = { agreementStart: `${thisYear}-04-01`, agreementEnd: `${thisYear}-12-31` };
 
 const seedTasks = (): DevTask[] => [
-  { id: "t1", title: "예비창업패키지 사업계획서 초안 완성", due_date: day(3), status: "in_progress", task_type: "auto", is_hidden: false },
-  { id: "t2", title: "예비창업패키지 증빙 서류 준비", due_date: day(7), status: "todo", task_type: "auto", is_hidden: false },
-  { id: "t3", title: "예비창업패키지 발표 리허설", due_date: day(10), status: "todo", task_type: "auto", is_hidden: false },
-  { id: "t4", title: "예비창업패키지 최종 제출", due_date: day(16), status: "todo", task_type: "auto", is_hidden: false },
-  { id: "t5", title: "경쟁사 3곳 가격 정책 정리", due_date: day(-2), status: "todo", task_type: "custom", is_hidden: false },
-  { id: "t6", title: "베타 사용자 인터뷰 5건", due_date: day(1), status: "in_progress", task_type: "custom", is_hidden: false },
-  { id: "t7", title: "팀 소개 페이지 초안", due_date: null, status: "todo", task_type: "custom", is_hidden: false },
-  { id: "t8", title: "사업자 통장 개설", due_date: day(-6), status: "done", task_type: "custom", is_hidden: false },
-  { id: "t9", title: "아이템 한 줄 소개 확정", due_date: day(-9), status: "done", task_type: "custom", is_hidden: false },
+  { id: "t1", title: "예비창업패키지 사업계획서 초안 완성", due_date: day(3), status: "in_progress", task_type: "auto", is_hidden: false, assignee_id: DEV_USER.id, comment_count: 2 },
+  { id: "t2", title: "예비창업패키지 증빙 서류 준비", due_date: day(7), status: "todo", task_type: "auto", is_hidden: false, assignee_id: "dev-2", comment_count: 0 },
+  { id: "t3", title: "예비창업패키지 발표 리허설", due_date: day(10), status: "todo", task_type: "auto", is_hidden: false, assignee_id: null, comment_count: 0 },
+  { id: "t4", title: "예비창업패키지 최종 제출", due_date: day(16), status: "todo", task_type: "auto", is_hidden: false, assignee_id: null, comment_count: 0 },
+  { id: "t5", title: "경쟁사 3곳 가격 정책 정리", due_date: day(-2), status: "todo", task_type: "custom", is_hidden: false, assignee_id: "dev-3", comment_count: 1 },
+  { id: "t6", title: "베타 사용자 인터뷰 5건", due_date: day(1), status: "in_progress", task_type: "custom", is_hidden: false, assignee_id: "dev-2", comment_count: 0 },
+  { id: "t7", title: "팀 소개 페이지 초안", due_date: null, status: "todo", task_type: "custom", is_hidden: false, assignee_id: null, comment_count: 0 },
+  { id: "t8", title: "사업자 통장 개설", due_date: day(-6), status: "done", task_type: "custom", is_hidden: false, assignee_id: DEV_USER.id, comment_count: 0 },
+  { id: "t9", title: "아이템 한 줄 소개 확정", due_date: day(-9), status: "done", task_type: "custom", is_hidden: false, assignee_id: null, comment_count: 0 },
+];
+
+const seedComments = (): DevComment[] => [
+  { id: "c1", taskId: "t1", authorId: "dev-2", authorName: "박민준", content: "문제 인식 파트에 시장 손실 규모 수치를 넣어야 할 것 같습니다.", createdAt: iso(-2) },
+  { id: "c2", taskId: "t1", authorId: DEV_USER.id, authorName: DEV_USER.fullName, content: "통계청 자료로 보완했습니다. 오늘 중 초안 공유할게요.", createdAt: iso(-1) },
+  { id: "c3", taskId: "t5", authorId: "dev-3", authorName: "정서연", content: "경쟁사 두 곳은 가격을 공개하지 않아 문의 메일 보냈습니다.", createdAt: iso(-1) },
 ];
 
 /** 판정 결과가 통과·보완·위반으로 골고루 나오도록 서로 다른 성격의 집행 건을 섞었습니다. */
@@ -215,6 +235,9 @@ const seed = (): DevState => ({
   submissions: seedSubmissions(),
   vault: seedVault(),
   waitlist: [],
+  conversionCodes: [],
+  comments: seedComments(),
+  budgets: { outsourcing: 40_000_000, equipment: 15_000_000, material: 10_000_000, labor: 30_000_000, advertising: 8_000_000 },
   bizplanEvents: [iso(-5)],
   eligibility: null,
   converted: false,

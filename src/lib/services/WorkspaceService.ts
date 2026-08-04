@@ -194,8 +194,18 @@ export async function completeOnboarding(input: OnboardingInput) {
     if (reportCountError) throw reportCountError;
 
     const reports = (reportCount ?? 0) > 0 ? [] : (projects ?? []).map((project) => {
-      const report = evaluateEligibility(project.program_id, { hasBusinessRegistration: null });
-      return { prep_team_id: team.id, report_type: "eligibility", state: report.state, score: report.score, result: report, created_by: auth.user.id };
+      const answers: EligibilityAnswers = { hasBusinessRegistration: null };
+      const report = evaluateEligibility(project.program_id, answers);
+      // result의 형태는 getLatestEligibilityReport가 읽는 { programId, answers, report }와 같아야 합니다.
+      // 리포트를 통째로 넣으면 복원 시 result.report가 없어 항상 null이 되고, 자동 진단이 화면에 뜨지 않습니다.
+      return {
+        prep_team_id: team.id,
+        report_type: "eligibility",
+        state: report.state,
+        score: report.score,
+        result: { programId: project.program_id, answers, report },
+        created_by: auth.user.id,
+      };
     });
     if (reports.length) {
       const { error: reportError } = await client.from("diagnosis_reports").insert(reports);
@@ -238,6 +248,17 @@ export async function joinWaitlist(tab: "team_building" | "mentor" | "investment
   await trackWorkspaceEvent("waitlist_join", undefined, { tab });
 }
 
+/** 이미 신청한 대기 목록. 새로고침 후에도 "신청 완료"가 유지되어야 합니다. */
+export async function getWaitlistEntries(): Promise<string[]> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devWaitlist();
+  const client = requireClient();
+  const { data: auth } = await client.auth.getUser();
+  if (!auth.user) return [];
+  const { data, error } = await client.from("waitlist_entries").select("tab").eq("user_id", auth.user.id);
+  if (error) return [];
+  return (data ?? []).map((row) => row.tab as string);
+}
+
 export async function captureLead(email: string, source: string) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) throw new Error("유효한 이메일 주소를 입력해 주세요.");
@@ -269,6 +290,8 @@ export interface PersistedTask {
   status: TaskStatus;
   task_type: "auto" | "custom";
   is_hidden: boolean;
+  assignee_id: string | null;
+  comment_count: number;
 }
 
 /** 제출 건에 첨부된 실제 증빙 파일. 매니저가 만료형 링크로 열 대상입니다. */
@@ -350,7 +373,15 @@ export async function getCurrentPrepTeamId() {
   const client = requireClient();
   const { data: auth, error: authError } = await client.auth.getUser();
   if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
-  const { data, error } = await client.from("prep_team_members").select("prep_team_id").eq("user_id", auth.user.id).limit(1).maybeSingle();
+  // 여러 팀에 속했다면 가장 먼저 합류한 팀으로 고정합니다.
+  // order 없이 limit(1)만 쓰면 요청마다 다른 팀이 나와 TODO·보관함·캘린더가 뒤바뀝니다.
+  const { data, error } = await client
+    .from("prep_team_members")
+    .select("prep_team_id, joined_at")
+    .eq("user_id", auth.user.id)
+    .order("joined_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
   if (error) throw error;
   if (!data) throw new Error("준비 팀을 먼저 설정해 주세요.");
   return data.prep_team_id as string;
@@ -360,9 +391,27 @@ export async function getWorkspaceTasks() {
   if (DEV_BYPASS) return (await import("../dev/devServices")).devTasks();
   const client = requireClient();
   const teamId = await getCurrentPrepTeamId();
-  const { data, error } = await client.from("workspace_tasks").select("id,title,due_date,status,task_type,is_hidden").eq("prep_team_id", teamId).eq("is_hidden", false).order("due_date", { ascending: true });
+  // 코멘트 개수는 집계로 함께 받아 카드마다 따로 조회하지 않습니다.
+  const { data, error } = await client
+    .from("workspace_tasks")
+    .select("id,title,due_date,status,task_type,is_hidden,assignee_id,task_comments(count)")
+    .eq("prep_team_id", teamId)
+    .eq("is_hidden", false)
+    .order("due_date", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as PersistedTask[];
+  return (data ?? []).map((row) => {
+    const counts = row.task_comments as Array<{ count: number }> | null;
+    return {
+      id: row.id as string,
+      title: row.title as string,
+      due_date: row.due_date as string | null,
+      status: row.status as TaskStatus,
+      task_type: row.task_type as "auto" | "custom",
+      is_hidden: row.is_hidden as boolean,
+      assignee_id: (row.assignee_id as string | null) ?? null,
+      comment_count: counts?.[0]?.count ?? 0,
+    };
+  });
 }
 
 export async function getManagerReviewSubmissions(): Promise<ManagerReviewSubmission[]> {
@@ -457,6 +506,18 @@ export async function requestSettlementReview(input: {
     evidenceFiles: documentIds.length,
   });
   return data.id as string;
+}
+
+/**
+ * 검토 큐에서 건을 열면 '검토 중'으로 올립니다.
+ * 매니저는 settlement_submissions를 직접 UPDATE할 수 없어(RLS) 함수를 거칩니다.
+ * 이미 검토 중이거나 판정이 끝난 건에는 아무 일도 일어나지 않습니다.
+ */
+export async function claimSubmissionForReview(submissionId: string) {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devClaimSubmission(submissionId);
+  const client = requireClient();
+  const { error } = await client.rpc("claim_settlement_submission", { input_submission_id: submissionId });
+  if (error) throw error;
 }
 
 const REVIEW_ERRORS: Record<string, string> = {
@@ -559,6 +620,154 @@ export async function getBizplanDiagnosisEvents(): Promise<string[]> {
   return (data ?? []).map((row) => row.created_at as string);
 }
 
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  authorId: string;
+  authorName: string;
+  content: string;
+  createdAt: string;
+}
+
+/** 할 일에 달린 코멘트. 실시간 채팅 대신 업무 객체에 붙는 스레드입니다. */
+export async function getTaskComments(taskId: string): Promise<TaskComment[]> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devTaskComments(taskId);
+  const client = requireClient();
+  // 작성자 이름은 화면에서 팀원 목록과 맞춥니다.
+  // author_id는 auth.users를 가리켜 profiles와의 조인을 PostgREST가 추론하지 못합니다.
+  const { data, error } = await client
+    .from("task_comments")
+    .select("id, task_id, author_id, content, created_at")
+    .eq("task_id", taskId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    taskId: row.task_id as string,
+    authorId: row.author_id as string,
+    authorName: "팀원",
+    content: row.content as string,
+    createdAt: row.created_at as string,
+  }));
+}
+
+export async function addTaskComment(taskId: string, content: string): Promise<TaskComment> {
+  const trimmed = content.trim();
+  if (!trimmed) throw new Error("코멘트 내용을 입력해 주세요.");
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devAddTaskComment(taskId, trimmed);
+  const client = requireClient();
+  const { data: auth, error: authError } = await client.auth.getUser();
+  if (authError || !auth.user) throw new Error("로그인이 필요합니다.");
+  const { data, error } = await client
+    .from("task_comments")
+    .insert({ task_id: taskId, author_id: auth.user.id, content: trimmed })
+    .select("id, task_id, author_id, content, created_at")
+    .single();
+  if (error) throw error;
+  return {
+    id: data.id as string,
+    taskId: data.task_id as string,
+    authorId: data.author_id as string,
+    authorName: "나",
+    content: data.content as string,
+    createdAt: data.created_at as string,
+  };
+}
+
+/** 담당자 지정. null이면 담당자 없음으로 되돌립니다. */
+export async function assignTask(taskId: string, assigneeId: string | null) {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devAssignTask(taskId, assigneeId);
+  const client = requireClient();
+  const { error } = await client.from("workspace_tasks").update({ assignee_id: assigneeId, updated_at: new Date().toISOString() }).eq("id", taskId);
+  if (error) throw error;
+}
+
+export type ConsultationTopic = "incorporation" | "contract" | "ip" | "labor";
+
+/**
+ * 제휴 법무법인 상담 신청 접수.
+ *
+ * 변호사법 제34조상 소개 대가를 받을 수 없으므로 중개가 아니라 신청 접수만 보관합니다.
+ * 연결 여부와 조건은 제휴처가 직접 판단합니다.
+ */
+export async function requestConsultation(input: {
+  topic: ConsultationTopic;
+  contactEmail: string;
+  contactName: string;
+  message: string;
+}) {
+  const email = input.contactEmail.trim().toLowerCase();
+  if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("유효한 이메일 주소를 입력해 주세요.");
+  if (!input.contactName.trim()) throw new Error("연락받으실 이름을 입력해 주세요.");
+  if (DEV_BYPASS) return;
+  const client = requireClient();
+  const { data: auth } = await client.auth.getUser();
+  const { error } = await client.from("consultation_requests").insert({
+    user_id: auth.user?.id ?? null,
+    topic: input.topic,
+    contact_email: email,
+    contact_name: input.contactName.trim(),
+    message: input.message.trim(),
+    consented_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+  await trackWorkspaceEvent("consultation_requested", undefined, { topic: input.topic });
+}
+
+/** 새 합격 전환 코드를 발급합니다. 기존 코드가 만료되면 이 경로로만 갱신할 수 있습니다. */
+export async function issueConversionCode(programId: string, maxUses = 100): Promise<string> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devIssueConversionCode(programId);
+  const client = requireClient();
+  const { data, error } = await client.rpc("issue_conversion_code", { input_program_id: programId, input_max_uses: maxUses });
+  if (error) {
+    throw new Error(error.message.includes("MANAGER_ROLE_REQUIRED") ? "기관 매니저만 코드를 발급할 수 있습니다." : error.message);
+  }
+  return data as string;
+}
+
+export interface BizplanHistoryEntry {
+  score: number;
+  createdAt: string;
+  psst: Record<string, { score: number; evidence: string }>;
+  swot: Record<string, string[]>;
+  actions: string[];
+}
+
+/** 사업계획서 진단 이력. 버전별 점수 추이(v1 48 → v2 62)의 원본입니다. */
+export async function getBizplanHistory(): Promise<BizplanHistoryEntry[]> {
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devBizplanHistory();
+  const client = requireClient();
+  const teamId = await getCurrentPrepTeamId();
+  const { data, error } = await client
+    .from("diagnosis_reports")
+    .select("score, created_at, result")
+    .eq("prep_team_id", teamId)
+    .eq("report_type", "bizplan")
+    .order("created_at", { ascending: true })
+    .limit(20);
+  if (error) throw error;
+  return (data ?? []).map((row) => {
+    const result = (row.result ?? {}) as Partial<BizplanHistoryEntry>;
+    return {
+      score: (row.score as number | null) ?? 0,
+      createdAt: row.created_at as string,
+      psst: result.psst ?? {},
+      swot: result.swot ?? {},
+      actions: result.actions ?? [],
+    };
+  });
+}
+
+/** 팀 초대로 실제 합류한 인원 수. 진단 무료 횟수 보너스의 근거입니다. */
+export async function getAcceptedInviteCount(): Promise<number> {
+  if (DEV_BYPASS) return 1;
+  const client = requireClient();
+  const teamId = await getCurrentPrepTeamId();
+  const { data, error } = await client.from("prep_team_invites").select("use_count").eq("prep_team_id", teamId);
+  if (error) return 0;
+  return (data ?? []).reduce((sum, row) => sum + (Number(row.use_count) || 0), 0);
+}
+
 export interface ManagerBootstrapResult {
   institutionId: string;
   institutionName: string;
@@ -590,7 +799,7 @@ export async function createWorkspaceTask(title: string, dueDate?: string) {
   if (DEV_BYPASS) return (await import("../dev/devServices")).devCreateTask(title, dueDate);
   const client = requireClient();
   const teamId = await getCurrentPrepTeamId();
-  const { data, error } = await client.from("workspace_tasks").insert({ prep_team_id: teamId, title: title.trim(), due_date: dueDate || null, task_type: "custom" }).select("id,title,due_date,status,task_type,is_hidden").single();
+  const { data, error } = await client.from("workspace_tasks").insert({ prep_team_id: teamId, title: title.trim(), due_date: dueDate || null, task_type: "custom" }).select("id,title,due_date,status,task_type,is_hidden,assignee_id").single();
   if (error) throw error;
   return data as PersistedTask;
 }
@@ -600,7 +809,7 @@ export async function updateWorkspaceTask(taskId: string, changes: Partial<Pick<
   const client = requireClient();
   const update: Record<string, unknown> = { ...changes, updated_at: new Date().toISOString() };
   if (changes.status === "done") update.completed_at = new Date().toISOString();
-  const { data, error } = await client.from("workspace_tasks").update(update).eq("id", taskId).select("id,title,due_date,status,task_type,is_hidden").single();
+  const { data, error } = await client.from("workspace_tasks").update(update).eq("id", taskId).select("id,title,due_date,status,task_type,is_hidden,assignee_id").single();
   if (error) throw error;
   if (changes.status === "done") await trackWorkspaceEvent("todo_complete", undefined, { taskId });
   return data as PersistedTask;

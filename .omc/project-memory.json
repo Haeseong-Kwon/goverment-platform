@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1785315368025,
+  "lastScanned": 1785805567943,
   "projectRoot": "/Users/haeseong/Desktop/Product/startup_meetup",
   "techStack": {
     "languages": [
@@ -81,7 +81,7 @@
       "path": "developer_docs",
       "purpose": null,
       "fileCount": 7,
-      "lastAccessed": 1785315367987,
+      "lastAccessed": 1785805567905,
       "keyFiles": [
         "사업비 비목 해설.pdf",
         "창업 파일럿 프로젝트 공유용.pdf",
@@ -93,9 +93,11 @@
     "docs": {
       "path": "docs",
       "purpose": "Documentation",
-      "fileCount": 4,
-      "lastAccessed": 1785315367989,
+      "fileCount": 6,
+      "lastAccessed": 1785805567906,
       "keyFiles": [
+        "도메인-연결과-검색등록.md",
+        "이메일-발송-설정.md",
         "창업 워크스페이스 설계 (오프라인).html",
         "행정 시뮬레이터 (standalone).html",
         "행정 시뮬레이터 - 제품 명세서.md"
@@ -104,119 +106,143 @@
     "public": {
       "path": "public",
       "purpose": "Public files",
-      "fileCount": 5,
-      "lastAccessed": 1785315367995,
+      "fileCount": 6,
+      "lastAccessed": 1785805567910,
       "keyFiles": [
         "file.svg",
         "globe.svg",
+        "llms.txt",
         "next.svg",
-        "vercel.svg",
-        "window.svg"
+        "vercel.svg"
       ]
     },
     "src": {
       "path": "src",
       "purpose": "Source code",
       "fileCount": 0,
-      "lastAccessed": 1785315367996,
+      "lastAccessed": 1785805567911,
       "keyFiles": []
     },
     "supabase": {
       "path": "supabase",
       "purpose": null,
-      "fileCount": 2,
-      "lastAccessed": 1785315367996,
+      "fileCount": 8,
+      "lastAccessed": 1785805567911,
       "keyFiles": [
-        "schema.sql",
-        "startup-workspace.rls.test.sql"
+        "002-manager-review.sql",
+        "003-profile-role-lock.sql",
+        "004-seed.sql",
+        "005-vault-and-team.sql",
+        "006-submission-evidence.sql"
       ]
     },
     "src/app": {
       "path": "src/app",
       "purpose": "Application code",
-      "fileCount": 4,
-      "lastAccessed": 1785315367998,
+      "fileCount": 12,
+      "lastAccessed": 1785805567912,
       "keyFiles": [
-        "favicon.ico",
-        "globals.css",
-        "layout.tsx"
+        "apple-icon.tsx",
+        "error.tsx",
+        "global-error.tsx"
       ]
     },
     "src/components": {
       "path": "src/components",
       "purpose": "UI components",
       "fileCount": 0,
-      "lastAccessed": 1785315367998,
+      "lastAccessed": 1785805567912,
       "keyFiles": []
     },
     "src/lib": {
       "path": "src/lib",
       "purpose": "Library code",
-      "fileCount": 3,
-      "lastAccessed": 1785315367999,
+      "fileCount": 6,
+      "lastAccessed": 1785805567913,
       "keyFiles": [
-        "semester.ts",
-        "supabase.ts",
-        "utils.ts"
-      ]
-    },
-    "src/types": {
-      "path": "src/types",
-      "purpose": "Type definitions",
-      "fileCount": 1,
-      "lastAccessed": 1785315367999,
-      "keyFiles": [
-        "index.ts"
+        "errors.ts",
+        "og.tsx",
+        "seo.ts"
       ]
     }
   },
   "hotPaths": [
     {
       "path": "src/lib/services/WorkspaceService.ts",
-      "accessCount": 53,
-      "lastAccessed": 1785396923228,
+      "accessCount": 72,
+      "lastAccessed": 1785810730482,
       "type": "file"
     },
     {
       "path": "src/features/startup-workspace/components.tsx",
-      "accessCount": 41,
-      "lastAccessed": 1785381141825,
+      "accessCount": 67,
+      "lastAccessed": 1785811402595,
       "type": "file"
     },
     {
       "path": "src/features/startup-workspace/ManagerScreens.tsx",
-      "accessCount": 33,
-      "lastAccessed": 1785397124274,
+      "accessCount": 55,
+      "lastAccessed": 1785809934062,
       "type": "file"
     },
     {
       "path": "src/features/startup-workspace/FounderPanels.tsx",
-      "accessCount": 20,
-      "lastAccessed": 1785378904709,
+      "accessCount": 32,
+      "lastAccessed": 1785810421410,
       "type": "file"
     },
     {
       "path": "src/lib/services/FounderWorkspaceService.ts",
-      "accessCount": 17,
-      "lastAccessed": 1785378894977,
+      "accessCount": 27,
+      "lastAccessed": 1785811305941,
       "type": "file"
     },
     {
       "path": "src/features/expense-rules/ExpenseValidator.tsx",
-      "accessCount": 11,
-      "lastAccessed": 1785379301491,
-      "type": "file"
-    },
-    {
-      "path": "src/features/expense-rules/ManagerTools.tsx",
-      "accessCount": 11,
-      "lastAccessed": 1785396885918,
+      "accessCount": 23,
+      "lastAccessed": 1785809259806,
       "type": "file"
     },
     {
       "path": "src/features/startup-workspace/EligibilityPanel.tsx",
+      "accessCount": 18,
+      "lastAccessed": 1785810910037,
+      "type": "file"
+    },
+    {
+      "path": "src/features/startup-workspace/shell.tsx",
+      "accessCount": 17,
+      "lastAccessed": 1785809650663,
+      "type": "file"
+    },
+    {
+      "path": "src/features/startup-workspace/logic.ts",
+      "accessCount": 14,
+      "lastAccessed": 1785810802292,
+      "type": "file"
+    },
+    {
+      "path": "src/features/expense-rules/ManagerTools.tsx",
+      "accessCount": 12,
+      "lastAccessed": 1785807812257,
+      "type": "file"
+    },
+    {
+      "path": "src/features/expense-rules/engine.ts",
+      "accessCount": 12,
+      "lastAccessed": 1785811339895,
+      "type": "file"
+    },
+    {
+      "path": "src/features/startup-workspace/logic.test.ts",
+      "accessCount": 11,
+      "lastAccessed": 1785811073876,
+      "type": "file"
+    },
+    {
+      "path": "src/features/startup-workspace/Landing.tsx",
       "accessCount": 10,
-      "lastAccessed": 1785340486581,
+      "lastAccessed": 1785808001082,
       "type": "file"
     },
     {
@@ -232,39 +258,21 @@
       "type": "file"
     },
     {
-      "path": "src/features/startup-workspace/shell.tsx",
-      "accessCount": 9,
-      "lastAccessed": 1785378331537,
-      "type": "file"
-    },
-    {
       "path": "README.md",
       "accessCount": 9,
       "lastAccessed": 1785387981697,
       "type": "file"
     },
     {
-      "path": "src/features/startup-workspace/Landing.tsx",
-      "accessCount": 8,
-      "lastAccessed": 1785383750077,
-      "type": "file"
-    },
-    {
-      "path": "src/features/startup-workspace/logic.ts",
-      "accessCount": 8,
-      "lastAccessed": 1785396885834,
-      "type": "file"
-    },
-    {
       "path": "src/features/startup-workspace/session.ts",
-      "accessCount": 7,
-      "lastAccessed": 1785338844047,
+      "accessCount": 9,
+      "lastAccessed": 1785809616787,
       "type": "file"
     },
     {
       "path": "src/features/expense-rules/PreDeliberation.tsx",
-      "accessCount": 7,
-      "lastAccessed": 1785340611127,
+      "accessCount": 8,
+      "lastAccessed": 1785807829568,
       "type": "file"
     },
     {
@@ -274,21 +282,27 @@
       "type": "file"
     },
     {
-      "path": "src/components/layout/Footer.tsx",
-      "accessCount": 5,
-      "lastAccessed": 1785338010662,
-      "type": "file"
-    },
-    {
-      "path": "src/features/startup-workspace/logic.test.ts",
-      "accessCount": 5,
-      "lastAccessed": 1785339669165,
+      "path": "src/features/expense-rules/planImport.ts",
+      "accessCount": 7,
+      "lastAccessed": 1785808951507,
       "type": "file"
     },
     {
       "path": "src/components/layout/AppChrome.tsx",
+      "accessCount": 7,
+      "lastAccessed": 1785810144282,
+      "type": "file"
+    },
+    {
+      "path": "src/app/onboarding/page.tsx",
+      "accessCount": 7,
+      "lastAccessed": 1785810993724,
+      "type": "file"
+    },
+    {
+      "path": "src/components/layout/Footer.tsx",
       "accessCount": 5,
-      "lastAccessed": 1785382956285,
+      "lastAccessed": 1785338010662,
       "type": "file"
     },
     {
@@ -298,9 +312,15 @@
       "type": "file"
     },
     {
-      "path": "src/features/expense-rules/engine.ts",
-      "accessCount": 4,
-      "lastAccessed": 1785316262325,
+      "path": "src/features/startup-workspace/rules.ts",
+      "accessCount": 5,
+      "lastAccessed": 1785810047050,
+      "type": "file"
+    },
+    {
+      "path": "src/features/expense-rules/types.ts",
+      "accessCount": 5,
+      "lastAccessed": 1785811289396,
       "type": "file"
     },
     {
@@ -334,39 +354,39 @@
       "type": "file"
     },
     {
-      "path": "src/app/onboarding/page.tsx",
-      "accessCount": 4,
-      "lastAccessed": 1785387944112,
-      "type": "file"
-    },
-    {
       "path": "src/lib/ai/expenseJudge.ts",
       "accessCount": 4,
       "lastAccessed": 1785397083241,
       "type": "file"
     },
     {
-      "path": "src/features/expense-rules/planImport.ts",
-      "accessCount": 3,
-      "lastAccessed": 1785316545133,
-      "type": "file"
-    },
-    {
-      "path": "src/features/expense-rules/types.ts",
-      "accessCount": 3,
-      "lastAccessed": 1785378813974,
+      "path": "src/app/api/workspace/expenses/validate/route.ts",
+      "accessCount": 4,
+      "lastAccessed": 1785807761054,
       "type": "file"
     },
     {
       "path": "src/lib/supabaseAdmin.ts",
-      "accessCount": 3,
-      "lastAccessed": 1785379229656,
+      "accessCount": 4,
+      "lastAccessed": 1785807766105,
       "type": "file"
     },
     {
-      "path": "src/app/api/workspace/expenses/validate/route.ts",
+      "path": "src/app/api/admin/bootstrap-manager/route.ts",
+      "accessCount": 4,
+      "lastAccessed": 1785809480640,
+      "type": "file"
+    },
+    {
+      "path": "src/features/expense-rules/ruleset.ts",
       "accessCount": 3,
-      "lastAccessed": 1785379277776,
+      "lastAccessed": 1785808994418,
+      "type": "file"
+    },
+    {
+      "path": "src/features/expense-rules/engine.test.ts",
+      "accessCount": 3,
+      "lastAccessed": 1785809153815,
       "type": "file"
     },
     {
@@ -388,12 +408,6 @@
       "type": "file"
     },
     {
-      "path": "src/app/api/admin/bootstrap-manager/route.ts",
-      "accessCount": 2,
-      "lastAccessed": 1785379172197,
-      "type": "file"
-    },
-    {
       "path": "supabase/003-profile-role-lock.sql",
       "accessCount": 2,
       "lastAccessed": 1785388021859,
@@ -406,27 +420,15 @@
       "type": "file"
     },
     {
-      "path": "supabase/schema.sql",
-      "accessCount": 1,
-      "lastAccessed": 1785315894243,
-      "type": "file"
-    },
-    {
-      "path": "src/features/expense-rules/ruleset.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785316100810,
-      "type": "file"
-    },
-    {
-      "path": "src/features/expense-rules/engine.test.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785316303345,
-      "type": "file"
-    },
-    {
       "path": "src/features/expense-rules/rejection.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785316331023,
+      "accessCount": 2,
+      "lastAccessed": 1785807812010,
+      "type": "file"
+    },
+    {
+      "path": "supabase/schema.sql",
+      "accessCount": 2,
+      "lastAccessed": 1785809568027,
       "type": "file"
     },
     {
@@ -445,12 +447,6 @@
       "path": "supabase/005-vault-and-team.sql",
       "accessCount": 1,
       "lastAccessed": 1785327257586,
-      "type": "file"
-    },
-    {
-      "path": "src/features/startup-workspace/rules.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785336437013,
       "type": "file"
     },
     {

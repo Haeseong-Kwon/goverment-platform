@@ -44,6 +44,8 @@ export function devCreateTask(title: string, dueDate?: string): PersistedTask {
     status: "todo",
     task_type: "custom",
     is_hidden: false,
+    assignee_id: null,
+    comment_count: 0,
   };
   devUpdate((current) => ({ ...current, tasks: [...current.tasks, created] }));
   return created;
@@ -120,6 +122,16 @@ export function devRequestReview(input: { title: string; amount: number; expense
   return created.id;
 }
 
+/** 검토 착수. 프로덕션의 claim_settlement_submission과 같은 멱등 규칙을 따릅니다. */
+export function devClaimSubmission(submissionId: string) {
+  devUpdate((current) => ({
+    ...current,
+    submissions: current.submissions.map((submission) =>
+      submission.id === submissionId && submission.status === "validated" ? { ...submission, status: "in_review" as const } : submission,
+    ),
+  }));
+}
+
 export function devReviewDecision(submissionId: string, decision: "approved" | "rejected", payload: { reasonCodes: string[]; feedback: string }) {
   devUpdate((current) => ({
     ...current,
@@ -191,7 +203,79 @@ export function devInvite(): TeamInvite {
 }
 
 export function devConversionCodes(): ConversionCode[] {
-  return DEV_CONVERSION_CODES;
+  return [...devState().conversionCodes, ...DEV_CONVERSION_CODES];
+}
+
+const DEV_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+export function devIssueConversionCode(programId: string) {
+  const code = Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) => DEV_CODE_ALPHABET[byte % DEV_CODE_ALPHABET.length]).join("");
+  const issued: ConversionCode = {
+    code,
+    programId,
+    expiresAt: new Date(Date.now() + 90 * 86_400_000).toISOString(),
+    useCount: 0,
+    maxUses: 100,
+  };
+  devUpdate((current) => ({ ...current, conversionCodes: [issued, ...current.conversionCodes] }));
+  return code;
+}
+
+export function devTaskComments(taskId: string) {
+  return devState().comments.filter((comment) => comment.taskId === taskId);
+}
+
+export function devAddTaskComment(taskId: string, content: string) {
+  const created = {
+    id: nextId(),
+    taskId,
+    authorId: DEV_USER.id,
+    authorName: DEV_USER.fullName,
+    content,
+    createdAt: new Date().toISOString(),
+  };
+  devUpdate((current) => ({
+    ...current,
+    comments: [...current.comments, created],
+    tasks: current.tasks.map((task) => (task.id === taskId ? { ...task, comment_count: task.comment_count + 1 } : task)),
+  }));
+  return created;
+}
+
+export function devAssignTask(taskId: string, assigneeId: string | null) {
+  devUpdate((current) => ({
+    ...current,
+    tasks: current.tasks.map((task) => (task.id === taskId ? { ...task, assignee_id: assigneeId } : task)),
+  }));
+}
+
+/** 협약 배정액 예시. 집행 누계는 실제 제출 건에서 계산해 화면과 판정이 어긋나지 않게 합니다. */
+export function devBudgetLines() {
+  const allocations = devState().budgets;
+  const executed = devState()
+    .submissions.filter((submission) => submission.team === DEV_TEAM_NAME && submission.status !== "rejected")
+    .reduce<Record<string, number>>((acc, submission) => {
+      const category = submission.expense.category;
+      return { ...acc, [category]: (acc[category] ?? 0) + submission.amount };
+    }, {});
+  return Object.entries(allocations).map(([category, allocated]) => ({
+    category,
+    allocated,
+    executed: executed[category] ?? 0,
+    remaining: allocated - (executed[category] ?? 0),
+  }));
+}
+
+export function devSaveBudget(category: string, allocatedAmount: number) {
+  devUpdate((current) => ({ ...current, budgets: { ...current.budgets, [category]: Math.round(allocatedAmount) } }));
+}
+
+export function devProgramDeadlines(): Record<string, string | null> {
+  return Object.fromEntries(DEV_PROGRAM_DEADLINES.map((program) => [program.id, program.deadline]));
+}
+
+export function devSelectedPrograms() {
+  return DEV_PROGRAM_DEADLINES.map((program) => ({ id: program.id, name: program.name, deadline: program.deadline }));
 }
 
 export function devInstitutionName(): string | null {
@@ -208,6 +292,26 @@ export function devWaitlist(): string[] {
 
 export function devBizplanEvents(): string[] {
   return devState().bizplanEvents;
+}
+
+/** 점수 추이 UI를 개발 모드에서도 볼 수 있게 두 버전을 넣어 둡니다. */
+export function devBizplanHistory() {
+  return [
+    {
+      score: 48,
+      createdAt: "2026-06-02T02:00:00.000Z",
+      psst: { problem: { score: 10, evidence: "문제 정의가 일반론에 머무릅니다." }, solution: { score: 14, evidence: "핵심 기능은 제시했습니다." }, scale_up: { score: 12, evidence: "시장 규모 근거가 없습니다." }, team: { score: 12, evidence: "역할 분담만 기술했습니다." } },
+      swot: { strength: ["기술 역량"], weakness: ["시장 근거 부족"], opportunity: ["소상공인 디지털화"], threat: ["기존 솔루션"] },
+      actions: ["문제의 손실 규모를 수치로 제시하세요.", "초기 진입 세분 시장을 특정하세요."],
+    },
+    {
+      score: 62,
+      createdAt: "2026-07-14T02:00:00.000Z",
+      psst: { problem: { score: 17, evidence: "재고 손실률 12%를 인용했습니다." }, solution: { score: 17, evidence: "예측 알고리즘 구조를 설명했습니다." }, scale_up: { score: 14, evidence: "TAM은 있으나 SAM이 없습니다." }, team: { score: 14, evidence: "개발 경력을 명시했습니다." } },
+      swot: { strength: ["문제 근거 확보", "기술 역량"], weakness: ["세분 시장 미정의"], opportunity: ["소상공인 디지털화"], threat: ["기존 솔루션"] },
+      actions: ["SAM과 초기 목표 점유율을 추가하세요.", "경쟁 대비 차별점을 한 문단으로 정리하세요."],
+    },
+  ];
 }
 
 export function devTrackEvent(eventName: string) {

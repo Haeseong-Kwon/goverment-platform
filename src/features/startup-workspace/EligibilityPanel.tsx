@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CalendarPlus } from "lucide-react";
 import { evaluateEligibility, recommendPrograms, STARTUP_PROGRAMS } from "./rules";
+import { getDday } from "./logic";
 import type { EligibilityAnswers, EligibilityReport, EligibilityState } from "./domain";
 import { Button, ChoiceChip, Notice, Panel, StatusBadge, type StatusTone } from "./ui";
-import { getLatestEligibilityReport, saveEligibilityReport } from "@/lib/services/WorkspaceService";
+import { getLatestEligibilityReport, saveEligibilityReport, createWorkspaceTask } from "@/lib/services/WorkspaceService";
+import { getProgramDeadlines, getSelectedPrograms } from "@/lib/services/FounderWorkspaceService";
 import { toMessage } from "@/lib/errors";
 
 const stateTone: Record<EligibilityState, StatusTone> = { eligible: "green", review: "amber", ineligible: "red", pending: "slate" };
@@ -127,6 +130,42 @@ export function EligibilityPanel() {
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [restored, setRestored] = useState<string | null>(null);
+  const [programDeadlines, setProgramDeadlines] = useState<Record<string, string | null>>({});
+  const [addedPrograms, setAddedPrograms] = useState<string[]>([]);
+  const [addingProgram, setAddingProgram] = useState<string | null>(null);
+  const [calendarMessage, setCalendarMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+
+  // 추천 카드에 공고 시기를 띄우고, 이미 담은 사업은 다시 담지 않게 합니다.
+  useEffect(() => {
+    let mounted = true;
+    getProgramDeadlines()
+      .then((rows) => { if (mounted) setProgramDeadlines(rows); })
+      .catch(() => undefined);
+    getSelectedPrograms()
+      .then((rows) => { if (mounted) setAddedPrograms(rows.map((row) => row.id)); })
+      .catch(() => undefined);
+    return () => { mounted = false; };
+  }, []);
+
+  /** 추천 → 캘린더 → TODO로 이어지는 지점. 공고 마감일을 팀 할 일로 만들어 캘린더에 올립니다. */
+  const addToCalendar = useCallback(async (programId: string, programName: string) => {
+    const deadline = programDeadlines[programId];
+    if (!deadline) {
+      setCalendarMessage({ tone: "error", text: "이 사업은 아직 공고 일정이 등록되지 않았습니다." });
+      return;
+    }
+    setAddingProgram(programId);
+    setCalendarMessage(null);
+    try {
+      await createWorkspaceTask(`${programName} 신청 마감`, deadline);
+      setAddedPrograms((current) => (current.includes(programId) ? current : [...current, programId]));
+      setCalendarMessage({ tone: "success", text: `${programName} 마감(${deadline})을 캘린더와 팀 TODO에 추가했습니다.` });
+    } catch (reason) {
+      setCalendarMessage({ tone: "error", text: toMessage(reason, "캘린더에 추가하지 못했습니다.") });
+    } finally {
+      setAddingProgram(null);
+    }
+  }, [programDeadlines]);
 
   useEffect(() => {
     let mounted = true;
@@ -198,19 +237,42 @@ export function EligibilityPanel() {
 
         <Panel title="지원 가능한 다른 사업">
           <div className="grid gap-3 md:grid-cols-3">
-            {recommendations.map((item) => (
-              <article key={item.programId} className="rounded-2xl border border-[#E2E8F0] p-4">
-                <StatusBadge tone={stateTone[item.state]}>{stateLabel[item.state]}</StatusBadge>
-                <h4 className="mt-3 font-bold text-[#0F172A]">{item.programName}</h4>
-                <p className="mt-1 text-sm text-[#475569]">
-                  {item.report.blockers.length > 0 ? item.report.blockers[0] : item.report.unchecked.length > 0 ? `미확인 ${item.report.unchecked.length}건` : "즉시 결격 사유 없음"}
-                </p>
-                <Button variant="ghost" size="sm" onClick={() => setProgramId(item.programId)} className="mt-3 -ml-3 text-[#2563EB] hover:text-[#1D4ED8]">
-                  이 사업으로 진단
-                </Button>
-              </article>
-            ))}
+            {recommendations.map((item) => {
+              const deadline = programDeadlines[item.programId] ?? null;
+              const dday = getDday(deadline);
+              const added = addedPrograms.includes(item.programId);
+              return (
+                <article key={item.programId} className="rounded-2xl border border-[#E2E8F0] p-4">
+                  <StatusBadge tone={stateTone[item.state]}>{stateLabel[item.state]}</StatusBadge>
+                  <h4 className="mt-3 font-bold text-[#0F172A]">{item.programName}</h4>
+                  <p className="mt-1 text-sm text-[#475569]">
+                    {item.report.blockers.length > 0 ? item.report.blockers[0] : item.report.unchecked.length > 0 ? `미확인 ${item.report.unchecked.length}건` : "즉시 결격 사유 없음"}
+                  </p>
+                  {/* 공고 시기를 함께 보여야 "이 사업 지금 되나"까지 한 카드에서 판단됩니다. */}
+                  <p className="mt-2 text-xs font-semibold text-[#94A3B8]">
+                    {deadline ? `공고 마감 ${deadline}${dday !== null && dday >= 0 ? ` · D-${dday}` : dday !== null ? " · 마감 지남" : ""}` : "공고 일정 미정"}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => setProgramId(item.programId)} className="-ml-3 text-[#2563EB] hover:text-[#1D4ED8]">
+                      이 사업으로 진단
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={<CalendarPlus size={14} />}
+                      disabled={added || addingProgram === item.programId || !deadline}
+                      loading={addingProgram === item.programId}
+                      onClick={() => void addToCalendar(item.programId, item.programName)}
+                      className="text-[#475569] hover:text-[#0F172A]"
+                    >
+                      {added ? "캘린더에 있음" : "캘린더에 추가"}
+                    </Button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
+          {calendarMessage && <div className="mt-3"><Notice tone={calendarMessage.tone} onDismiss={() => setCalendarMessage(null)}>{calendarMessage.text}</Notice></div>}
         </Panel>
 
         <p className="text-[13px] font-medium text-[#94A3B8]">

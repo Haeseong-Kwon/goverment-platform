@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Check, Loader2 } from "lucide-react";
 import { getCurrentUser } from "@/lib/services/AuthService";
 import { completeOnboarding } from "@/lib/services/WorkspaceService";
+import { createTeamInvite, type TeamInvite } from "@/lib/services/FounderWorkspaceService";
 import { STARTUP_PROGRAMS } from "@/features/startup-workspace/rules";
 import { Button, ChoiceChip, Field, Notice, StatusBadge, inputClass } from "@/features/startup-workspace/ui";
 import { cn } from "@/lib/utils";
@@ -15,6 +16,7 @@ const STEPS = [
   { title: "대표자 정보", hint: "누가 팀을 이끄는지 확인합니다." },
   { title: "지원사업 선택", hint: "선택한 공고의 마감일로 준비 일정을 역산합니다." },
   { title: "아이템 소개", hint: "자격 진단과 계획서 진단의 기준이 됩니다." },
+  { title: "팀원 초대", hint: "초대 링크로 합류하면 진단 무료 횟수가 늘어납니다." },
 ] as const;
 
 const emptyForm = {
@@ -35,6 +37,9 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [invite, setInvite] = useState<TeamInvite | null>(null);
+  const [destination, setDestination] = useState("/founder");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -61,7 +66,8 @@ export default function OnboardingPage() {
   const stepValid =
     step === 0 ? Boolean(form.fullName.trim() && form.teamName.trim())
     : step === 1 ? true
-    : Boolean(form.itemSummary.trim());
+    : step === 2 ? Boolean(form.itemSummary.trim())
+    : true;
 
   const submit = async () => {
     setLoading(true);
@@ -74,10 +80,28 @@ export default function OnboardingPage() {
         itemSummary: form.itemSummary.trim(),
         desiredPositions: form.desiredPositions.split(",").map((item) => item.trim()).filter(Boolean),
       });
-      router.replace(result.redirect);
+      setDestination(result.redirect);
+      // 팀이 만들어진 뒤에야 초대 코드를 만들 수 있어 저장 다음 단계에 둡니다.
+      // 초대 링크 생성이 실패해도 온보딩은 이미 끝났으므로 진행을 막지 않습니다.
+      setInvite(await createTeamInvite().catch(() => null));
+      setStep(3);
     } catch (reason) {
       setError(toMessage(reason, "온보딩을 완료하지 못했습니다."));
+    } finally {
       setLoading(false);
+    }
+  };
+
+  const inviteUrl = invite && typeof window !== "undefined" ? `${window.location.origin}/signup?invite=${invite.code}` : null;
+
+  const copyInvite = async () => {
+    if (!inviteUrl) return;
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+      setError("복사에 실패했습니다. 링크를 직접 선택해 복사해 주세요.");
     }
   };
 
@@ -158,17 +182,43 @@ export default function OnboardingPage() {
             </div>
           )}
 
+          {step === 3 && (
+            <div className="mt-7 space-y-4">
+              <Notice tone="success">팀 설정을 저장했습니다. 선택한 사업의 마감 기준 할 일이 생성되었습니다.</Notice>
+              <p className="text-sm leading-6 text-[#475569]">
+                아래 링크를 팀원에게 보내면 같은 워크스페이스로 합류합니다.
+                합류할 때마다 사업계획서 AI 진단 무료 횟수가 1회씩 늘어납니다.
+              </p>
+              {inviteUrl ? (
+                <div className="rounded-2xl border border-[#E2E8F0] p-4">
+                  <p className="break-all font-mono text-sm text-[#2563EB]">{inviteUrl}</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => void copyInvite()}>링크 복사</Button>
+                    {copied && <StatusBadge tone="green">복사했습니다</StatusBadge>}
+                    <span className="text-xs text-[#94A3B8]">최대 {invite?.maxUses ?? 5}명 · {invite?.expiresAt.slice(0, 10)}까지</span>
+                  </div>
+                </div>
+              ) : (
+                <p className="rounded-xl bg-[#FFFBEB] p-4 text-sm font-semibold text-[#B45309]">
+                  초대 링크를 만들지 못했습니다. 팀 설정 화면에서 다시 발급할 수 있습니다.
+                </p>
+              )}
+            </div>
+          )}
+
           {error && <div className="mt-5"><Notice tone="error" onDismiss={() => setError(null)}>{error}</Notice></div>}
 
           <div className="mt-8 flex items-center justify-between gap-3">
-            <Button variant="secondary" size="lg" disabled={step === 0 || loading} onClick={() => setStep((current) => current - 1)}>
+            <Button variant="secondary" size="lg" disabled={step === 0 || step === 3 || loading} onClick={() => setStep((current) => current - 1)}>
               이전
             </Button>
             {!stepValid && <StatusBadge tone="amber">필수 항목을 입력해 주세요</StatusBadge>}
-            {step < STEPS.length - 1 ? (
+            {step < 2 ? (
               <Button size="lg" disabled={!stepValid} onClick={() => setStep((current) => current + 1)}>다음</Button>
-            ) : (
+            ) : step === 2 ? (
               <Button size="lg" loading={loading} disabled={!stepValid} onClick={() => void submit()}>설정 완료</Button>
+            ) : (
+              <Button size="lg" onClick={() => router.replace(destination)}>워크스페이스로 이동</Button>
             )}
           </div>
         </section>
