@@ -54,9 +54,38 @@ body {
   }
 }
 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .animate-in {
   animation: riseIn 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+/* 덮개처럼 위치가 이미 정해진 것은 떠오르지 않고 밝기만 바뀝니다. */
+.animate-fade {
+  animation: fadeIn 0.16s ease-out both;
+}
+
+/*
+  목록이 한 덩어리로 튀어나오면 시선이 어디에 붙을지 모릅니다.
+  카드마다 아주 짧게 순서를 주되, 6번째부터는 더 늦추지 않습니다.
+  기다림이 되는 순간 효과가 아니라 지연입니다.
+*/
+.animate-in-stagger > * {
+  animation: riseIn 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.animate-in-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.animate-in-stagger > *:nth-child(2) { animation-delay: 30ms; }
+.animate-in-stagger > *:nth-child(3) { animation-delay: 60ms; }
+.animate-in-stagger > *:nth-child(4) { animation-delay: 90ms; }
+.animate-in-stagger > *:nth-child(5) { animation-delay: 120ms; }
+.animate-in-stagger > *:nth-child(n + 6) { animation-delay: 150ms; }
 
 html {
   scroll-behavior: smooth;
@@ -112,7 +141,9 @@ body,
     transition-duration: 0.01ms !important;
   }
 
-  .animate-in {
+  .animate-in,
+  .animate-fade,
+  .animate-in-stagger > * {
     animation: none !important;
   }
 }

@@ -23,7 +23,7 @@ import type { ExpenseInput, ReasonCode } from "@/features/expense-rules/types";
 import { canManagerSeeReviewItem, getManagerDashboardSummary } from "./logic";
 import { STARTUP_PROGRAMS } from "./rules";
 import { RequireManagerSession, WorkspaceShell } from "./shell";
-import { Button, ChoiceChip, EmptyState, LinkButton, Notice, PageHeader, Panel, ProgressBar, Skeleton, StatusBadge, focusRing, inputClass } from "./ui";
+import { Button, ChoiceChip, EmptyState, LinkButton, Notice, PageHeader, Panel, ProgressBar, Skeleton, StatusBadge, focusRing, inputClass, listRow } from "./ui";
 import { cn } from "@/lib/utils";
 import { toMessage } from "@/lib/errors";
 
@@ -249,7 +249,7 @@ function ManagerDashboardBody() {
         </section>
       )}
 
-      <section className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <section className="animate-in-stagger mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {[
           { href: "/manager/review", title: "검토 큐", desc: `검증 통과 요청 ${summary.requestCount}건을 확인합니다.` },
           { href: "/manager/plan-review", title: "사업비 계획 검토", desc: "집행 계획을 붙여 넣어 비목·한도를 일괄 판정합니다." },
@@ -646,7 +646,7 @@ function ManagerFeatureBody({ feature }: { feature: ManagerFeature }) {
               <span>팀</span><span>최근 제출</span><span className="text-right">제출</span><span className="text-right">최근 상태</span>
             </div>
             {groupByTeam(rows).map((group) => (
-              <div key={group.team} className="grid min-h-14 grid-cols-[1.2fr_1.2fr_.6fr_.8fr] items-center gap-2 border-b border-[#F1F5F9] px-5 py-3 text-sm">
+              <div key={group.team} className={cn("grid min-h-14 grid-cols-[1.2fr_1.2fr_.6fr_.8fr] items-center gap-2 border-b border-[#F1F5F9] px-5 py-3 text-sm", listRow)}>
                 <div className="min-w-0">
                   <strong className="block truncate">{group.team}</strong>
                   <span className="text-xs text-[#94A3B8]">

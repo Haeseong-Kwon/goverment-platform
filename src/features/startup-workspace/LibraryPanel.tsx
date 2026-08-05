@@ -10,7 +10,7 @@ import {
   type LibraryDocument,
 } from "@/lib/services/LibraryService";
 import { captureLead, trackWorkspaceEvent } from "@/lib/services/WorkspaceService";
-import { Button, ChoiceChip, EmptyState, Field, Notice, Panel, Skeleton, StatusBadge, inputClass } from "./ui";
+import { Button, ChoiceChip, EmptyState, Field, Modal, Notice, Panel, Skeleton, StatusBadge, inputClass, liftCard } from "./ui";
 import { cn } from "@/lib/utils";
 import { toMessage } from "@/lib/errors";
 
@@ -78,9 +78,9 @@ export function LibraryPanel() {
       {visible.length === 0 ? (
         <EmptyState title="해당 분류의 자료가 없습니다" description="다른 분류를 선택해 보세요." />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="animate-in-stagger grid gap-4 md:grid-cols-2">
           {visible.map((document) => (
-            <div key={document.slug} className="flex flex-col rounded-2xl border border-[#E2E8F0] bg-white p-5">
+            <div key={document.slug} className={cn("flex flex-col rounded-2xl border border-[#E2E8F0] bg-white p-5", liftCard)}>
               <StatusBadge tone="slate">{LIBRARY_CATEGORIES.find((item) => item.id === document.category)?.label}</StatusBadge>
               <h3 className="mt-3 text-lg font-bold text-[#0F172A]">{document.title}</h3>
               <p className="mt-2 flex-1 text-sm leading-6 text-[#475569]">{document.description}</p>
@@ -118,12 +118,6 @@ function LibraryEmailPrompt({ document, onClose }: { document: LibraryDocument; 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
   const submit = async () => {
     setSaving(true);
     setError(null);
@@ -138,24 +132,24 @@ function LibraryEmailPrompt({ document, onClose }: { document: LibraryDocument; 
   };
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-[rgba(15,23,42,0.45)] p-4" onClick={onClose}>
-      <div className={cn("w-full max-w-md rounded-2xl bg-white p-6")} onClick={(event) => event.stopPropagation()}>
-        <h2 className="text-lg font-bold text-[#0F172A]">새 자료가 올라오면 알려드릴까요?</h2>
-        <p className="mt-2 text-sm leading-6 text-[#475569]">
-          방금 자료는 새 탭에서 열렸습니다. 주소를 남기시면 자료실이 갱신될 때 알려드립니다. 남기지 않아도 자료 이용에는 제한이 없습니다.
-        </p>
-        <div className="mt-4">
-          <Field label="이메일">
-            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" className={inputClass} />
-          </Field>
-        </div>
-        {error && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
-        <p className="mt-3 text-xs leading-5 text-[#94A3B8]">수신 동의 후 저장되며, 언제든 수신 거부할 수 있습니다.</p>
-        <div className="mt-5 flex justify-end gap-2">
+    <Modal
+      title="새 자료가 올라오면 알려드릴까요?"
+      description="방금 자료는 새 탭에서 열렸습니다. 주소를 남기시면 자료실이 갱신될 때 알려드립니다. 남기지 않아도 자료 이용에는 제한이 없습니다."
+      onClose={onClose}
+      footer={
+        <>
           <Button variant="secondary" onClick={onClose}>괜찮습니다</Button>
           <Button loading={saving} disabled={!email.trim()} onClick={() => void submit()}>등록</Button>
-        </div>
+        </>
+      }
+    >
+      <div className="mt-4">
+        <Field label="이메일">
+          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" className={inputClass} />
+        </Field>
       </div>
-    </div>
+      {error && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
+      <p className="mt-3 text-xs leading-5 text-[#94A3B8]">수신 동의 후 저장되며, 언제든 수신 거부할 수 있습니다.</p>
+    </Modal>
   );
 }

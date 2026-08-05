@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Mail } from "lucide-react";
 import { calculateInsurance, calculateTotalLaborCost, compareBusinessTax } from "./rules";
 import { captureLead } from "@/lib/services/WorkspaceService";
-import { Button, ChoiceChip, Field, Notice, Panel, StatusBadge, inputClass } from "./ui";
+import { Button, ChoiceChip, Field, Modal, Notice, Panel, StatusBadge, inputClass, interactive } from "./ui";
 import { cn } from "@/lib/utils";
 import { toMessage } from "@/lib/errors";
 
@@ -39,7 +39,10 @@ function Bars({ items }: { items: Array<{ label: string; value: number; max: num
             <span className="shrink-0 tabular-nums text-[#475569]">{won(item.value)}원</span>
           </div>
           <div className="h-2.5 rounded-full bg-[#EFF6FF]">
-            <div className="h-full rounded-full bg-[#2563EB]" style={{ width: `${Math.min(100, (item.value / Math.max(1, item.max)) * 100)}%` }} />
+            <div
+              className="h-full rounded-full bg-[#2563EB] transition-[width] duration-500 ease-out"
+              style={{ width: `${Math.min(100, (item.value / Math.max(1, item.max)) * 100)}%` }}
+            />
           </div>
         </div>
       ))}
@@ -146,7 +149,7 @@ function TaxCompareCalculator() {
           세부담 차이 <strong className="tabular-nums text-[#0F172A]">{won(result.difference)}원</strong>
         </p>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <div className={cn("rounded-xl border p-4", result.cheaper === "sole" ? "border-[#16A34A] bg-[#F0FDF4]" : "border-[#E2E8F0]")}>
+          <div className={cn("rounded-xl border p-4", interactive, result.cheaper === "sole" ? "border-[#16A34A] bg-[#F0FDF4]" : "border-[#E2E8F0]")}>
             <strong className="block text-sm font-bold text-[#475569]">개인사업자</strong>
             <span className="mt-1 block text-2xl font-bold tabular-nums text-[#0F172A]">{won(result.sole.total)}원</span>
             <dl className="mt-3 space-y-1 text-xs text-[#475569]">
@@ -154,7 +157,7 @@ function TaxCompareCalculator() {
               <div className="flex justify-between"><dt>지방소득세</dt><dd className="tabular-nums">{won(result.sole.localTax)}원</dd></div>
             </dl>
           </div>
-          <div className={cn("rounded-xl border p-4", result.cheaper === "corporate" ? "border-[#16A34A] bg-[#F0FDF4]" : "border-[#E2E8F0]")}>
+          <div className={cn("rounded-xl border p-4", interactive, result.cheaper === "corporate" ? "border-[#16A34A] bg-[#F0FDF4]" : "border-[#E2E8F0]")}>
             <strong className="block text-sm font-bold text-[#475569]">법인</strong>
             <span className="mt-1 block text-2xl font-bold tabular-nums text-[#0F172A]">{won(result.corporate.total)}원</span>
             <dl className="mt-3 space-y-1 text-xs text-[#475569]">
@@ -180,11 +183,7 @@ function EmailCaptureCard({ source }: { source: string }) {
   const [saving, setSaving] = useState(false);
   const [done, setDone] = useState(false);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  // Esc·바깥 클릭·스크롤 잠금은 Modal이 처리합니다.
 
   const submit = async () => {
     setSaving(true);
@@ -214,28 +213,26 @@ function EmailCaptureCard({ source }: { source: string }) {
         업데이트 소식 받기
       </Button>
       {open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-[rgba(15,23,42,0.45)] p-4" onClick={() => setOpen(false)}>
-          <div className="w-full max-w-md rounded-2xl bg-white p-6" onClick={(event) => event.stopPropagation()}>
-            <h2 className="text-lg font-bold text-[#0F172A]">업데이트 소식 받기</h2>
-            {/* 발송 수단이 붙기 전까지 "결과를 보내드립니다"라고 쓰지 않습니다. 지키지 못할 약속입니다. */}
-            <p className="mt-2 text-sm leading-6 text-[#475569]">
-              계산 결과는 이 화면에서 바로 확인하실 수 있습니다. 주소를 남기시면 새 계산기와 자료실이 추가될 때 알려드립니다.
-            </p>
-            <div className="mt-4">
-              <Field label="이메일">
-                <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" className={inputClass} />
-              </Field>
-            </div>
-            {error && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
-            <p className="mt-3 text-xs leading-5 text-[#94A3B8]">
-              수신 동의 후 저장되며, 언제든 수신 거부할 수 있습니다.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
+        <Modal
+          title="업데이트 소식 받기"
+          /* 발송 수단이 붙기 전까지 "결과를 보내드립니다"라고 쓰지 않습니다. 지키지 못할 약속입니다. */
+          description="계산 결과는 이 화면에서 바로 확인하실 수 있습니다. 주소를 남기시면 새 계산기와 자료실이 추가될 때 알려드립니다."
+          onClose={() => setOpen(false)}
+          footer={
+            <>
               <Button variant="secondary" onClick={() => setOpen(false)}>취소</Button>
               <Button loading={saving} disabled={!email.trim()} onClick={() => void submit()}>등록</Button>
-            </div>
+            </>
+          }
+        >
+          <div className="mt-4">
+            <Field label="이메일">
+              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" className={inputClass} />
+            </Field>
           </div>
-        </div>
+          {error && <div className="mt-3"><Notice tone="error">{error}</Notice></div>}
+          <p className="mt-3 text-xs leading-5 text-[#94A3B8]">수신 동의 후 저장되며, 언제든 수신 거부할 수 있습니다.</p>
+        </Modal>
       )}
     </>
   );

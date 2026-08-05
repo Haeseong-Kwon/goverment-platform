@@ -24,7 +24,7 @@ import {
 import { requestConsultation } from "@/lib/services/WorkspaceService";
 import { getDday, toKstDateKey } from "./logic";
 import { STARTUP_PROGRAMS } from "./rules";
-import { Button, ChoiceChip, EmptyState, Field, LinkButton, Notice, Panel, Skeleton, StatusBadge, inputClass, type StatusTone } from "./ui";
+import { Button, ChoiceChip, EmptyState, Field, LinkButton, Notice, Panel, Skeleton, StatusBadge, inputClass, selectableRow, type StatusTone } from "./ui";
 import { cn } from "@/lib/utils";
 import { toMessage } from "@/lib/errors";
 
@@ -594,7 +594,7 @@ export function IncorporationPanel() {
                 key={step.label}
                 type="button"
                 onClick={() => setDone((current) => (checked ? current.filter((item) => item !== index) : [...current, index]))}
-                className={cn("flex w-full items-start gap-3 rounded-xl border p-3 text-left", checked ? "border-[#16A34A] bg-[#F0FDF4]" : "border-[#E2E8F0]")}
+                className={cn("flex w-full items-start gap-3 rounded-xl border p-3 text-left", selectableRow, checked ? "border-[#16A34A] bg-[#F0FDF4]" : "border-[#E2E8F0]")}
               >
                 <span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold", checked ? "bg-[#16A34A] text-white" : "bg-[#F8FAFC] text-[#94A3B8]")}>{checked ? "✓" : index + 1}</span>
                 <span className="min-w-0">

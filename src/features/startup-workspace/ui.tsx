@@ -19,7 +19,23 @@ export const focusRing =
   "outline-none focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:ring-offset-2 focus-visible:ring-offset-white";
 
 /** 색·투명도·변형만 전환합니다. 레이아웃을 흔드는 속성은 넣지 않습니다. */
-const interactive = "transition-[color,background-color,border-color,opacity,transform,box-shadow] duration-150 ease-out";
+export const interactive = "transition-[color,background-color,border-color,opacity,transform,box-shadow] duration-150 ease-out";
+
+/**
+ * 눌러서 고르는 줄(체크리스트·서류 목록·증빙 선택).
+ * 커서가 올라갔을 때 "이건 누를 수 있다"가 보여야 합니다.
+ * 선택된 줄은 이미 색으로 상태를 말하므로 hover 색을 덧칠하지 않습니다.
+ */
+export const selectableRow = cn(interactive, focusRing, "hover:border-[#CBD5E1] hover:bg-[#F8FAFC] active:scale-[.995]");
+
+/** 표의 한 줄. 눌러서 무언가 열리는 줄에만 씁니다. 읽기 전용 줄에는 붙이지 않습니다. */
+export const listRow = cn(interactive, "hover:bg-[#F8FAFC]");
+
+/**
+ * 떠오르는 카드. 이동이 목적인 카드에만 씁니다.
+ * 아주 조금만 올립니다. 크게 움직이면 목록 전체가 출렁이는 것처럼 보입니다.
+ */
+export const liftCard = cn(interactive, "hover:-translate-y-0.5 hover:border-[#CBD5E1] hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)]");
 
 // ---------------------------------------------------------------- 버튼
 
@@ -253,7 +269,7 @@ export function Panel({
     <section
       className={cn(
         "rounded-2xl border border-[#E2E8F0] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]",
-        hoverable && cn(interactive, "hover:-translate-y-0.5 hover:border-[#CBD5E1] hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)]"),
+        hoverable && liftCard,
         className,
       )}
     >
@@ -351,6 +367,68 @@ export function Notice({
     </div>
   );
 }
+
+// ---------------------------------------------------------------- 대화상자
+
+/**
+ * 화면 위에 뜨는 대화상자.
+ *
+ * 화면마다 따로 만들면 Esc 처리와 바깥 클릭이 매번 빠집니다.
+ * 덮개는 밝기만, 본체는 짧게 떠오릅니다 — 위치가 정해진 것을 움직이면 산만합니다.
+ */
+export function Modal({
+  title,
+  description,
+  onClose,
+  footer,
+  children,
+}: {
+  title: string;
+  description?: string;
+  onClose: () => void;
+  footer?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKeyDown);
+    // 열리면 초점을 안으로 옮깁니다. 키보드 사용자가 뒤쪽 화면을 헤매지 않도록.
+    panelRef.current?.focus();
+    // 뒤쪽 본문이 같이 스크롤되면 대화상자가 떠 있는 느낌이 깨집니다.
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[80] grid place-items-center p-4">
+      <div className="animate-fade absolute inset-0 bg-[rgba(15,23,42,0.45)]" onClick={onClose} aria-hidden />
+      <div
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="animate-in relative w-full max-w-md rounded-2xl bg-white p-6 shadow-[0_24px_64px_rgba(15,23,42,0.24)] outline-none"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-lg font-bold text-[#0F172A]">{title}</h2>
+          <IconButton label="닫기" icon={<X size={15} />} onClick={onClose} className="-my-1 -mr-1" />
+        </div>
+        {description && <p className="mt-2 text-sm leading-6 text-[#475569]">{description}</p>}
+        {children}
+        {footer && <div className="mt-5 flex justify-end gap-2">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- 토스트
 
 /**
  * 잠깐 떴다 사라지는 알림. 저장·승인 같은 결과를 알리면서

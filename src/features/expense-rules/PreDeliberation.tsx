@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Printer } from "lucide-react";
 import { POLICY } from "./ruleset";
-import { Button, Field, Panel, StatusBadge, inputClass } from "../startup-workspace/ui";
+import { Button, Field, Panel, StatusBadge, inputClass, selectableRow } from "../startup-workspace/ui";
 import { cn } from "@/lib/utils";
 
 /** 사전심의 합본 구성 서류 6종. */
@@ -60,7 +60,7 @@ export function PreDeliberationPanel() {
                 key={document.id}
                 type="button"
                 onClick={() => toggle(document.id)}
-                className={cn("flex w-full items-center gap-3 rounded-xl border p-3 text-left", active ? "border-[#16A34A] bg-[#F0FDF4]" : "border-[#E2E8F0]")}
+                className={cn("flex w-full items-center gap-3 rounded-xl border p-3 text-left", selectableRow, active ? "border-[#16A34A] bg-[#F0FDF4]" : "border-[#E2E8F0]")}
               >
                 <span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-bold", active ? "bg-[#16A34A] text-white" : "bg-[#F8FAFC] text-[#94A3B8]")}>
                   {active ? "✓" : index + 1}

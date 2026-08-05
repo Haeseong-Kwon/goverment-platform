@@ -379,7 +379,7 @@ function TaskBoard() {
           action={<LinkButton href="/onboarding">지원사업 선택하기</LinkButton>}
         />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="animate-in-stagger grid gap-4 lg:grid-cols-3">
           {columns.map((column) => {
             const items = rows.filter((task) => task.status === column.status);
             return (
@@ -465,7 +465,7 @@ function FounderHome({ founder }: { founder: boolean }) {
           <Skeleton className="h-[132px] md:col-span-2" /><Skeleton className="h-[132px]" /><Skeleton className="h-[132px]" />
         </div>
       ) : (
-        <section className="grid gap-4 md:grid-cols-4">
+        <section className="animate-in-stagger grid gap-4 md:grid-cols-4">
           <div className={cn("rounded-2xl p-5 text-white md:col-span-2", overdue ? "bg-[#DC2626]" : "bg-[#2563EB]")}>
             {overdue ? (
               <>
