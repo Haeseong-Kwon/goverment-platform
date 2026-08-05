@@ -390,6 +390,12 @@
       "type": "file"
     },
     {
+      "path": "supabase/schema.sql",
+      "accessCount": 3,
+      "lastAccessed": 1785893645437,
+      "type": "file"
+    },
+    {
       "path": "src/features/expense-rules/planImport.test.ts",
       "accessCount": 2,
       "lastAccessed": 1785316549709,
@@ -423,12 +429,6 @@
       "path": "src/features/expense-rules/rejection.ts",
       "accessCount": 2,
       "lastAccessed": 1785807812010,
-      "type": "file"
-    },
-    {
-      "path": "supabase/schema.sql",
-      "accessCount": 2,
-      "lastAccessed": 1785809568027,
       "type": "file"
     },
     {

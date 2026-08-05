@@ -12,10 +12,12 @@
 -- ---------------------------------------------------------------- 1) 공고 마감일
 
 -- 사업마다 다른 날짜여야 "복수 지원사업의 마감 충돌"을 볼 수 있습니다.
--- 이미 운영 중인 값은 건드리지 않습니다.
-UPDATE programs SET deadline = DATE '2026-03-31' WHERE id = 'yechang-2026' AND deadline IS NULL;
-UPDATE programs SET deadline = DATE '2026-04-24' WHERE id = 'chocang-2026' AND deadline IS NULL;
-UPDATE programs SET deadline = DATE '2026-05-29' WHERE id = 'modu-2026'    AND deadline IS NULL;
+-- 고정 날짜를 박으면 적용 시점이 지나는 순간 전부 과거가 되어, 신규 가입자가
+-- "이미 지남"으로 빨갛게 찬 보드를 받습니다. 적용 시점 기준 미래로 잡습니다.
+-- 실제 공고가 나오면 이 값을 공고문 마감일로 갱신하세요.
+UPDATE programs SET deadline = (current_date + INTERVAL '30 days')::date WHERE id = 'yechang-2026' AND deadline IS NULL;
+UPDATE programs SET deadline = (current_date + INTERVAL '55 days')::date WHERE id = 'chocang-2026' AND deadline IS NULL;
+UPDATE programs SET deadline = (current_date + INTERVAL '80 days')::date WHERE id = 'modu-2026'    AND deadline IS NULL;
 
 -- 새로 추가되는 사업이 마감일 없이 들어와 조용히 빈 보드를 만드는 일을 막습니다.
 UPDATE programs SET deadline = (current_date + INTERVAL '60 days')::date WHERE deadline IS NULL;

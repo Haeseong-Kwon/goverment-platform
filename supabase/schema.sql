@@ -230,12 +230,17 @@ CREATE TABLE IF NOT EXISTS programs (
 
 -- deadline은 반드시 채웁니다. NULL이면 자동 마일스톤도 캘린더 공고 마감도 만들어지지 않아
 -- 사용자는 지원사업을 골라도 빈 보드를 받게 됩니다(실패 표시도 없습니다).
--- 사업마다 다른 날짜여야 "복수 지원사업의 마감 충돌"을 한 화면에서 볼 수 있습니다.
+--
+-- 날짜를 고정값으로 박지 않습니다. 실제 공고가 뜨기 전까지 쓰는 임시값인데,
+-- 고정하면 적용 시점이 지나는 순간 전부 과거가 되어 신규 가입자가 "이미 지남"으로
+-- 빨갛게 찬 보드를 받습니다. 적용 시점 기준 미래로 잡고, 사업마다 간격을 벌려
+-- "복수 지원사업의 마감 충돌"을 한 화면에서 볼 수 있게 합니다.
+-- 실제 공고가 나오면 이 값을 공고문 마감일로 갱신하세요.
 INSERT INTO programs (id, name, year, ruleset_version, requires_no_business_registration, blocks_prior_benefit, deadline)
 VALUES
-  ('yechang-2026', '2026 예비창업패키지', 2026, 'v1', true, true, DATE '2026-03-31'),
-  ('chocang-2026', '2026 초기창업패키지', 2026, 'v1', false, true, DATE '2026-04-24'),
-  ('modu-2026', '2026 모두의창업', 2026, 'v1', false, false, DATE '2026-05-29')
+  ('yechang-2026', '2026 예비창업패키지', 2026, 'v1', true, true, (current_date + INTERVAL '30 days')::date),
+  ('chocang-2026', '2026 초기창업패키지', 2026, 'v1', false, true, (current_date + INTERVAL '55 days')::date),
+  ('modu-2026', '2026 모두의창업', 2026, 'v1', false, false, (current_date + INTERVAL '80 days')::date)
 ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS prep_teams (
