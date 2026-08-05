@@ -105,7 +105,7 @@ describe("canManagerSeeReviewItem", () => {
 describe("getSidebarItems", () => {
   it("returns role-specific fixed navigation", () => {
     expect(getSidebarItems("pre_founder")).toContain("AI 진단");
-    expect(getSidebarItems("founder")).toEqual(["홈", "정산 사전검증", "사전심의 합본", "상태 트래커", "서류 보관함", "팀 설정"]);
+    expect(getSidebarItems("founder")).toEqual(["홈", "정산 사전검증", "사전심의 합본", "상태 트래커", "계산기", "무료 자료실", "서류 보관함", "팀 설정"]);
     expect(getSidebarItems("manager")).toEqual(["대시보드", "검토 큐", "사업비 계획 검토", "팀 관리", "리포트", "설정"]);
   });
 });
@@ -117,14 +117,26 @@ describe("getSidebarLinks", () => {
       "/founder/todo",
       "/founder/calendar",
       "/founder/diagnostics",
-      // 계산기·자료실은 로그인 없이 쓰는 공개 도구라 /founder 밖에 있습니다.
-      "/calculator",
-      "/library",
+      // 사이드바 링크는 전부 워크스페이스 안에 머물러야 합니다.
+      // 계산기·자료실에는 비로그인 공개판(/calculator·/library)이 따로 있지만, 메뉴는 안쪽을 가리킵니다.
+      "/founder/calculator",
+      "/founder/library",
       "/founder/incorporation",
       "/founder/connect",
       "/founder/vault",
       "/founder/settings",
     ]);
+  });
+
+  it("어떤 메뉴도 워크스페이스 밖으로 나가지 않는다", () => {
+    // 사이드바를 눌렀는데 워크스페이스 껍데기(사이드바·헤더)가 사라지면 길을 잃습니다.
+    // 공개 도구를 만들면서 계산기·자료실 링크가 /calculator·/library로 새어 나간 적이 있습니다.
+    const sectionRoot = { pre_founder: "/founder", founder: "/workspace", manager: "/manager" } as const;
+    for (const [role, root] of Object.entries(sectionRoot)) {
+      for (const link of getSidebarLinks(role as keyof typeof sectionRoot)) {
+        expect(link.href, `${role} 메뉴 "${link.label}"가 ${root} 밖을 가리킵니다`).toMatch(new RegExp(`^${root}(/|$)`));
+      }
+    }
   });
 
   it("separates manager navigation from founder navigation", () => {
@@ -144,6 +156,9 @@ describe("getSidebarLinks", () => {
       "/workspace/precheck",
       "/workspace/predeliberation",
       "/workspace/tracker",
+      // 협약 팀도 같은 도구를 쓰되, 링크는 /workspace 안쪽을 가리켜야 합니다.
+      "/workspace/calculator",
+      "/workspace/library",
       "/workspace/vault",
       "/workspace/settings",
     ]);

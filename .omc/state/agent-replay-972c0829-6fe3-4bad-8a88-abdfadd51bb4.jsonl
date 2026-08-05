@@ -72,3 +72,4 @@
 {"t":0,"agent":"a7bb59c","agent_type":"general-purpose","event":"agent_stop","success":true,"duration_ms":189987}
 {"t":0,"agent":"ad4ec49","agent_type":"unknown","event":"agent_stop","success":true}
 {"t":0,"agent":"a785622","agent_type":"unknown","event":"agent_stop","success":true}
+{"t":0,"agent":"a7e1312","agent_type":"unknown","event":"agent_stop","success":true}

@@ -175,8 +175,8 @@
     },
     {
       "path": "src/features/startup-workspace/components.tsx",
-      "accessCount": 67,
-      "lastAccessed": 1785811402595,
+      "accessCount": 68,
+      "lastAccessed": 1785889346807,
       "type": "file"
     },
     {
@@ -216,9 +216,15 @@
       "type": "file"
     },
     {
+      "path": "src/features/startup-workspace/logic.test.ts",
+      "accessCount": 17,
+      "lastAccessed": 1785889969775,
+      "type": "file"
+    },
+    {
       "path": "src/features/startup-workspace/logic.ts",
-      "accessCount": 14,
-      "lastAccessed": 1785810802292,
+      "accessCount": 16,
+      "lastAccessed": 1785889922361,
       "type": "file"
     },
     {
@@ -237,12 +243,6 @@
       "path": "src/features/expense-rules/engine.ts",
       "accessCount": 12,
       "lastAccessed": 1785811339895,
-      "type": "file"
-    },
-    {
-      "path": "src/features/startup-workspace/logic.test.ts",
-      "accessCount": 11,
-      "lastAccessed": 1785811073876,
       "type": "file"
     },
     {

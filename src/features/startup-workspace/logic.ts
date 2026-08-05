@@ -6,8 +6,9 @@ const sidebarByRole: Record<StartupRole, Array<{ label: string; href: string }>>
     { label: "팀 TODO", href: "/founder/todo" },
     { label: "마감 캘린더", href: "/founder/calendar" },
     { label: "AI 진단", href: "/founder/diagnostics" },
-    { label: "계산기", href: "/calculator" },
-    { label: "무료 자료실", href: "/library" },
+    // 워크스페이스 안에서 열립니다. 같은 도구의 비로그인 공개판은 /calculator·/library입니다.
+    { label: "계산기", href: "/founder/calculator" },
+    { label: "무료 자료실", href: "/founder/library" },
     { label: "법인 설립", href: "/founder/incorporation" },
     { label: "커넥트", href: "/founder/connect" },
     { label: "서류 보관함", href: "/founder/vault" },
@@ -18,6 +19,9 @@ const sidebarByRole: Record<StartupRole, Array<{ label: string; href: string }>>
     { label: "정산 사전검증", href: "/workspace/precheck" },
     { label: "사전심의 합본", href: "/workspace/predeliberation" },
     { label: "상태 트래커", href: "/workspace/tracker" },
+    // 협약 팀도 채용·외주 단가를 계산하고 표준 양식을 씁니다. 준비 단계와 같은 도구를 씁니다.
+    { label: "계산기", href: "/workspace/calculator" },
+    { label: "무료 자료실", href: "/workspace/library" },
     { label: "서류 보관함", href: "/workspace/vault" },
     { label: "팀 설정", href: "/workspace/settings" },
   ],

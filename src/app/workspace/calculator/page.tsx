@@ -7,6 +7,6 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function FounderCalculatorPage() {
-  return <FounderFeaturePage feature="calculator" />;
+export default function WorkspaceCalculatorPage() {
+  return <FounderFeaturePage feature="calculator" founder />;
 }

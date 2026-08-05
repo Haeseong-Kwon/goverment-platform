@@ -32,6 +32,8 @@ import {
 import { Button, EmptyState, Field, LinkButton, Notice, PageHeader, Panel, Skeleton, StatusBadge, focusRing, inputClass, textareaClass, useToast } from "./ui";
 import { ExpenseValidator } from "@/features/expense-rules/ExpenseValidator";
 import { BudgetPanel } from "@/features/expense-rules/BudgetPanel";
+import { CalculatorSuite } from "./CalculatorSuite";
+import { LibraryPanel } from "./LibraryPanel";
 import { PreDeliberationPanel } from "@/features/expense-rules/PreDeliberation";
 import { cn } from "@/lib/utils";
 import { toMessage } from "@/lib/errors";
@@ -571,12 +573,14 @@ function FounderCore({ founder = false }: { founder?: boolean }) {
   );
 }
 
-type FounderFeature = "todo" | "calendar" | "diagnostics" | "incorporation" | "connect" | "vault" | "settings" | "precheck" | "predeliberation" | "tracker";
+type FounderFeature = "todo" | "calendar" | "diagnostics" | "calculator" | "library" | "incorporation" | "connect" | "vault" | "settings" | "precheck" | "predeliberation" | "tracker";
 
 const FEATURE_META: Record<FounderFeature, { title: string; description: string }> = {
   todo: { title: "팀 TODO", description: "공고 마감 기준 자동 마일스톤과 직접 추가한 할 일을 함께 관리합니다." },
   calendar: { title: "마감 캘린더", description: "선택한 지원사업 공고 마감과 팀 할 일 마감을 한 달력에서 확인합니다." },
   diagnostics: { title: "AI 진단", description: "자격 요건을 룰셋으로 판정하고 사업계획서를 PSST 구조로 점검합니다." },
+  calculator: { title: "계산기", description: "4대보험 실부담액, 인건비 총부담액, 법인 vs 개인 세금을 비교합니다. 모든 결과는 참고용 추정입니다." },
+  library: { title: "무료 자료실", description: "출처가 표기된 창업 표준 양식을 받습니다. 계약서·IR·인사·정부지원 행정 서식." },
   incorporation: { title: "법인 설립", description: "사업별 설립 타이밍과 절차를 확인합니다. 순서를 잘못 밟으면 자격이 사라집니다." },
   connect: { title: "커넥트", description: "팀빌딩·멘토·투자 연결 대기 신청을 접수합니다." },
   vault: { title: "서류 보관함", description: "같은 이름으로 올리면 버전이 쌓이고, 열람은 만료형 보안 링크로만 이뤄집니다." },
@@ -595,6 +599,8 @@ function FounderFeaturePage({ feature, founder = false }: { feature: FounderFeat
         {feature === "todo" && <TaskBoard />}
         {feature === "calendar" && <CalendarPanel />}
         {feature === "diagnostics" && <div className="space-y-6"><EligibilityPanel /><BizPlanCard /></div>}
+        {feature === "calculator" && <CalculatorSuite />}
+        {feature === "library" && <LibraryPanel />}
         {feature === "incorporation" && <IncorporationPanel />}
         {feature === "connect" && <ConnectCard />}
         {feature === "vault" && <VaultPanel />}
