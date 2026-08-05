@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Info, Sparkles } from "lucide-react";
+import { AlertTriangle, BrainCircuit, CheckCircle2, Info } from "lucide-react";
 import { validateExpense } from "./engine";
 import { CATEGORIES, CATEGORY_LIST, FRAUD_WARNING, ITEM_FLAG_LABELS, REASON_CODES } from "./ruleset";
 import type { ExpenseCategory, ExpenseInput, ExpenseVerdict, ItemFlag, Severity } from "./types";
@@ -90,7 +90,7 @@ export function VerdictReport({ verdict, ai, onRequestReview, requestPending = f
       {ai && (
         <Panel title="AI 비목 판정">
           <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge tone="blue"><Sparkles size={12} className="mr-1 inline" />AI 추정</StatusBadge>
+            <StatusBadge tone="blue"><BrainCircuit size={12} className="mr-1 inline" />AI 추정</StatusBadge>
             <StatusBadge tone={ai.categoryMismatch ? "red" : "green"}>
               {ai.categoryMismatch ? `비목 오분류 의심 → ${CATEGORIES[ai.category].name}` : `비목 일치 · ${CATEGORIES[ai.category].name}`}
             </StatusBadge>
@@ -422,7 +422,7 @@ export function ExpenseValidator({
           </div>
         </Panel>
 
-        <Panel title="집행 내역 설명" action={<StatusBadge tone="blue"><Sparkles size={12} className="mr-1 inline" />AI 비목 판정</StatusBadge>}>
+        <Panel title="집행 내역 설명" action={<StatusBadge tone="blue"><BrainCircuit size={12} className="mr-1 inline" />AI 비목 판정</StatusBadge>}>
           <textarea
             value={description}
             onChange={(event) => setDescription(event.target.value)}

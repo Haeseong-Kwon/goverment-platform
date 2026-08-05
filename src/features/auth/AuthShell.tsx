@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarCheck, ShieldCheck, Sparkles } from "lucide-react";
+import { CalendarCheck, Radar, ShieldCheck } from "lucide-react";
 import { inputClass } from "@/features/startup-workspace/ui";
 import { cn } from "@/lib/utils";
 
 const HIGHLIGHTS = [
-  { Icon: Sparkles, title: "AI 자격·계획서 진단", desc: "근거 조항과 함께 판정 결과를 돌려줍니다." },
+  { Icon: Radar, title: "AI 자격·계획서 진단", desc: "근거 조항과 함께 판정 결과를 돌려줍니다." },
   { Icon: CalendarCheck, title: "마감 기준 자동 TODO", desc: "공고 마감일에서 준비 마일스톤을 역산합니다." },
   { Icon: ShieldCheck, title: "정산 사전검증", desc: "반려될 항목을 제출 전에 먼저 찾습니다." },
 ];

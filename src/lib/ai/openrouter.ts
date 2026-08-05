@@ -43,7 +43,7 @@ export function parseDiagnosis(content: string): BizplanDiagnosis {
  * 스캔 이미지 PDF는 글자가 없어 아무것도 나오지 않습니다.
  */
 export type BizplanInput =
-  | { kind: "text"; text: string }
+  | { kind: "text"; text: string; sourceName?: string }
   | { kind: "file"; fileName: string; base64: string };
 
 const USER_INSTRUCTION =

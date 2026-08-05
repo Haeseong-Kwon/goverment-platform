@@ -20,7 +20,7 @@ import {
   Menu,
   Settings,
   ShieldCheck,
-  Sparkles,
+  Radar,
   Users,
   X,
 } from "lucide-react";
@@ -37,7 +37,7 @@ const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
   "/founder": LayoutDashboard,
   "/founder/todo": ListChecks,
   "/founder/calendar": CalendarDays,
-  "/founder/diagnostics": Sparkles,
+  "/founder/diagnostics": Radar,
   "/founder/calculator": Calculator,
   "/founder/incorporation": Building2,
   "/founder/connect": Users,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runBizplanDiagnosis, type BizplanInput } from "@/lib/ai/openrouter";
+import { extractDocxText } from "@/lib/ai/docx";
 import { createUserClient, DEV_BYPASS_SERVER } from "@/lib/supabaseAdmin";
 import { getDiagnosisCreditBalance } from "@/features/startup-workspace/rules";
 
@@ -54,11 +55,33 @@ async function readInput(request: NextRequest): Promise<BizplanInput | { error: 
     if (file.size > MAX_FILE_BYTES) {
       return { error: `파일이 너무 큽니다. 최대 4MB까지 첨부할 수 있습니다. (현재 ${(file.size / 1024 / 1024).toFixed(1)}MB)`, status: 413 };
     }
-    if (!file.type.includes("pdf") && !file.name.toLowerCase().endsWith(".pdf")) {
-      return { error: "PDF 파일만 첨부할 수 있습니다. 한글·워드 문서는 PDF로 내보낸 뒤 올려 주세요.", status: 415 };
+    const name = file.name.toLowerCase();
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    // 워드는 우리가 직접 글자를 뽑아 본문 경로로 넘깁니다(OpenRouter의 파서는 PDF만 봅니다).
+    if (name.endsWith(".docx") || file.type.includes("wordprocessingml")) {
+      let text: string;
+      try {
+        text = extractDocxText(buffer);
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : "워드 파일을 읽지 못했습니다.", status: 422 };
+      }
+      if (text.trim().length < 100) {
+        return { error: "워드 파일에서 읽어낸 본문이 100자 미만입니다. 표·이미지로만 이뤄진 문서는 글자를 뽑을 수 없습니다.", status: 422 };
+      }
+      return { kind: "text", text: text.slice(0, 40_000), sourceName: file.name };
     }
-    const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
-    return { kind: "file", fileName: file.name, base64 };
+
+    if (name.endsWith(".doc")) {
+      return { error: "구형 워드(.doc)는 지원하지 않습니다. .docx 또는 PDF로 저장한 뒤 올려 주세요.", status: 415 };
+    }
+    if (name.endsWith(".hwp") || name.endsWith(".hwpx")) {
+      return { error: "한글 파일(HWP)은 지원하지 않습니다. PDF로 내보낸 뒤 올려 주세요.", status: 415 };
+    }
+    if (!file.type.includes("pdf") && !name.endsWith(".pdf")) {
+      return { error: "PDF 또는 워드(.docx) 파일만 첨부할 수 있습니다.", status: 415 };
+    }
+    return { kind: "file", fileName: file.name, base64: buffer.toString("base64") };
   }
 
   let body: { text?: unknown };
@@ -123,7 +146,7 @@ export async function POST(request: NextRequest) {
           report_type: "bizplan",
           state: totalScore >= 70 ? "eligible" : totalScore >= 40 ? "review" : "ineligible",
           score: totalScore,
-          result: { ...report, model, totalScore, source: input.kind === "file" ? input.fileName : "본문 붙여넣기" },
+          result: { ...report, model, totalScore, source: input.kind === "file" ? input.fileName : input.sourceName ?? "본문 붙여넣기" },
           created_by: userId,
         });
         if (saveError) console.error("bizplan 진단 저장 실패:", saveError.message);

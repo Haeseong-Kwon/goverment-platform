@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle, Check, EyeOff, FileText, Loader2, MessageSquare, Plus, Rocket, ScanSearch,
-  ShieldAlert, Sparkles, Target, TrendingUp, Upload, Users, Wrench, X, Zap,
+  BrainCircuit, Radar, ShieldAlert, Target, TrendingUp, Upload, Users, Wrench, X, Zap,
   type LucideIcon,
 } from "lucide-react";
 import { getDday, getFounderDashboardSummary, getMonthlyDiagnosticUsage } from "./logic";
@@ -458,7 +458,7 @@ function FounderHome({ founder }: { founder: boolean }) {
         title={founder ? "협약 수행 홈" : "창업자 준비 워크스페이스"}
         description={founder ? "집행 건을 사전검증하고 검토 상태를 추적합니다." : "지원사업 준비 흐름을 팀 TODO와 진단 리포트로 관리합니다."}
         action={
-          <LinkButton href={founder ? "/workspace/precheck" : "/founder/diagnostics"} icon={<Sparkles size={15} />}>
+          <LinkButton href={founder ? "/workspace/precheck" : "/founder/diagnostics"} icon={<Radar size={15} />}>
             {founder ? "정산 사전검증" : "AI 진단 시작"}
           </LinkButton>
         }
@@ -927,8 +927,15 @@ function AiDiagnosisRunner({ exhausted, onComplete }: { exhausted: boolean; onCo
   const pick = (next: File | null) => {
     setError(null);
     if (!next) { setFile(null); return; }
-    if (!next.type.includes("pdf") && !next.name.toLowerCase().endsWith(".pdf")) {
-      setError("PDF 파일만 첨부할 수 있습니다. 한글(HWP)·워드 문서는 PDF로 내보낸 뒤 올려 주세요.");
+    const name = next.name.toLowerCase();
+    if (!name.endsWith(".pdf") && !name.endsWith(".docx")) {
+      setError(
+        name.endsWith(".hwp") || name.endsWith(".hwpx")
+          ? "한글 파일(HWP)은 지원하지 않습니다. PDF로 내보낸 뒤 올려 주세요."
+          : name.endsWith(".doc")
+            ? "구형 워드(.doc)는 지원하지 않습니다. .docx 또는 PDF로 저장한 뒤 올려 주세요."
+            : "PDF 또는 워드(.docx) 파일만 첨부할 수 있습니다.",
+      );
       return;
     }
     if (next.size > MAX_ATTACH_BYTES) {
@@ -982,7 +989,7 @@ function AiDiagnosisRunner({ exhausted, onComplete }: { exhausted: boolean; onCo
           <input
             ref={fileRef}
             type="file"
-            accept="application/pdf,.pdf"
+            accept="application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             className="hidden"
             onChange={(event) => pick(event.target.files?.[0] ?? null)}
           />
@@ -1002,11 +1009,11 @@ function AiDiagnosisRunner({ exhausted, onComplete }: { exhausted: boolean; onCo
             )}
           >
             <Upload size={20} className={cn(interactive, dragging ? "text-[#2563EB]" : "text-[#94A3B8]")} />
-            <span className="text-sm font-bold text-[#0F172A]">사업계획서 PDF 첨부</span>
+            <span className="text-sm font-bold text-[#0F172A]">사업계획서 첨부</span>
             <span className="text-xs leading-5 text-[#94A3B8]">
-              끌어다 놓거나 눌러서 선택 · 최대 4MB
+              PDF · 워드(.docx) · 최대 4MB — 끌어다 놓거나 눌러서 선택
               <br />
-              글자를 선택할 수 있는 PDF여야 합니다. 스캔 이미지는 내용을 읽지 못합니다.
+              글자를 선택할 수 있는 문서여야 합니다. 스캔 이미지는 내용을 읽지 못합니다.
             </span>
           </button>
 
@@ -1027,7 +1034,7 @@ function AiDiagnosisRunner({ exhausted, onComplete }: { exhausted: boolean; onCo
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button loading={loading} disabled={!canRun || exhausted} icon={<Sparkles size={15} />} onClick={() => void run()}>
+        <Button loading={loading} disabled={!canRun || exhausted} icon={<Radar size={15} />} onClick={() => void run()}>
           {loading ? "분석 중…" : "AI 진단 실행"}
         </Button>
         {file ? (
@@ -1045,14 +1052,14 @@ function AiDiagnosisRunner({ exhausted, onComplete }: { exhausted: boolean; onCo
         <div className="animate-in space-y-5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <ScoreGauge score={result.totalScore ?? Object.values(result.psst ?? {}).reduce((sum, item) => sum + item.score, 0)} />
-            <StatusBadge tone="blue"><Sparkles size={12} className="mr-1 inline" />{result.model} · AI 추정</StatusBadge>
+            <StatusBadge tone="blue"><BrainCircuit size={12} className="mr-1 inline" />{result.model} · AI 추정</StatusBadge>
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2">
             {Object.entries(result.psst ?? {}).map(([key, item]) => {
               const meta = PSST_META[key];
               const tone = scoreTone(item.score, 25);
-              const Icon = meta?.Icon ?? Sparkles;
+              const Icon = meta?.Icon ?? BrainCircuit;
               return (
                 <div key={key} className="rounded-xl border border-[#E2E8F0] bg-white p-4">
                   <div className="flex items-center gap-2">
@@ -1089,7 +1096,7 @@ function AiDiagnosisRunner({ exhausted, onComplete }: { exhausted: boolean; onCo
           <div className="grid gap-2 sm:grid-cols-2">
             {Object.entries(result.swot ?? {}).map(([key, items]) => {
               const meta = SWOT_META[key];
-              const Icon = meta?.Icon ?? Sparkles;
+              const Icon = meta?.Icon ?? BrainCircuit;
               return (
                 <div key={key} className={cn("rounded-xl border p-4", meta?.ring ?? "border-[#E2E8F0] bg-white")}>
                   <strong className={cn("flex items-center gap-1.5 text-sm", meta?.tone)}>
