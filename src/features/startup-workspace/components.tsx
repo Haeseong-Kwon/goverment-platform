@@ -1,8 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Check, EyeOff, Loader2, MessageSquare, Plus, Sparkles, TrendingUp } from "lucide-react";
+import {
+  AlertTriangle, Check, EyeOff, FileText, Loader2, MessageSquare, Plus, Rocket, ScanSearch,
+  ShieldAlert, Sparkles, Target, TrendingUp, Upload, Users, Wrench, X, Zap,
+  type LucideIcon,
+} from "lucide-react";
 import { getDday, getFounderDashboardSummary, getMonthlyDiagnosticUsage } from "./logic";
 import { EligibilityPanel } from "./EligibilityPanel";
 import { CalendarPanel, IncorporationPanel, TeamSettingsPanel, TrackerPanel, VaultPanel } from "./FounderPanels";
@@ -29,7 +33,7 @@ import {
   type PersistedTask,
   type TaskComment,
 } from "@/lib/services/WorkspaceService";
-import { Button, EmptyState, Field, LinkButton, Notice, PageHeader, Panel, Skeleton, StatusBadge, focusRing, inputClass, textareaClass, useToast } from "./ui";
+import { Button, EmptyState, Field, IconButton, LinkButton, Notice, PageHeader, Panel, ProgressBar, Skeleton, StatusBadge, focusRing, inputClass, interactive, textareaClass, useToast } from "./ui";
 import { ExpenseValidator } from "@/features/expense-rules/ExpenseValidator";
 import { BudgetPanel } from "@/features/expense-rules/BudgetPanel";
 import { CalculatorSuite } from "./CalculatorSuite";
@@ -820,37 +824,136 @@ function BizPlanCard() {
 
 const MIN_BIZPLAN_LENGTH = 100;
 
-/** 모델이 돌려주는 키는 영문입니다. 화면에는 공고문에서 쓰는 PSST 용어로 보여 줍니다. */
-const PSST_LABELS: Record<string, string> = {
-  problem: "문제인식 (Problem)",
-  solution: "실현가능성 (Solution)",
-  scale_up: "성장전략 (Scale-up)",
-  team: "팀구성 (Team)",
+/**
+ * 모델이 돌려주는 키는 영문입니다. 화면에는 공고문에서 쓰는 PSST 용어로 보여 줍니다.
+ *
+ * 아이콘은 장식이 아니라 축을 구분하는 표식입니다. 같은 모양을 반복하면 네 칸이
+ * 한 덩어리로 보여서, 축마다 성격이 드러나는 그림을 각각 붙였습니다.
+ */
+const PSST_META: Record<string, { label: string; short: string; Icon: LucideIcon }> = {
+  problem: { label: "문제인식", short: "Problem", Icon: ScanSearch },
+  solution: { label: "실현가능성", short: "Solution", Icon: Wrench },
+  scale_up: { label: "성장전략", short: "Scale-up", Icon: Rocket },
+  team: { label: "팀구성", short: "Team", Icon: Users },
 };
 
-const SWOT_LABELS: Record<string, string> = {
-  strength: "강점",
-  weakness: "약점",
-  opportunity: "기회",
-  threat: "위협",
+const SWOT_META: Record<string, { label: string; Icon: LucideIcon; tone: string; ring: string }> = {
+  strength: { label: "강점", Icon: Zap, tone: "text-[#16A34A]", ring: "border-[#BBF7D0] bg-[#F0FDF4]" },
+  weakness: { label: "약점", Icon: AlertTriangle, tone: "text-[#B45309]", ring: "border-[#FDE68A] bg-[#FFFBEB]" },
+  opportunity: { label: "기회", Icon: Target, tone: "text-[#2563EB]", ring: "border-[#BFDBFE] bg-[#EFF6FF]" },
+  threat: { label: "위협", Icon: ShieldAlert, tone: "text-[#DC2626]", ring: "border-[#FECACA] bg-[#FEF2F2]" },
 };
+
+/** 점수 구간별 색. 숫자만 보여 주면 78점이 좋은 건지 알 수 없습니다. */
+const scoreTone = (score: number, max = 100) => {
+  const ratio = score / max;
+  if (ratio >= 0.7) return { stroke: "#16A34A", text: "text-[#16A34A]", label: "양호" };
+  if (ratio >= 0.4) return { stroke: "#B45309", text: "text-[#B45309]", label: "보완 필요" };
+  return { stroke: "#DC2626", text: "text-[#DC2626]", label: "미흡" };
+};
+
+/** 합격 준비도 게이지. 원 하나로 "지금 어디쯤인지"를 먼저 보여 줍니다. */
+function ScoreGauge({ score }: { score: number }) {
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius;
+  const tone = scoreTone(score);
+  return (
+    <div className="flex items-center gap-4">
+      <div className="relative h-[104px] w-[104px] shrink-0">
+        <svg viewBox="0 0 104 104" className="h-full w-full -rotate-90" aria-hidden>
+          <circle cx="52" cy="52" r={radius} fill="none" stroke="#E2E8F0" strokeWidth="8" />
+          <circle
+            cx="52"
+            cy="52"
+            r={radius}
+            fill="none"
+            stroke={tone.stroke}
+            strokeWidth="8"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - Math.max(0, Math.min(100, score)) / 100)}
+            className="transition-[stroke-dashoffset] duration-700 ease-out"
+          />
+        </svg>
+        <div className="absolute inset-0 grid place-items-center">
+          <span className={cn("text-2xl font-bold tabular-nums", tone.text)}>{score}</span>
+          <span className="text-[11px] font-semibold text-[#94A3B8]">/ 100</span>
+        </div>
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm font-bold text-[#0F172A]">합격 준비도</p>
+        <p className={cn("mt-1 text-sm font-semibold", tone.text)}>{tone.label}</p>
+        <p className="mt-1 text-xs leading-5 text-[#94A3B8]">PSST 4축 합산 · AI 추정</p>
+      </div>
+    </div>
+  );
+}
+
+const MAX_ATTACH_BYTES = 4 * 1024 * 1024;
+
+/** 첨부 파일 한 줄. 무엇을 올렸고 어떻게 빼는지가 보여야 합니다. */
+function AttachedFile({ file, onClear, disabled }: { file: File; onClear: () => void; disabled: boolean }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-[#BFDBFE] bg-[#EFF6FF] p-3">
+      <FileText size={18} className="shrink-0 text-[#2563EB]" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-bold text-[#0F172A]">{file.name}</p>
+        <p className="text-xs text-[#475569]">{(file.size / 1024 / 1024).toFixed(2)}MB · 이 파일로 진단합니다</p>
+      </div>
+      <IconButton label="첨부 취소" icon={<X size={15} />} onClick={onClear} disabled={disabled} />
+    </div>
+  );
+}
 
 function AiDiagnosisRunner({ exhausted, onComplete }: { exhausted: boolean; onComplete: () => void }) {
   const [text, setText] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ psst: Record<string, { score: number; evidence: string }>; actions: string[]; swot: Record<string, string[]>; model: string } | null>(null);
-  const short = text.trim().length < MIN_BIZPLAN_LENGTH;
+  const [result, setResult] = useState<{
+    psst: Record<string, { score: number; evidence: string }>;
+    actions: string[];
+    swot: Record<string, string[]>;
+    model: string;
+    totalScore?: number;
+  } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const shortText = text.trim().length < MIN_BIZPLAN_LENGTH;
+  // 파일이 있으면 파일이 이깁니다. 둘 다 보내면 무엇을 진단했는지 설명할 수 없습니다.
+  const canRun = file !== null || !shortText;
+
+  const pick = (next: File | null) => {
+    setError(null);
+    if (!next) { setFile(null); return; }
+    if (!next.type.includes("pdf") && !next.name.toLowerCase().endsWith(".pdf")) {
+      setError("PDF 파일만 첨부할 수 있습니다. 한글(HWP)·워드 문서는 PDF로 내보낸 뒤 올려 주세요.");
+      return;
+    }
+    if (next.size > MAX_ATTACH_BYTES) {
+      setError(`파일이 너무 큽니다. 최대 4MB까지 첨부할 수 있습니다. (현재 ${(next.size / 1024 / 1024).toFixed(1)}MB)`);
+      return;
+    }
+    setFile(next);
+  };
 
   const run = async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/workspace/diagnoses/bizplan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
-        body: JSON.stringify({ text }),
-      });
+      const headers = await getAuthHeaders();
+      const response = file
+        ? await fetch("/api/workspace/diagnoses/bizplan", {
+            method: "POST",
+            headers,
+            body: (() => { const form = new FormData(); form.append("file", file); return form; })(),
+          })
+        : await fetch("/api/workspace/diagnoses/bizplan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...headers },
+            body: JSON.stringify({ text }),
+          });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "AI 진단에 실패했습니다.");
       setResult(data);
@@ -871,51 +974,131 @@ function AiDiagnosisRunner({ exhausted, onComplete }: { exhausted: boolean; onCo
           이번 달 무료 진단을 모두 사용했습니다. 다음 달 1일에 초기화됩니다. 그동안은 자격 진단과 보관함을 활용해 주세요.
         </Notice>
       )}
-      <textarea
-        value={text}
-        disabled={exhausted}
-        onChange={(event) => setText(event.target.value)}
-        className={cn(textareaClass, "min-h-40")}
-        placeholder="사업계획서 본문을 붙여 넣으세요. 문제인식·실현가능성·성장전략·팀구성 순서로 넣으면 판정이 정확해집니다."
-      />
+
+      {file ? (
+        <AttachedFile file={file} onClear={() => pick(null)} disabled={loading} />
+      ) : (
+        <>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            className="hidden"
+            onChange={(event) => pick(event.target.files?.[0] ?? null)}
+          />
+          <button
+            type="button"
+            disabled={exhausted || loading}
+            onClick={() => fileRef.current?.click()}
+            onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => { event.preventDefault(); setDragging(false); pick(event.dataTransfer.files?.[0] ?? null); }}
+            className={cn(
+              "flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed px-5 py-7 text-center",
+              interactive,
+              focusRing,
+              "disabled:pointer-events-none disabled:opacity-40",
+              dragging ? "border-[#2563EB] bg-[#EFF6FF]" : "border-[#CBD5E1] hover:border-[#2563EB] hover:bg-[#F8FAFC]",
+            )}
+          >
+            <Upload size={20} className={cn(interactive, dragging ? "text-[#2563EB]" : "text-[#94A3B8]")} />
+            <span className="text-sm font-bold text-[#0F172A]">사업계획서 PDF 첨부</span>
+            <span className="text-xs leading-5 text-[#94A3B8]">
+              끌어다 놓거나 눌러서 선택 · 최대 4MB
+              <br />
+              글자를 선택할 수 있는 PDF여야 합니다. 스캔 이미지는 내용을 읽지 못합니다.
+            </span>
+          </button>
+
+          <div className="flex items-center gap-3">
+            <span className="h-px flex-1 bg-[#E2E8F0]" />
+            <span className="text-xs font-semibold text-[#94A3B8]">또는 본문 붙여넣기</span>
+            <span className="h-px flex-1 bg-[#E2E8F0]" />
+          </div>
+
+          <textarea
+            value={text}
+            disabled={exhausted}
+            onChange={(event) => setText(event.target.value)}
+            className={cn(textareaClass, "min-h-40")}
+            placeholder="사업계획서 본문을 붙여 넣으세요. 문제인식·실현가능성·성장전략·팀구성 순서로 넣으면 판정이 정확해집니다."
+          />
+        </>
+      )}
+
       <div className="flex flex-wrap items-center gap-3">
-        <Button loading={loading} disabled={short || exhausted} onClick={() => void run()}>
+        <Button loading={loading} disabled={!canRun || exhausted} icon={<Sparkles size={15} />} onClick={() => void run()}>
           {loading ? "분석 중…" : "AI 진단 실행"}
         </Button>
-        <span className={cn("text-xs font-semibold tabular-nums", short ? "text-[#B45309]" : "text-[#94A3B8]")}>
-          {text.trim().length.toLocaleString()}자 {short ? `· ${MIN_BIZPLAN_LENGTH}자 이상 필요` : "· 실행 가능"}
-        </span>
+        {file ? (
+          <span className="text-xs font-semibold text-[#94A3B8]">첨부 파일로 진단합니다</span>
+        ) : (
+          <span className={cn("text-xs font-semibold tabular-nums", shortText ? "text-[#B45309]" : "text-[#94A3B8]")}>
+            {text.trim().length.toLocaleString()}자 {shortText ? `· ${MIN_BIZPLAN_LENGTH}자 이상 필요` : "· 실행 가능"}
+          </span>
+        )}
       </div>
 
       {error && <Notice tone="error" onDismiss={() => setError(null)}>{error}</Notice>}
 
       {result && (
-        <div className="space-y-4 rounded-xl bg-[#F8FAFC] p-4">
-          <StatusBadge tone="blue">{result.model} · AI 추정</StatusBadge>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {Object.entries(result.psst ?? {}).map(([key, item]) => (
-              <div key={key} className="rounded-lg bg-white p-3">
-                <strong className="text-sm">{PSST_LABELS[key] ?? key} {item.score}/25</strong>
-                <div className="mt-2 h-2 rounded-full bg-[#EFF6FF]">
-                  <div className="h-full rounded-full bg-[#2563EB]" style={{ width: `${Math.min(100, (item.score / 25) * 100)}%` }} />
-                </div>
-                <p className="mt-2 text-sm leading-6 text-[#475569]">{item.evidence}</p>
-              </div>
-            ))}
+        <div className="animate-in space-y-5 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <ScoreGauge score={result.totalScore ?? Object.values(result.psst ?? {}).reduce((sum, item) => sum + item.score, 0)} />
+            <StatusBadge tone="blue"><Sparkles size={12} className="mr-1 inline" />{result.model} · AI 추정</StatusBadge>
           </div>
-          <div>
-            <strong className="text-sm">보완 액션</strong>
-            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm leading-6 text-[#475569]">
-              {(result.actions ?? []).map((action) => <li key={action}>{action}</li>)}
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            {Object.entries(result.psst ?? {}).map(([key, item]) => {
+              const meta = PSST_META[key];
+              const tone = scoreTone(item.score, 25);
+              const Icon = meta?.Icon ?? Sparkles;
+              return (
+                <div key={key} className="rounded-xl border border-[#E2E8F0] bg-white p-4">
+                  <div className="flex items-center gap-2">
+                    <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#F1F5F9]", tone.text)}>
+                      <Icon size={16} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <strong className="block truncate text-sm text-[#0F172A]">{meta?.label ?? key}</strong>
+                      <span className="text-[11px] font-semibold text-[#94A3B8]">{meta?.short}</span>
+                    </div>
+                    <strong className={cn("shrink-0 text-sm tabular-nums", tone.text)}>{item.score}/25</strong>
+                  </div>
+                  <ProgressBar className="mt-3" value={(item.score / 25) * 100} tone={item.score >= 17 ? "green" : item.score >= 10 ? "amber" : "red"} />
+                  <p className="mt-2 text-sm leading-6 text-[#475569]">{item.evidence}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="rounded-xl border border-[#E2E8F0] bg-white p-4">
+            <strong className="flex items-center gap-1.5 text-sm text-[#0F172A]">
+              <Wrench size={15} className="text-[#2563EB]" />보완 액션
+            </strong>
+            <ul className="mt-2 space-y-1.5">
+              {(result.actions ?? []).map((action) => (
+                <li key={action} className="flex gap-2 text-sm leading-6 text-[#475569]">
+                  <Check size={15} className="mt-1 shrink-0 text-[#2563EB]" />
+                  <span className="min-w-0">{action}</span>
+                </li>
+              ))}
             </ul>
           </div>
+
           <div className="grid gap-2 sm:grid-cols-2">
-            {Object.entries(result.swot ?? {}).map(([key, items]) => (
-              <div key={key} className="rounded-lg bg-white p-3 text-sm">
-                <strong>{SWOT_LABELS[key] ?? key}</strong>
-                <p className="mt-1 leading-6 text-[#475569]">{items.join(" · ")}</p>
-              </div>
-            ))}
+            {Object.entries(result.swot ?? {}).map(([key, items]) => {
+              const meta = SWOT_META[key];
+              const Icon = meta?.Icon ?? Sparkles;
+              return (
+                <div key={key} className={cn("rounded-xl border p-4", meta?.ring ?? "border-[#E2E8F0] bg-white")}>
+                  <strong className={cn("flex items-center gap-1.5 text-sm", meta?.tone)}>
+                    <Icon size={15} />{meta?.label ?? key}
+                  </strong>
+                  <p className="mt-1.5 text-sm leading-6 text-[#475569]">{items.join(" · ") || "—"}</p>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

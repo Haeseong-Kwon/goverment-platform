@@ -35,9 +35,44 @@ export function parseDiagnosis(content: string): BizplanDiagnosis {
   return result as unknown as BizplanDiagnosis;
 }
 
-export async function runBizplanDiagnosis(text: string) {
+/**
+ * 진단 입력. 본문을 붙여 넣거나 파일을 첨부합니다.
+ *
+ * PDF는 OpenRouter의 file-parser 플러그인이 텍스트를 뽑아 모델에 넘깁니다.
+ * 별도 PDF 라이브러리를 넣지 않는 이유이고, 대신 텍스트 레이어가 있는 PDF만 읽힙니다.
+ * 스캔 이미지 PDF는 글자가 없어 아무것도 나오지 않습니다.
+ */
+export type BizplanInput =
+  | { kind: "text"; text: string }
+  | { kind: "file"; fileName: string; base64: string };
+
+const USER_INSTRUCTION =
+  "첨부한 사업계획서를 PSST 기준으로 진단하세요. 표지·목차·양식 안내문은 근거로 쓰지 말고 본문만 봅니다.";
+
+function buildMessages(input: BizplanInput) {
+  if (input.kind === "text") {
+    return { messages: [{ role: "user", content: input.text }], plugins: undefined };
+  }
+  return {
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: USER_INSTRUCTION },
+          { type: "file", file: { filename: input.fileName, file_data: `data:application/pdf;base64,${input.base64}` } },
+        ],
+      },
+    ],
+    // pdf-text는 문서에 이미 있는 텍스트 레이어만 읽습니다(무료). OCR은 돌리지 않습니다.
+    plugins: [{ id: "file-parser", pdf: { engine: "pdf-text" } }],
+  };
+}
+
+export async function runBizplanDiagnosis(input: BizplanInput | string) {
+  const normalized: BizplanInput = typeof input === "string" ? { kind: "text", text: input } : input;
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY가 설정되지 않았습니다.");
+  const request = buildMessages(normalized);
   const sectionSchema = { type: "object", additionalProperties: false, required: ["score", "evidence"], properties: { score: { type: "number", minimum: 0, maximum: 25 }, evidence: { type: "string" } } };
   const schema = {
     type: "object", additionalProperties: false, required: ["psst", "actions", "swot"],
@@ -52,10 +87,8 @@ export async function runBizplanDiagnosis(text: string) {
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000", "X-OpenRouter-Title": "StartUp Pilot" },
     body: JSON.stringify({
       model: process.env.OPENROUTER_MODEL ?? "z-ai/glm-5.2", temperature: 0.2, stream: false,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: text },
-      ],
+      messages: [{ role: "system", content: SYSTEM_PROMPT }, ...request.messages],
+      ...(request.plugins ? { plugins: request.plugins } : {}),
       response_format: { type: "json_schema", json_schema: { name: "bizplan_diagnosis", strict: true, schema } },
     }),
     signal: AbortSignal.timeout(TIMEOUT_MS),

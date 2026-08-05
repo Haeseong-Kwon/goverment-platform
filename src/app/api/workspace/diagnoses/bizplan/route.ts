@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runBizplanDiagnosis } from "@/lib/ai/openrouter";
+import { runBizplanDiagnosis, type BizplanInput } from "@/lib/ai/openrouter";
 import { createUserClient, DEV_BYPASS_SERVER } from "@/lib/supabaseAdmin";
 import { getDiagnosisCreditBalance } from "@/features/startup-workspace/rules";
 
@@ -36,15 +36,46 @@ async function countAcceptedInvites(client: NonNullable<ReturnType<typeof create
 }
 
 /**
+ * 첨부 파일 상한. 서버리스 요청 본문 한도(대략 4.5MB) 안에 들어와야 합니다.
+ * 텍스트 레이어가 있는 사업계획서 PDF는 보통 이 안에 들어옵니다.
+ * 이보다 큰 파일은 대개 스캔 이미지라 어차피 글자를 뽑을 수 없습니다.
+ */
+const MAX_FILE_BYTES = 4 * 1024 * 1024;
+
+/** 본문 또는 첨부 파일 중 하나를 진단 입력으로 만듭니다. */
+async function readInput(request: NextRequest): Promise<BizplanInput | { error: string; status: number }> {
+  const contentType = request.headers.get("content-type") ?? "";
+
+  if (contentType.includes("multipart/form-data")) {
+    const form = await request.formData().catch(() => null);
+    const file = form?.get("file");
+    if (!(file instanceof File)) return { error: "첨부한 파일을 읽지 못했습니다.", status: 400 };
+    if (file.size === 0) return { error: "빈 파일입니다.", status: 400 };
+    if (file.size > MAX_FILE_BYTES) {
+      return { error: `파일이 너무 큽니다. 최대 4MB까지 첨부할 수 있습니다. (현재 ${(file.size / 1024 / 1024).toFixed(1)}MB)`, status: 413 };
+    }
+    if (!file.type.includes("pdf") && !file.name.toLowerCase().endsWith(".pdf")) {
+      return { error: "PDF 파일만 첨부할 수 있습니다. 한글·워드 문서는 PDF로 내보낸 뒤 올려 주세요.", status: 415 };
+    }
+    const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+    return { kind: "file", fileName: file.name, base64 };
+  }
+
+  let body: { text?: unknown };
+  try { body = await request.json(); } catch { return { error: "JSON 요청 본문이 필요합니다.", status: 400 }; }
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  if (text.length < 100) return { error: "진단할 사업계획서 본문을 100자 이상 입력해 주세요.", status: 400 };
+  if (text.length > 40_000) return { error: "사업계획서 본문은 40,000자 이하로 입력해 주세요.", status: 413 };
+  return { kind: "text", text };
+}
+
+/**
  * 무료 횟수는 서버에서 셉니다. 브라우저에서만 막으면 요청을 직접 보내는 것으로
  * 얼마든지 넘길 수 있고, 호출 한 번마다 실제 비용이 나갑니다.
  */
 export async function POST(request: NextRequest) {
-  let body: { text?: unknown };
-  try { body = await request.json(); } catch { return NextResponse.json({ error: "JSON 요청 본문이 필요합니다." }, { status: 400 }); }
-  const text = typeof body.text === "string" ? body.text.trim() : "";
-  if (text.length < 100) return NextResponse.json({ error: "진단할 사업계획서 본문을 100자 이상 입력해 주세요." }, { status: 400 });
-  if (text.length > 40_000) return NextResponse.json({ error: "사업계획서 본문은 40,000자 이하로 입력해 주세요." }, { status: 413 });
+  const input = await readInput(request);
+  if ("error" in input) return NextResponse.json({ error: input.error }, { status: input.status });
 
   const client = DEV_BYPASS_SERVER ? null : createUserClient(request);
   let userId: string | null = null;
@@ -75,7 +106,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { report, model, generationId } = await runBizplanDiagnosis(text);
+    const { report, model, generationId } = await runBizplanDiagnosis(input);
     // PSST 4축이 각 0~25점이므로 합이 그대로 100점 만점 "합격 준비도 점수"가 됩니다.
     const totalScore = Object.values(report.psst).reduce((sum, section) => sum + section.score, 0);
 
@@ -92,7 +123,7 @@ export async function POST(request: NextRequest) {
           report_type: "bizplan",
           state: totalScore >= 70 ? "eligible" : totalScore >= 40 ? "review" : "ineligible",
           score: totalScore,
-          result: { ...report, model, totalScore },
+          result: { ...report, model, totalScore, source: input.kind === "file" ? input.fileName : "본문 붙여넣기" },
           created_by: userId,
         });
         if (saveError) console.error("bizplan 진단 저장 실패:", saveError.message);
