@@ -175,8 +175,8 @@
     },
     {
       "path": "src/lib/services/WorkspaceService.ts",
-      "accessCount": 77,
-      "lastAccessed": 1786327998428,
+      "accessCount": 80,
+      "lastAccessed": 1786333234172,
       "type": "file"
     },
     {
@@ -193,8 +193,8 @@
     },
     {
       "path": "src/lib/services/FounderWorkspaceService.ts",
-      "accessCount": 30,
-      "lastAccessed": 1786328040972,
+      "accessCount": 33,
+      "lastAccessed": 1786333244631,
       "type": "file"
     },
     {

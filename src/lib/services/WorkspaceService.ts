@@ -646,23 +646,48 @@ export interface TaskComment {
   createdAt: string;
 }
 
+/**
+ * 사용자 id → 표시 이름.
+ *
+ * `profiles`를 붙여 읽을 수 없어서 따로 조회합니다. prep_team_members·task_comments는
+ * auth.users를 가리키는데 profiles.id에는 외래키가 없어, PostgREST가 두 테이블 사이를
+ * 이어 줄 경로를 찾지 못합니다("Could not find a relationship ... in the schema cache").
+ *
+ * 이름이 필요한 화면이 여럿(팀 설정·코멘트)이라 조회를 여기 한곳에 둡니다.
+ * 실패해도 던지지 않습니다. 이름은 장식이고, 그 때문에 팀 명단이나 코멘트가
+ * 통째로 사라지면 손해가 더 큽니다.
+ */
+export async function getProfileNames(userIds: string[]): Promise<Map<string, string>> {
+  const unique = Array.from(new Set(userIds.filter(Boolean)));
+  if (unique.length === 0) return new Map();
+  const { data } = await requireClient().from("profiles").select("id, full_name").in("id", unique);
+  return new Map(
+    (data ?? []).flatMap((row) => {
+      const fullName = row.full_name as string | null;
+      return fullName ? [[row.id as string, fullName] as const] : [];
+    }),
+  );
+}
+
 /** 할 일에 달린 코멘트. 실시간 채팅 대신 업무 객체에 붙는 스레드입니다. */
 export async function getTaskComments(taskId: string): Promise<TaskComment[]> {
   if (DEV_BYPASS) return (await import("../dev/devServices")).devTaskComments(taskId);
   const client = requireClient();
-  // 작성자 이름은 화면에서 팀원 목록과 맞춥니다.
-  // author_id는 auth.users를 가리켜 profiles와의 조인을 PostgREST가 추론하지 못합니다.
   const { data, error } = await client
     .from("task_comments")
     .select("id, task_id, author_id, content, created_at")
     .eq("task_id", taskId)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((row) => ({
+
+  const rows = data ?? [];
+  // 이름은 한 번에 모아 옵니다. 코멘트마다 조회하면 스레드 하나에 왕복이 그만큼 늘어납니다.
+  const nameById = await getProfileNames(rows.map((row) => row.author_id as string));
+  return rows.map((row) => ({
     id: row.id as string,
     taskId: row.task_id as string,
     authorId: row.author_id as string,
-    authorName: "팀원",
+    authorName: nameById.get(row.author_id as string) ?? "이름 미등록",
     content: row.content as string,
     createdAt: row.created_at as string,
   }));
@@ -680,11 +705,13 @@ export async function addTaskComment(taskId: string, content: string): Promise<T
     .select("id, task_id, author_id, content, created_at")
     .single();
   if (error) throw error;
+  // "나"로 두면 새로고침한 순간 실제 이름으로 바뀌어, 방금 쓴 코멘트가 남의 것처럼 보입니다.
+  const nameById = await getProfileNames([userId]);
   return {
     id: data.id as string,
     taskId: data.task_id as string,
     authorId: data.author_id as string,
-    authorName: "나",
+    authorName: nameById.get(userId) ?? "이름 미등록",
     content: data.content as string,
     createdAt: data.created_at as string,
   };

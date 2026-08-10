@@ -1,5 +1,5 @@
 import { supabase } from "../supabase";
-import { getCurrentPrepTeamId, requireClient } from "./WorkspaceService";
+import { getCurrentPrepTeamId, getProfileNames, requireClient } from "./WorkspaceService";
 import { DEV_BYPASS } from "../dev/devMode";
 import { getAuthUserId, invalidateTeamCache, requireAuthUserId } from "./sessionCache";
 
@@ -128,21 +128,24 @@ export async function getTeamMembers(): Promise<TeamMember[]> {
   if (DEV_BYPASS) return (await import("../dev/devServices")).devMembers();
   const client = requireClient();
   const teamId = await getCurrentPrepTeamId();
+  // `profiles(full_name)`으로 붙여 읽을 수 없습니다. prep_team_members.user_id는 auth.users를
+  // 가리키고 profiles.id에는 외래키가 아예 없어서, 두 테이블 사이에 PostgREST가 따라갈 경로가
+  // 없습니다("Could not find a relationship ... in the schema cache"). 이름은 따로 조회합니다.
   const { data, error } = await client
     .from("prep_team_members")
-    .select("user_id, member_role, joined_at, profiles(full_name)")
+    .select("user_id, member_role, joined_at")
     .eq("prep_team_id", teamId)
     .order("joined_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((row) => {
-    const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
-    return {
-      userId: row.user_id as string,
-      role: row.member_role as "leader" | "member",
-      fullName: (profile as { full_name?: string } | null)?.full_name ?? "이름 미등록",
-      joinedAt: row.joined_at as string,
-    };
-  });
+
+  const rows = data ?? [];
+  const nameById = await getProfileNames(rows.map((row) => row.user_id as string));
+  return rows.map((row) => ({
+    userId: row.user_id as string,
+    role: row.member_role as "leader" | "member",
+    fullName: nameById.get(row.user_id as string) ?? "이름 미등록",
+    joinedAt: row.joined_at as string,
+  }));
 }
 
 export interface TeamInvite {
