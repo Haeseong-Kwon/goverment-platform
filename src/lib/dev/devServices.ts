@@ -446,3 +446,17 @@ export function devSearchAnnouncements(
 export function devAnnouncementsSyncedAt(): string {
   return new Date().toISOString();
 }
+
+export function devAnnouncementDeadlines(from: string, to: string) {
+  return devAnnouncements()
+    .filter((item) => item.end_date && item.end_date >= from && item.end_date <= to)
+    .map((item) => ({
+      sn: item.pbanc_sn,
+      title: item.title,
+      endDate: item.end_date as string,
+      supportField: item.support_field,
+      regions: item.regions,
+      detailUrl: item.detail_url ?? "",
+    }))
+    .sort((a, b) => a.endDate.localeCompare(b.endDate));
+}

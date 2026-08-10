@@ -118,6 +118,7 @@ describe("getSidebarLinks", () => {
       "/founder/todo",
       "/founder/calendar",
       "/founder/diagnostics",
+      "/founder/plan-check",
       // 사이드바 링크는 전부 워크스페이스 안에 머물러야 합니다.
       // 계산기·자료실에는 비로그인 공개판(/calculator·/library)이 따로 있지만, 메뉴는 안쪽을 가리킵니다.
       "/founder/calculator",

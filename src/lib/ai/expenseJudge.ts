@@ -1,5 +1,5 @@
-import { CATEGORIES, ITEM_FLAG_LABELS, RULESET_VERSION } from "@/features/expense-rules/ruleset";
 import type { ExpenseCategory, ItemFlag } from "@/features/expense-rules/types";
+import { CATEGORY_IDS, FLAG_IDS, buildFlagBrief, buildRulesetBrief } from "./rulesetBrief";
 
 export interface ExpenseJudgement {
   /** AI가 자연어 설명에서 읽어낸 비목 */
@@ -11,9 +11,6 @@ export interface ExpenseJudgement {
   /** 창업자가 바로 고칠 수 있는 문장 */
   correction: string;
 }
-
-const CATEGORY_IDS = Object.keys(CATEGORIES) as ExpenseCategory[];
-const FLAG_IDS = Object.keys(ITEM_FLAG_LABELS) as ItemFlag[];
 
 /** 사전검증은 규정 엔진만으로도 답이 나옵니다. AI가 늦으면 기다리지 않고 넘어갑니다. */
 const TIMEOUT_MS = 45_000;
@@ -31,13 +28,6 @@ export function parseJudgement(content: string): ExpenseJudgement {
   if (typeof result.rationale !== "string" || typeof result.correction !== "string") throw new Error("AI 응답 형식이 올바르지 않습니다.");
   const itemFlags = Array.isArray(result.itemFlags) ? result.itemFlags.filter((flag): flag is ItemFlag => FLAG_IDS.includes(flag as ItemFlag)) : [];
   return { category: result.category, itemFlags, rationale: result.rationale, correction: result.correction };
-}
-
-function buildRulesetBrief() {
-  return CATEGORY_IDS.map((id) => {
-    const spec = CATEGORIES[id];
-    return `- ${id}(${spec.name}): ${spec.definition}\n  유의: ${spec.cautions.slice(0, 4).join(" / ")}`;
-  }).join("\n");
 }
 
 const SYSTEM_PROMPT = [
@@ -82,7 +72,7 @@ export async function judgeExpenseDescription(description: string): Promise<Expe
       temperature: 0,
       stream: false,
       messages: [
-        { role: "system", content: `${SYSTEM_PROMPT}\n\n[RULESET ${RULESET_VERSION}]\n${buildRulesetBrief()}\n\n[FLAGS]\n${FLAG_IDS.map((flag) => `${flag}: ${ITEM_FLAG_LABELS[flag]}`).join("\n")}` },
+        { role: "system", content: `${SYSTEM_PROMPT}\n\n${buildRulesetBrief()}\n\n${buildFlagBrief()}` },
         { role: "user", content: description },
       ],
       response_format: { type: "json_schema", json_schema: { name: "expense_judgement", strict: true, schema } },

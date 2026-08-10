@@ -286,6 +286,21 @@ function checkEquipment(input: ExpenseInput, collect: FindingCollector) {
   if (hasFlag(input, "used_from_individual")) {
     collect.add(rule("EQP-05", "block", "E-108", "중고 기자재의 개인 간 거래는 집행할 수 없습니다.", "중고 기계·설비는 개인간 거래 불가, 중고상품 취급이 명시된 사업자와의 거래에 대해 집행 가능", "사업자등록증상 중고상품 소매업이 명시된 사업자와 거래하세요."));
   }
+  // 개인 간 거래가 아니어도 중고 거래는 그냥 넘어가지 않습니다. 「중고상품 취급이 명시된
+  // 사업자」라는 단서가 붙어 있어, 거래처 업종을 증빙으로 남겨야 정산에서 걸리지 않습니다.
+  // EQP-05(개인 간 거래)가 이미 막은 건은 같은 말을 두 번 하지 않습니다.
+  if (hasFlag(input, "used_item") && !hasFlag(input, "used_from_individual")) {
+    collect.add(
+      rule(
+        "EQP-08",
+        "warn",
+        "E-102",
+        "중고 기자재는 거래처가 중고상품 취급 사업자임을 증빙해야 합니다.",
+        "중고 기계·설비는 개인간 거래 불가, 중고상품 취급이 명시된 사업자와의 거래에 한해 집행 가능",
+        "거래처 사업자등록증(업태·종목에 중고상품 소매업 명시) 사본을 증빙에 포함하세요.",
+      ),
+    );
+  }
   if (hasFlag(input, "camera_for_promotion_only")) {
     collect.add(rule("EQP-06", "block", "E-101", "단순 제품홍보용 카메라·캠코더는 구입할 수 없습니다.", "단순 제품홍보를 위한 촬영용 카메라, 캠코더 등 구입 불가", "아이템 개발용 영상콘텐츠 제작 목적임을 증빙하거나 항목을 제외하세요."));
   }

@@ -40,6 +40,7 @@ const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
   "/founder/todo": ListChecks,
   "/founder/calendar": CalendarDays,
   "/founder/diagnostics": Radar,
+  "/founder/plan-check": ShieldCheck,
   "/founder/calculator": Calculator,
   "/founder/incorporation": Building2,
   "/founder/connect": Users,

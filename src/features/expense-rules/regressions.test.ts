@@ -64,6 +64,32 @@ describe("회귀 방지 — 감사에서 발견된 결함", () => {
     expect(noBudget.findings.some((f: any) => f.code === "BUD-01")).toBe(false);
   });
 
+  // AI가 설정할 수 있는 플래그인데 엔진이 검사하지 않아, 중고 기자재를 잡아내도
+  // 아무 판정도 나오지 않던 구멍입니다.
+  it("중고 기자재는 거래처 업종 증빙을 요구한다", () => {
+    const used = validateExpense({ ...base, category: "equipment", amount: 3_000_000,
+      deliveryDate: "2026-06-10", itemFlags: ["used_item"],
+      evidence: ["세금계산서", "계좌이체 확인증", "거래명세서"] } as any);
+    expect(used.findings.map((f: any) => f.code)).toContain("EQP-08");
+    expect(used.verdict).toBe("review");
+  });
+
+  it("개인 간 중고 거래는 차단이고, 같은 지적을 두 번 하지 않는다", () => {
+    const personal = validateExpense({ ...base, category: "equipment", amount: 3_000_000,
+      deliveryDate: "2026-06-10", itemFlags: ["used_item", "used_from_individual"],
+      evidence: ["세금계산서", "계좌이체 확인증", "거래명세서"] } as any);
+    const found = personal.findings.map((f: any) => f.code);
+    expect(found).toContain("EQP-05");
+    expect(found).not.toContain("EQP-08");
+    expect(personal.verdict).toBe("fail");
+  });
+
+  it("중고가 아니면 EQP-08은 나오지 않는다", () => {
+    const fresh = validateExpense({ ...base, category: "equipment", amount: 3_000_000,
+      deliveryDate: "2026-06-10", evidence: ["세금계산서", "계좌이체 확인증", "거래명세서"] } as any);
+    expect(fresh.findings.map((f: any) => f.code)).not.toContain("EQP-08");
+  });
+
   it("여비·교육훈련비 통과 가능", () => {
     const trv = validateExpense({ ...base, category: "travel", amount: 300000,
       evidence: ["출장 계획·결과 보고", "교통비 영수증", "계좌이체 확인증"],

@@ -168,15 +168,15 @@
   },
   "hotPaths": [
     {
-      "path": "src/lib/services/WorkspaceService.ts",
-      "accessCount": 77,
-      "lastAccessed": 1786327998428,
+      "path": "src/features/startup-workspace/components.tsx",
+      "accessCount": 81,
+      "lastAccessed": 1786330812735,
       "type": "file"
     },
     {
-      "path": "src/features/startup-workspace/components.tsx",
-      "accessCount": 76,
-      "lastAccessed": 1786328416431,
+      "path": "src/lib/services/WorkspaceService.ts",
+      "accessCount": 77,
+      "lastAccessed": 1786327998428,
       "type": "file"
     },
     {
@@ -240,15 +240,15 @@
       "type": "file"
     },
     {
-      "path": "src/features/expense-rules/ManagerTools.tsx",
-      "accessCount": 12,
-      "lastAccessed": 1785807812257,
+      "path": "src/features/expense-rules/engine.ts",
+      "accessCount": 13,
+      "lastAccessed": 1786330323057,
       "type": "file"
     },
     {
-      "path": "src/features/expense-rules/engine.ts",
+      "path": "src/features/expense-rules/ManagerTools.tsx",
       "accessCount": 12,
-      "lastAccessed": 1785811339895,
+      "lastAccessed": 1785807812257,
       "type": "file"
     },
     {

@@ -7,10 +7,11 @@ import {
   type CalendarItem,
   type CalendarKind,
 } from "@/lib/services/FounderWorkspaceService";
+import { getAnnouncementDeadlines, type AnnouncementDeadline } from "@/lib/services/AnnouncementService";
 import { createWorkspaceTask } from "@/lib/services/WorkspaceService";
 import { getDday, toKstDateKey } from "./logic";
 import { TaskCommentThread } from "./TaskCommentThread";
-import { Button, EmptyState, LinkButton, Notice, Panel, Skeleton, StatusBadge, inputClass, focusRing, type StatusTone } from "./ui";
+import { Button, ChoiceChip, EmptyState, LinkButton, Notice, Panel, Skeleton, StatusBadge, inputClass, focusRing, type StatusTone } from "./ui";
 import { cn } from "@/lib/utils";
 import { toMessage } from "@/lib/errors";
 
@@ -68,11 +69,14 @@ function Legend() {
 function DayCell({
   cell,
   items,
+  feedCount,
   selected,
   onSelect,
 }: {
   cell: { key: string; day: number; inMonth: boolean; isToday: boolean };
   items: CalendarItem[];
+  /** 담지 않은 K-Startup 공고 마감 수. 하루 최대 40건이라 제목 대신 건수만 얹습니다. */
+  feedCount: number;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -81,7 +85,7 @@ function DayCell({
       type="button"
       onClick={onSelect}
       aria-pressed={selected}
-      aria-label={`${cell.key} 일정 ${items.length}건`}
+      aria-label={`${cell.key} 일정 ${items.length}건${feedCount > 0 ? `, 공고 마감 ${feedCount}건` : ""}`}
       className={cn(
         "flex min-h-[58px] flex-col gap-1 rounded-lg p-1 text-left transition-colors sm:min-h-[96px] sm:rounded-xl sm:p-1.5 lg:min-h-[116px] lg:p-2",
         focusRing,
@@ -92,12 +96,19 @@ function DayCell({
     >
       <span className={cn("text-[11px] font-bold tabular-nums sm:text-xs", cell.isToday && "text-[#2563EB]")}>{cell.day}</span>
 
-      <span className="flex flex-wrap gap-0.5 sm:hidden">
+      <span className="flex flex-wrap items-center gap-0.5 sm:hidden">
         {items.slice(0, 4).map((item) => <span key={item.id} className={cn("h-1.5 w-1.5 rounded-full", metaOf(item).dot)} />)}
         {items.length > 4 && <span className="text-[9px] font-bold leading-none text-[#94A3B8]">+{items.length - 4}</span>}
+        {feedCount > 0 && <span className="text-[9px] font-bold leading-none text-[#C2410C]">공{feedCount}</span>}
       </span>
 
       <span className="hidden min-w-0 flex-col gap-0.5 sm:flex">
+        {/* 공고 마감은 팀 일정보다 먼저 눈에 들어와야 "오늘 뭘 놓치고 있나"가 보입니다. */}
+        {feedCount > 0 && (
+          <span className="truncate rounded border border-dashed border-[#FDBA74] px-1 py-0.5 text-[10px] font-bold leading-4 text-[#C2410C] lg:text-[11px]">
+            공고 마감 {feedCount}건
+          </span>
+        )}
         {items.slice(0, 2).map((item) => (
           <span key={item.id} title={item.title} className={cn("truncate rounded px-1 py-0.5 text-[10px] font-semibold leading-4 lg:text-[11px]", metaOf(item).chip)}>
             {item.title}
@@ -185,6 +196,80 @@ function DayItemRow({ item, onCommentAdded }: { item: CalendarItem; onCommentAdd
   );
 }
 
+/** 한 날짜에 마감이 수십 건일 수 있어 상세 패널에서도 잘라 보여 줍니다. */
+const FEED_VISIBLE = 6;
+
+/**
+ * 그날 마감인데 아직 담지 않은 공고들.
+ *
+ * 캘린더가 공고 실데이터를 보여 주는 지점입니다. 여기서 바로 담으면 코멘트를 달 수 있는
+ * 팀 일정이 되고, 그때부터 위쪽 목록으로 올라갑니다.
+ */
+function DayAnnouncementFeed({ deadlines, onAdded }: { deadlines: AnnouncementDeadline[]; onAdded: () => void }) {
+  const [addingSn, setAddingSn] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  const add = async (deadline: AnnouncementDeadline) => {
+    setAddingSn(deadline.sn);
+    setError(null);
+    try {
+      await createWorkspaceTask(`[공고] ${deadline.title} 접수 마감`, deadline.endDate, deadline.sn);
+      onAdded();
+    } catch (reason) {
+      setError(toMessage(reason, "공고를 담지 못했습니다."));
+    } finally {
+      setAddingSn(null);
+    }
+  };
+
+  if (deadlines.length === 0) return null;
+  const visible = expanded ? deadlines : deadlines.slice(0, FEED_VISIBLE);
+
+  return (
+    <div className="mt-4 rounded-xl border border-[#FED7AA] bg-[#FFF7ED] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-bold text-[#9A3412]">이날 마감하는 K-Startup 공고 {deadlines.length}건</p>
+        <LinkButton href="/founder/announcements" variant="ghost" size="sm" className="-mr-3 text-[#C2410C]">조건으로 찾기</LinkButton>
+      </div>
+      <ul className="mt-2 space-y-1.5">
+        {visible.map((deadline) => (
+          <li key={deadline.sn} className="rounded-lg bg-white p-2.5">
+            <p className="break-keep text-xs font-semibold leading-5 text-[#0F172A]">{deadline.title}</p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {deadline.supportField && <span className="rounded bg-[#FFF7ED] px-1.5 py-0.5 text-[11px] font-semibold text-[#C2410C]">{deadline.supportField}</span>}
+              {deadline.regions.slice(0, 2).map((region) => (
+                <span key={region} className="rounded bg-[#F1F5F9] px-1.5 py-0.5 text-[11px] font-semibold text-[#475569]">{region}</span>
+              ))}
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<Plus size={12} />}
+                loading={addingSn === deadline.sn}
+                onClick={() => void add(deadline)}
+                className="ml-auto text-[#C2410C] hover:text-[#9A3412]"
+              >
+                캘린더에 담기
+              </Button>
+              {deadline.detailUrl && (
+                <a href={deadline.detailUrl} target="_blank" rel="noreferrer noopener" aria-label={`${deadline.title} 원문 열기`} className={cn("text-[#C2410C]", focusRing)}>
+                  <ExternalLink size={13} />
+                </a>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+      {deadlines.length > FEED_VISIBLE && (
+        <Button variant="ghost" size="sm" onClick={() => setExpanded((value) => !value)} className="mt-1 -ml-3 text-[#C2410C]">
+          {expanded ? "접기" : `나머지 ${deadlines.length - FEED_VISIBLE}건 더 보기`}
+        </Button>
+      )}
+      {error && <p className="mt-2 text-xs font-semibold text-[#DC2626]">{error}</p>}
+    </div>
+  );
+}
+
 function AddScheduleForm({ date, onAdded }: { date: string; onAdded: () => void }) {
   const [title, setTitle] = useState("");
   const [saving, setSaving] = useState(false);
@@ -228,6 +313,8 @@ function AddScheduleForm({ date, onAdded }: { date: string; onAdded: () => void 
 
 export function CalendarPanel() {
   const [items, setItems] = useState<CalendarItem[] | null>(null);
+  const [deadlines, setDeadlines] = useState<AnnouncementDeadline[]>([]);
+  const [showFeed, setShowFeed] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [monthOffset, setMonthOffset] = useState(0);
   // 선택 날짜를 항상 유지합니다. 비워 두면 상세·추가 영역이 통째로 사라져 화면이 출렁입니다.
@@ -260,11 +347,37 @@ export function CalendarPanel() {
     };
   }, [monthOffset]);
 
+  // 보이는 격자만큼만 받아 옵니다. 달을 넘길 때마다 그 범위로 다시 조회합니다.
+  const range = useMemo(() => ({ from: cells[0].key, to: cells[cells.length - 1].key }), [cells]);
+
+  useEffect(() => {
+    if (!showFeed) { setDeadlines([]); return; }
+    let mounted = true;
+    getAnnouncementDeadlines(range.from, range.to)
+      .then((rows) => { if (mounted) setDeadlines(rows); })
+      .catch(() => { if (mounted) setDeadlines([]); });
+    return () => { mounted = false; };
+  }, [range, showFeed]);
+
   const list = useMemo(() => items ?? [], [items]);
   const byDate = useMemo(
     () => list.reduce<Record<string, CalendarItem[]>>((acc, item) => ({ ...acc, [item.date]: [...(acc[item.date] ?? []), item] }), {}),
     [list],
   );
+
+  // 이미 담은 공고는 팀 일정 줄로 이미 보입니다. 피드에 또 띄우면 같은 마감이 두 번 나옵니다.
+  const addedSns = useMemo(
+    () => new Set(list.flatMap((item) => (item.announcement ? [item.announcement.sn] : []))),
+    [list],
+  );
+  const feedByDate = useMemo(
+    () =>
+      deadlines
+        .filter((deadline) => !addedSns.has(deadline.sn))
+        .reduce<Record<string, AnnouncementDeadline[]>>((acc, deadline) => ({ ...acc, [deadline.endDate]: [...(acc[deadline.endDate] ?? []), deadline] }), {}),
+    [deadlines, addedSns],
+  );
+
   const selectedItems = byDate[selected] ?? [];
   const upcoming = list.filter((item) => item.date >= toKstDateKey()).slice(0, 6);
   const loading = items === null;
@@ -279,6 +392,7 @@ export function CalendarPanel() {
         </ul>
       )}
       <AddScheduleForm date={selected} onAdded={() => void load()} />
+      <DayAnnouncementFeed deadlines={feedByDate[selected] ?? []} onAdded={() => void load()} />
     </Panel>
   );
 
@@ -312,6 +426,7 @@ export function CalendarPanel() {
                   key={cell.key}
                   cell={cell}
                   items={byDate[cell.key] ?? []}
+                  feedCount={(feedByDate[cell.key] ?? []).length}
                   selected={selected === cell.key}
                   onSelect={() => setSelected(cell.key)}
                 />
@@ -319,7 +434,16 @@ export function CalendarPanel() {
             </div>
           )}
 
-          <div className="mt-4 border-t border-[#F1F5F9] pt-3"><Legend /></div>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#F1F5F9] pt-3">
+            <Legend />
+            <ChoiceChip
+              selected={showFeed}
+              onClick={() => setShowFeed((value) => !value)}
+              className="px-2.5 py-1.5 text-[13px]"
+            >
+              K-Startup 공고 마감 함께 보기
+            </ChoiceChip>
+          </div>
         </Panel>
 
         {detail}

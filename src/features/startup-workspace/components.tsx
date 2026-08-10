@@ -34,6 +34,8 @@ import {
   type PersistedTask,
 } from "@/lib/services/WorkspaceService";
 import { Button, EmptyState, Field, IconButton, LinkButton, Notice, PageHeader, Panel, ProgressBar, Skeleton, StatusBadge, focusRing, inputClass, interactive, textareaClass, useToast } from "./ui";
+import type { BudgetFinding } from "@/lib/ai/openrouter";
+import { CATEGORIES, RULESET_VERSION } from "@/features/expense-rules/ruleset";
 import { ExpenseValidator } from "@/features/expense-rules/ExpenseValidator";
 import { BudgetPanel } from "@/features/expense-rules/BudgetPanel";
 import { CalculatorSuite } from "./CalculatorSuite";
@@ -513,10 +515,11 @@ function FounderCore({ founder = false }: { founder?: boolean }) {
   );
 }
 
-type FounderFeature = "announcements" | "todo" | "calendar" | "diagnostics" | "calculator" | "library" | "incorporation" | "connect" | "vault" | "settings" | "precheck" | "predeliberation" | "tracker";
+type FounderFeature = "announcements" | "plancheck" | "todo" | "calendar" | "diagnostics" | "calculator" | "library" | "incorporation" | "connect" | "vault" | "settings" | "precheck" | "predeliberation" | "tracker";
 
 const FEATURE_META: Record<FounderFeature, { title: string; description: string }> = {
   announcements: { title: "지원사업 공고", description: "K-Startup 공식 오픈API에서 매일 받아 오는 정부지원사업 공고입니다. 내 조건으로 걸러 보고, 마감일을 캘린더로 보냅니다." },
+  plancheck: { title: "사업비 점검", description: "사업계획서에 적을 사업비를 「사업비 비목 해설」 룰셋으로 미리 판정합니다. 비목 오분류는 선정 이후에 고치면 늦습니다." },
   todo: { title: "팀 TODO", description: "공고 마감 기준 자동 마일스톤과 직접 추가한 할 일을 함께 관리합니다." },
   calendar: { title: "마감 캘린더", description: "K-Startup 공고 마감·지원사업 마감·팀 일정을 색으로 구분해 한 달력에서 봅니다. 날짜를 골라 일정을 추가하고, 각 일정에 팀원과 코멘트를 주고받습니다." },
   diagnostics: { title: "AI 진단", description: "자격 요건을 룰셋으로 판정하고 사업계획서를 PSST 구조로 점검합니다." },
@@ -538,6 +541,7 @@ function FounderFeaturePage({ feature, founder = false }: { feature: FounderFeat
       <WorkspaceShell role={founder ? "founder" : "pre_founder"}>
         <PageHeader badge={founder ? "선정 팀" : "창업자 준비"} badgeTone={founder ? "green" : "blue"} title={meta.title} description={meta.description} />
         {feature === "announcements" && <AnnouncementsPanel />}
+        {feature === "plancheck" && <PlanCheckPanel />}
         {feature === "todo" && <TaskBoard />}
         {feature === "calendar" && <CalendarPanel />}
         {feature === "diagnostics" && <div className="space-y-6"><EligibilityPanel /><BizPlanCard /></div>}
@@ -617,6 +621,27 @@ function EvidenceFilePicker({ selected, onToggle }: { selected: string[]; onTogg
         </div>
       )}
     </Panel>
+  );
+}
+
+/**
+ * 협약 전 팀을 위한 사업비 비목 점검.
+ *
+ * 정산 사전검증(PrecheckPanel)과 같은 룰 엔진을 쓰지만 매니저에게 보내지 않습니다.
+ * 예비창업자는 아직 협약도 배정액도 없어서 "검토 요청"과 "배정 잔액 대비 한도"가
+ * 성립하지 않습니다. `onRequestReview`를 넘기지 않는 것만으로 그 버튼이 사라집니다.
+ *
+ * 비목을 잘못 잡은 사업비 계획서는 선정 이후가 아니라 작성 단계에서 고쳐야 싸게 끝납니다.
+ */
+function PlanCheckPanel() {
+  return (
+    <div className="space-y-4">
+      <Notice tone="info">
+        선정·협약 전에도 사업계획서에 적을 사업비를 미리 점검할 수 있습니다. 판정 기준은 협약 팀이 쓰는 정산 사전검증과 같은
+        「사업비 비목 해설」 룰셋({RULESET_VERSION})입니다. 이 화면은 매니저에게 전달되지 않습니다.
+      </Notice>
+      <ExpenseValidator />
+    </div>
   );
 }
 
@@ -843,6 +868,61 @@ function AttachedFile({ file, onClear, disabled }: { file: File; onClear: () => 
   );
 }
 
+/**
+ * 사업계획서의 사업비 집행 계획 점검 결과.
+ *
+ * PSST 점수만 보여 주던 진단에 「사업비 비목 해설」 룰셋 대조를 붙인 자리입니다.
+ * 계획서에 사업비 표가 없는 것은 정상이라 그 경우를 실패가 아니라 안내로 다룹니다.
+ */
+function BudgetFindings({ budget }: { budget?: { found: boolean; note: string; findings: BudgetFinding[] } }) {
+  if (!budget) return null;
+
+  const blocks = budget.findings.filter((finding) => finding.severity === "block").length;
+  const tone = blocks > 0 ? "red" : budget.findings.length > 0 ? "amber" : "green";
+
+  return (
+    <div className="rounded-xl border border-[#E2E8F0] bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <strong className="flex items-center gap-1.5 text-sm text-[#0F172A]">
+          <FileText size={15} className="text-[#C2410C]" />사업비 비목 점검
+        </strong>
+        <StatusBadge tone={budget.found ? tone : "slate"}>
+          {!budget.found ? "사업비 계획 없음" : budget.findings.length === 0 ? "지적 없음" : `보완 ${budget.findings.length}건`}
+        </StatusBadge>
+      </div>
+
+      {budget.note && <p className="mt-2 text-sm leading-6 text-[#475569]">{budget.note}</p>}
+
+      {budget.findings.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {budget.findings.map((finding, index) => (
+            <li
+              key={`${finding.item}-${index}`}
+              className={cn("rounded-lg border p-3", finding.severity === "block" ? "border-[#FECACA] bg-[#FEF2F2]" : "border-[#FDE68A] bg-[#FFFBEB]")}
+            >
+              <div className="flex flex-wrap items-center gap-1.5">
+                <StatusBadge tone={finding.severity === "block" ? "red" : "amber"}>
+                  {finding.severity === "block" ? "집행 불가" : "확인 필요"}
+                </StatusBadge>
+                <StatusBadge tone="slate">
+                  {finding.category === "unknown" ? "비목 미확인" : CATEGORIES[finding.category].name}
+                </StatusBadge>
+                <span className="min-w-0 break-keep text-sm font-bold text-[#0F172A]">{finding.item}</span>
+              </div>
+              <p className="mt-2 text-sm leading-6 text-[#475569]">{finding.issue}</p>
+              <p className="mt-1.5 text-sm font-semibold leading-6 text-[#0F172A]">수정 · {finding.fix}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <p className="mt-3 text-xs leading-5 text-[#94A3B8]">
+        「사업비 비목 해설」 룰셋({RULESET_VERSION}) 대조 결과입니다. 참고용이며 최종 판단은 공고문과 주관기관 지침을 따릅니다.
+      </p>
+    </div>
+  );
+}
+
 function AiDiagnosisRunner({ exhausted, onComplete }: { exhausted: boolean; onComplete: () => void }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -853,6 +933,7 @@ function AiDiagnosisRunner({ exhausted, onComplete }: { exhausted: boolean; onCo
     psst: Record<string, { score: number; evidence: string }>;
     actions: string[];
     swot: Record<string, string[]>;
+    budget?: { found: boolean; note: string; findings: BudgetFinding[] };
     model: string;
     totalScore?: number;
   } | null>(null);
@@ -1030,6 +1111,8 @@ function AiDiagnosisRunner({ exhausted, onComplete }: { exhausted: boolean; onCo
               ))}
             </ul>
           </div>
+
+          <BudgetFindings budget={result.budget} />
 
           <div className="grid gap-2 sm:grid-cols-2">
             {Object.entries(result.swot ?? {}).map(([key, items]) => {

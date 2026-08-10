@@ -7,6 +7,7 @@ const sidebarByRole: Record<StartupRole, Array<{ label: string; href: string }>>
     { label: "팀 TODO", href: "/founder/todo" },
     { label: "마감 캘린더", href: "/founder/calendar" },
     { label: "AI 진단", href: "/founder/diagnostics" },
+    { label: "사업비 점검", href: "/founder/plan-check" },
     // 워크스페이스 안에서 열립니다. 같은 도구의 비로그인 공개판은 /calculator·/library입니다.
     { label: "계산기", href: "/founder/calculator" },
     { label: "무료 자료실", href: "/founder/library" },

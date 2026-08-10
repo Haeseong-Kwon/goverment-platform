@@ -94,6 +94,42 @@ export async function searchAnnouncements(
   return { rows: (data ?? []) as Announcement[], total: count ?? 0 };
 }
 
+/** 캘린더 격자에 겹쳐 그리는 공고 마감 한 건. 목록 화면보다 가벼운 필드만 씁니다. */
+export interface AnnouncementDeadline {
+  sn: number;
+  title: string;
+  endDate: string;
+  supportField: string | null;
+  regions: string[];
+  detailUrl: string;
+}
+
+/**
+ * 달력에 보이는 기간의 공고 마감을 가져옵니다.
+ *
+ * 캘린더가 "담은 공고"만 그리면 아무것도 담지 않은 팀에게는 빈 달력이 나옵니다.
+ * 마감이 하루 최대 40건이라 셀에 전부 그릴 수는 없어, 셀에는 건수만 얹고
+ * 목록은 날짜를 골랐을 때 상세 패널에서 보여 줍니다.
+ */
+export async function getAnnouncementDeadlines(from: string, to: string): Promise<AnnouncementDeadline[]> {
+  if (DEV_BYPASS || !supabase) return (await import("../dev/devServices")).devAnnouncementDeadlines(from, to);
+  const { data, error } = await supabase
+    .from("kstartup_announcements")
+    .select("pbanc_sn, title, end_date, support_field, regions, detail_url")
+    .gte("end_date", from)
+    .lte("end_date", to)
+    .order("end_date", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    sn: row.pbanc_sn as number,
+    title: row.title as string,
+    endDate: row.end_date as string,
+    supportField: (row.support_field as string | null) ?? null,
+    regions: (row.regions as string[] | null) ?? [],
+    detailUrl: (row.detail_url as string | null) ?? "",
+  }));
+}
+
 /** 화면에 "언제 기준 정보인지"를 표시하기 위한 값. 없으면 아직 한 번도 동기화되지 않은 상태입니다. */
 export async function getAnnouncementsSyncedAt(): Promise<string | null> {
   if (DEV_BYPASS || !supabase) return (await import("../dev/devServices")).devAnnouncementsSyncedAt();
