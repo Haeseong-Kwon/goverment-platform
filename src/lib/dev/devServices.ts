@@ -14,6 +14,8 @@ import {
   type DevSubmission,
 } from "./fixtures";
 import { DEV_USER, currentDevRole } from "./devMode";
+import { matchesAnnouncementFilters, type Announcement } from "../kstartup/announcements";
+import { toKstDateKey } from "@/features/startup-workspace/logic";
 
 /** 개발용 진입 모드에서 각 서비스 함수가 대신 돌려주는 값입니다. 실제 스키마와 같은 모양을 지킵니다. */
 
@@ -329,4 +331,83 @@ export function devLatestEligibility(): SavedEligibilityReport | null {
 
 export function devCompleteOnboarding() {
   return { teamId: "dev-team", redirect: "/founder" };
+}
+
+/**
+ * K-Startup 공고 화면용 예시. 실제 API 응답 3건을 형태 그대로 옮기고 날짜만
+ * 오늘 기준으로 밀어 접수중·접수예정·마감이 한 화면에 나오게 했습니다.
+ */
+function devAnnouncements(): Announcement[] {
+  const today = toKstDateKey();
+  const shift = (days: number) => new Date(Date.parse(`${today}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+  return [
+    {
+      pbanc_sn: 178845,
+      title: "2026년 웰컴 투 팁스 1차 참가기업 모집 (충청권)",
+      summary: "충청권 소재의 유망한 기술 기반 초기 창업기업을 발굴하여, 팁스(TIPS) 사업 연계 등 사업 성장을 지원하는 『2026년 웰컴 투 팁스』프로그램의 참가기업을 아래와 같이 공고합니다.",
+      start_date: shift(-3), end_date: shift(5),
+      support_field: "행사ㆍ네트워크",
+      regions: ["전국"], biz_ages: ["3년미만"], applicant_types: ["일반기업", "1인 창조기업"],
+      target_ages: ["만 20세 이상 ~ 만 39세 이하", "만 40세 이상"],
+      organizer: "(주)로우파트너스", supervising_institution: "민간", department: "프리팁스 투자육성부", contact: "0428629583",
+      apply_target: "충청권(대전·세종·충남·충북) 소재 창업 후 2년 3개월 미만 기업",
+      exclude_target: "팁스 R&D 및 팁스 연계 사업에 선정되어 협약을 체결한 이력이 있는 창업기업(대표자 포함)은 신청 불가",
+      apply_methods: { 온라인: "https://buly.kr/HHf3KNe" },
+      notes: null,
+      detail_url: "https://www.k-startup.go.kr/web/contents/bizpbanc-ongoing.do?schM=view&pbancSn=178845",
+      guide_url: null, is_integrated: false,
+    },
+    {
+      pbanc_sn: 178702,
+      title: "2026년 예비창업패키지 예비창업자 모집 공고",
+      summary: "혁신적인 기술창업 아이디어를 보유한 예비창업자의 성공적인 창업사업화를 지원합니다.",
+      start_date: shift(7), end_date: shift(30),
+      support_field: "사업화",
+      regions: ["전국"], biz_ages: ["예비창업자"], applicant_types: ["예비창업자", "일반인"],
+      target_ages: ["만 20세 이상 ~ 만 39세 이하", "만 40세 이상"],
+      organizer: "창업진흥원", supervising_institution: "공공기관", department: "예비창업부", contact: "0442808000",
+      apply_target: "공고일 기준 신청자 명의의 사업자등록(개인·법인)이 없는 예비창업자",
+      exclude_target: "동일 사업 기수혜자, 국세 또는 지방세 체납 중인 자",
+      apply_methods: { 온라인: "K-Startup 누리집 온라인 접수" },
+      notes: "제출 서류 미비 시 평가에서 제외될 수 있습니다.",
+      detail_url: "https://www.k-startup.go.kr/web/contents/bizpbanc-ongoing.do?schM=view&pbancSn=178702",
+      guide_url: null, is_integrated: true,
+    },
+    {
+      pbanc_sn: 178410,
+      title: "2026년 서울 청년창업사관학교 입교생 모집",
+      summary: "만 39세 이하 청년 창업자를 대상으로 사업화 자금과 보육 공간을 지원합니다.",
+      start_date: shift(-40), end_date: shift(-6),
+      support_field: "시설ㆍ공간ㆍ보육",
+      regions: ["서울"], biz_ages: ["3년미만", "5년미만"], applicant_types: ["일반기업", "대학생"],
+      target_ages: ["만 20세 이상 ~ 만 39세 이하"],
+      organizer: "중소벤처기업진흥공단", supervising_institution: "공공기관", department: "청년창업처", contact: "0554408000",
+      apply_target: "만 39세 이하, 창업 3년 이내 기업의 대표자",
+      exclude_target: null,
+      apply_methods: { 온라인: "청년창업사관학교 누리집", 방문: "서울 청년창업사관학교" },
+      notes: null,
+      detail_url: "https://www.k-startup.go.kr/web/contents/bizpbanc-ongoing.do?schM=view&pbancSn=178410",
+      guide_url: null, is_integrated: false,
+    },
+  ];
+}
+
+export function devSearchAnnouncements(
+  filters: Parameters<typeof matchesAnnouncementFilters>[1] & { sort: "deadline" | "recent" },
+  page: number,
+  pageSize: number,
+) {
+  const today = toKstDateKey();
+  const matched = devAnnouncements()
+    .filter((announcement) => matchesAnnouncementFilters(announcement, filters, today))
+    .sort((a, b) =>
+      filters.sort === "recent"
+        ? b.pbanc_sn - a.pbanc_sn
+        : (a.end_date ?? "9999-12-31").localeCompare(b.end_date ?? "9999-12-31"),
+    );
+  return { rows: matched.slice(page * pageSize, page * pageSize + pageSize), total: matched.length };
+}
+
+export function devAnnouncementsSyncedAt(): string {
+  return new Date().toISOString();
 }

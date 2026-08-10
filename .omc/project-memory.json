@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1785805567943,
+  "lastScanned": 1786321064845,
   "projectRoot": "/Users/haeseong/Desktop/Product/startup_meetup",
   "techStack": {
     "languages": [
@@ -81,7 +81,7 @@
       "path": "developer_docs",
       "purpose": null,
       "fileCount": 7,
-      "lastAccessed": 1785805567905,
+      "lastAccessed": 1786321064811,
       "keyFiles": [
         "사업비 비목 해설.pdf",
         "창업 파일럿 프로젝트 공유용.pdf",
@@ -94,7 +94,7 @@
       "path": "docs",
       "purpose": "Documentation",
       "fileCount": 6,
-      "lastAccessed": 1785805567906,
+      "lastAccessed": 1786321064812,
       "keyFiles": [
         "도메인-연결과-검색등록.md",
         "이메일-발송-설정.md",
@@ -107,7 +107,7 @@
       "path": "public",
       "purpose": "Public files",
       "fileCount": 6,
-      "lastAccessed": 1785805567910,
+      "lastAccessed": 1786321064817,
       "keyFiles": [
         "file.svg",
         "globe.svg",
@@ -120,14 +120,14 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 0,
-      "lastAccessed": 1785805567911,
+      "lastAccessed": 1786321064818,
       "keyFiles": []
     },
     "supabase": {
       "path": "supabase",
       "purpose": null,
-      "fileCount": 8,
-      "lastAccessed": 1785805567911,
+      "fileCount": 10,
+      "lastAccessed": 1786321064818,
       "keyFiles": [
         "002-manager-review.sql",
         "003-profile-role-lock.sql",
@@ -140,7 +140,7 @@
       "path": "src/app",
       "purpose": "Application code",
       "fileCount": 12,
-      "lastAccessed": 1785805567912,
+      "lastAccessed": 1786321064820,
       "keyFiles": [
         "apple-icon.tsx",
         "error.tsx",
@@ -151,14 +151,14 @@
       "path": "src/components",
       "purpose": "UI components",
       "fileCount": 0,
-      "lastAccessed": 1785805567912,
+      "lastAccessed": 1786321064820,
       "keyFiles": []
     },
     "src/lib": {
       "path": "src/lib",
       "purpose": "Library code",
       "fileCount": 6,
-      "lastAccessed": 1785805567913,
+      "lastAccessed": 1786321064820,
       "keyFiles": [
         "errors.ts",
         "og.tsx",
@@ -175,8 +175,8 @@
     },
     {
       "path": "src/features/startup-workspace/components.tsx",
-      "accessCount": 71,
-      "lastAccessed": 1785896836548,
+      "accessCount": 75,
+      "lastAccessed": 1786322975488,
       "type": "file"
     },
     {
@@ -204,27 +204,27 @@
       "type": "file"
     },
     {
-      "path": "src/features/startup-workspace/EligibilityPanel.tsx",
-      "accessCount": 18,
-      "lastAccessed": 1785810910037,
+      "path": "src/features/startup-workspace/shell.tsx",
+      "accessCount": 20,
+      "lastAccessed": 1786322944532,
       "type": "file"
     },
     {
-      "path": "src/features/startup-workspace/shell.tsx",
-      "accessCount": 17,
-      "lastAccessed": 1785809650663,
+      "path": "src/features/startup-workspace/EligibilityPanel.tsx",
+      "accessCount": 19,
+      "lastAccessed": 1786322259844,
       "type": "file"
     },
     {
       "path": "src/features/startup-workspace/logic.test.ts",
-      "accessCount": 17,
-      "lastAccessed": 1785889969775,
+      "accessCount": 18,
+      "lastAccessed": 1786323063910,
       "type": "file"
     },
     {
       "path": "src/features/startup-workspace/logic.ts",
-      "accessCount": 16,
-      "lastAccessed": 1785889922361,
+      "accessCount": 17,
+      "lastAccessed": 1786322930258,
       "type": "file"
     },
     {
@@ -306,6 +306,12 @@
       "type": "file"
     },
     {
+      "path": "src/features/startup-workspace/rules.ts",
+      "accessCount": 6,
+      "lastAccessed": 1786322271115,
+      "type": "file"
+    },
+    {
       "path": "src/components/layout/Footer.tsx",
       "accessCount": 5,
       "lastAccessed": 1785338010662,
@@ -315,12 +321,6 @@
       "path": "src/app/layout.tsx",
       "accessCount": 5,
       "lastAccessed": 1785383625449,
-      "type": "file"
-    },
-    {
-      "path": "src/features/startup-workspace/rules.ts",
-      "accessCount": 5,
-      "lastAccessed": 1785810047050,
       "type": "file"
     },
     {
@@ -378,6 +378,12 @@
       "type": "file"
     },
     {
+      "path": "supabase/schema.sql",
+      "accessCount": 4,
+      "lastAccessed": 1786322259589,
+      "type": "file"
+    },
+    {
       "path": "src/features/expense-rules/ruleset.ts",
       "accessCount": 3,
       "lastAccessed": 1785808994418,
@@ -387,12 +393,6 @@
       "path": "src/features/expense-rules/engine.test.ts",
       "accessCount": 3,
       "lastAccessed": 1785809153815,
-      "type": "file"
-    },
-    {
-      "path": "supabase/schema.sql",
-      "accessCount": 3,
-      "lastAccessed": 1785893645437,
       "type": "file"
     },
     {

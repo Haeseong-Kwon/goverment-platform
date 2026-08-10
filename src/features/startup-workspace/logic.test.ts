@@ -114,6 +114,7 @@ describe("getSidebarLinks", () => {
   it("gives every founder preparation menu an addressable target", () => {
     expect(getSidebarLinks("pre_founder").map((item) => item.href)).toEqual([
       "/founder",
+      "/founder/announcements",
       "/founder/todo",
       "/founder/calendar",
       "/founder/diagnostics",

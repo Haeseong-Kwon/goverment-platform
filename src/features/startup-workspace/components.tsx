@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { getDday, getFounderDashboardSummary, getMonthlyDiagnosticUsage } from "./logic";
 import { EligibilityPanel } from "./EligibilityPanel";
+import { AnnouncementsPanel } from "./AnnouncementsPanel";
 import { CalendarPanel, IncorporationPanel, TeamSettingsPanel, TrackerPanel, VaultPanel } from "./FounderPanels";
 import { getSelectedPrograms, getTeamMembers, listVaultDocuments, type BudgetLine, type SelectedProgram, type TeamMember, type VaultDocument } from "@/lib/services/FounderWorkspaceService";
 import { RequireFounderSession, WorkspaceShell } from "./shell";
@@ -577,9 +578,10 @@ function FounderCore({ founder = false }: { founder?: boolean }) {
   );
 }
 
-type FounderFeature = "todo" | "calendar" | "diagnostics" | "calculator" | "library" | "incorporation" | "connect" | "vault" | "settings" | "precheck" | "predeliberation" | "tracker";
+type FounderFeature = "announcements" | "todo" | "calendar" | "diagnostics" | "calculator" | "library" | "incorporation" | "connect" | "vault" | "settings" | "precheck" | "predeliberation" | "tracker";
 
 const FEATURE_META: Record<FounderFeature, { title: string; description: string }> = {
+  announcements: { title: "지원사업 공고", description: "K-Startup 공식 오픈API에서 매일 받아 오는 정부지원사업 공고입니다. 내 조건으로 걸러 보고, 마감일을 캘린더로 보냅니다." },
   todo: { title: "팀 TODO", description: "공고 마감 기준 자동 마일스톤과 직접 추가한 할 일을 함께 관리합니다." },
   calendar: { title: "마감 캘린더", description: "선택한 지원사업 공고 마감과 팀 할 일 마감을 한 달력에서 확인합니다." },
   diagnostics: { title: "AI 진단", description: "자격 요건을 룰셋으로 판정하고 사업계획서를 PSST 구조로 점검합니다." },
@@ -600,6 +602,7 @@ function FounderFeaturePage({ feature, founder = false }: { feature: FounderFeat
     <RequireFounderSession role={founder ? "founder" : "pre_founder"}>
       <WorkspaceShell role={founder ? "founder" : "pre_founder"}>
         <PageHeader badge={founder ? "선정 팀" : "창업자 준비"} badgeTone={founder ? "green" : "blue"} title={meta.title} description={meta.description} />
+        {feature === "announcements" && <AnnouncementsPanel />}
         {feature === "todo" && <TaskBoard />}
         {feature === "calendar" && <CalendarPanel />}
         {feature === "diagnostics" && <div className="space-y-6"><EligibilityPanel /><BizPlanCard /></div>}

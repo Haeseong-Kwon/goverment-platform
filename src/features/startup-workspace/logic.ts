@@ -3,6 +3,7 @@ import type { DashboardTaskInput, ManagerSubmissionInput, ReviewVisibilityInput,
 const sidebarByRole: Record<StartupRole, Array<{ label: string; href: string }>> = {
   pre_founder: [
     { label: "홈", href: "/founder" },
+    { label: "지원사업 공고", href: "/founder/announcements" },
     { label: "팀 TODO", href: "/founder/todo" },
     { label: "마감 캘린더", href: "/founder/calendar" },
     { label: "AI 진단", href: "/founder/diagnostics" },

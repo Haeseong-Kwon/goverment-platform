@@ -1,7 +1,7 @@
 {
   "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"for i in $(seq 1 40); do curl -s -o /dev/null http://localhost:3944/ 2>/dev/null && break; sleep 1; done\\necho \\\"=== 선정 팀(협약) 워크스페이스 ===\\\"\\nfor p in /workspace/calculator /workspace/librar...",
-  "error": "Exit code 144\n=== 선정 팀(협약) 워크스페이스 ===\n  /workspace/calculator    <aside>=1 협약메뉴=1 준비쪽유출=0  계산기 | StartUp Pilot\n  /workspace/library       <aside>=1 협약메뉴=1 준비쪽유출=0  무료 자료실 | StartUp Pilot\n  /workspace/precheck      <aside>=1 협약메뉴=1 준비쪽유출=0  정산 사전검증 | StartUp Pilot\n\n=== 사이드바 실제 링크 (협약 팀) ===",
-  "timestamp": "2026-08-05T00:34:17.083Z",
-  "retry_count": 1
+  "tool_input_preview": "{\"command\":\"python3 - <<'EOF'\\nimport json,urllib.request\\ntoday=\\\"20260810\\\"; tot=0\\nfor p in range(1,16):\\n    u=f\\\"https://k-skill-proxy.nomadamas.org/v1/kstartup/announcements?perPage=100&page={p}...",
+  "error": "Exit code 1\nTraceback (most recent call last):\n  File \"<stdin>\", line 5, in <module>\n  File \"/opt/anaconda3/lib/python3.12/urllib/request.py\", line 215, in urlopen\n    return opener.open(url, data, timeout)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/anaconda3/lib/python3.12/urllib/request.py\", line 521, in open\n    response = meth(req, response)\n               ^^^^^^^^^^^^^^^^^^^\n  File \"/opt/anaconda3/lib/python3.12/urllib/request.py\", line 630, in http_response\n    response = self...",
+  "timestamp": "2026-08-10T00:40:04.198Z",
+  "retry_count": 2
 }

@@ -17,6 +17,7 @@ import {
   ListChecks,
   Loader2,
   LogOut,
+  Megaphone,
   Menu,
   Settings,
   ShieldCheck,
@@ -35,6 +36,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_ICONS: Record<string, typeof LayoutDashboard> = {
   "/founder": LayoutDashboard,
+  "/founder/announcements": Megaphone,
   "/founder/todo": ListChecks,
   "/founder/calendar": CalendarDays,
   "/founder/diagnostics": Radar,
