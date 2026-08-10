@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Archive, ClipboardCopy, Download, RefreshCw, Upload, UserPlus } from "lucide-react";
 import {
   VAULT_FOLDERS,
   createTeamInvite,
   getActiveTeamInvite,
-  getCalendarItems,
   getSelectedPrograms,
   getTeamMembers,
   getTrackedSubmissions,
@@ -14,7 +13,6 @@ import {
   joinTeamByInvite,
   listVaultDocuments,
   uploadVaultDocument,
-  type CalendarItem,
   type TeamInvite,
   type TeamMember,
   type TrackedSubmission,
@@ -22,7 +20,6 @@ import {
   type VaultFolder,
 } from "@/lib/services/FounderWorkspaceService";
 import { requestConsultation } from "@/lib/services/WorkspaceService";
-import { getDday, toKstDateKey } from "./logic";
 import { STARTUP_PROGRAMS } from "./rules";
 import { Button, ChoiceChip, EmptyState, Field, LinkButton, Notice, Panel, Skeleton, StatusBadge, inputClass, selectableRow, type StatusTone } from "./ui";
 import { cn } from "@/lib/utils";
@@ -64,154 +61,6 @@ function LoadState({
   if (loading) return <div className="space-y-2">{[0, 1, 2].map((key) => <Skeleton key={key} className="h-14" />)}</div>;
   if (empty) return <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />;
   return null;
-}
-
-// ---------------------------------------------------------------- 마감 캘린더
-
-const MS_DAY = 86_400_000;
-// 달력 격자는 UTC 자정으로 만든 날짜라 그대로, "오늘"과 D-day만 한국 날짜로 판단합니다.
-const toKey = (date: Date) => date.toISOString().slice(0, 10);
-
-const itemTone = (item: CalendarItem) =>
-  item.kind === "program" ? "bg-[#FEF2F2] text-[#DC2626]" : item.status === "done" ? "bg-[#F0FDF4] text-[#16A34A]" : "bg-[#EFF6FF] text-[#2563EB]";
-
-const itemDot = (item: CalendarItem) =>
-  item.kind === "program" ? "bg-[#DC2626]" : item.status === "done" ? "bg-[#16A34A]" : "bg-[#2563EB]";
-
-export function CalendarPanel() {
-  const { data, error, reload } = useLoader(getCalendarItems);
-  const [monthOffset, setMonthOffset] = useState(0);
-  const [selected, setSelected] = useState<string | null>(null);
-  const items = useMemo(() => data ?? [], [data]);
-
-  const { cells, label } = useMemo(() => {
-    const base = new Date();
-    const view = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + monthOffset, 1));
-    const firstWeekday = view.getUTCDay();
-    const daysInMonth = new Date(Date.UTC(view.getUTCFullYear(), view.getUTCMonth() + 1, 0)).getUTCDate();
-    const start = new Date(view.getTime() - firstWeekday * MS_DAY);
-    return {
-      label: `${view.getUTCFullYear()}년 ${view.getUTCMonth() + 1}월`,
-      cells: Array.from({ length: 42 }, (_, index) => {
-        const date = new Date(start.getTime() + index * MS_DAY);
-        return { key: toKey(date), day: date.getUTCDate(), inMonth: date.getUTCMonth() === view.getUTCMonth(), isToday: toKey(date) === toKstDateKey(base) };
-      }).slice(0, firstWeekday + daysInMonth > 35 ? 42 : 35),
-    };
-  }, [monthOffset]);
-
-  const byDate = useMemo(() => items.reduce<Record<string, CalendarItem[]>>((acc, item) => ({ ...acc, [item.date]: [...(acc[item.date] ?? []), item] }), {}), [items]);
-  const upcoming = items.filter((item) => item.date >= toKstDateKey()).slice(0, 6);
-
-  return (
-    <div className="space-y-5">
-      <Panel
-        title={label}
-        action={
-          <div className="flex gap-2">
-            <Button variant="secondary" size="sm" onClick={() => setMonthOffset((value) => value - 1)}>이전</Button>
-            <Button variant="secondary" size="sm" onClick={() => setMonthOffset(0)} disabled={monthOffset === 0}>오늘</Button>
-            <Button variant="secondary" size="sm" onClick={() => setMonthOffset((value) => value + 1)}>다음</Button>
-          </div>
-        }
-      >
-        {error && <p className="mb-3 rounded-xl border border-[#FECACA] bg-[#FEF2F2] p-4 text-sm font-semibold text-[#DC2626]">{error}</p>}
-        <div className="mt-2 grid grid-cols-7 gap-1 text-center text-xs font-bold text-[#94A3B8]">
-          {["일", "월", "화", "수", "목", "금", "토"].map((day) => <div key={day} className="py-2">{day}</div>)}
-        </div>
-        <div className="grid grid-cols-7 gap-1">
-          {cells.map((cell) => {
-            const dayItems = byDate[cell.key] ?? [];
-            const active = selected === cell.key;
-            return (
-              <button
-                key={cell.key}
-                type="button"
-                onClick={() => setSelected(active ? null : cell.key)}
-                aria-pressed={active}
-                className={cn(
-                  "flex min-h-[76px] flex-col gap-1 rounded-xl p-1.5 text-left transition-colors sm:min-h-[92px] sm:p-2",
-                  cell.inMonth ? "bg-[#F8FAFC] hover:bg-[#EFF6FF]" : "bg-white text-[#CBD5E1]",
-                  cell.isToday && "ring-2 ring-[#2563EB]",
-                  active && "ring-2 ring-[#0F172A]",
-                )}
-              >
-                <span className={cn("text-xs font-bold tabular-nums", cell.isToday && "text-[#2563EB]")}>{cell.day}</span>
-
-                {/* 좁은 화면에서는 점, 넓은 화면에서는 제목까지 보여 줍니다. */}
-                <span className="flex flex-wrap gap-1 sm:hidden">
-                  {dayItems.slice(0, 4).map((item) => (
-                    <span key={item.id} className={cn("h-1.5 w-1.5 rounded-full", itemDot(item))} />
-                  ))}
-                </span>
-
-                <span className="hidden min-w-0 flex-col gap-1 sm:flex">
-                  {dayItems.slice(0, 2).map((item) => (
-                    <span key={item.id} title={item.title} className={cn("truncate rounded px-1.5 py-0.5 text-[11px] font-semibold leading-4", itemTone(item))}>
-                      {item.title}
-                    </span>
-                  ))}
-                  {dayItems.length > 2 && <span className="px-1.5 text-[11px] font-bold text-[#94A3B8]">+{dayItems.length - 2}건</span>}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-[#475569]">
-          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-[#DC2626]" />공고 마감</span>
-          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-[#2563EB]" />할 일</span>
-          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-[#16A34A]" />완료</span>
-        </div>
-
-        {selected && (
-          <div className="mt-4 rounded-xl border border-[#E2E8F0] p-4">
-            <p className="text-sm font-bold text-[#0F172A]">{selected}</p>
-            {(byDate[selected] ?? []).length === 0 ? (
-              <p className="mt-2 text-sm text-[#94A3B8]">이 날짜에 등록된 일정이 없습니다.</p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {(byDate[selected] ?? []).map((item) => (
-                  <li key={item.id} className="flex items-center gap-2 text-sm">
-                    <span className={cn("h-2 w-2 shrink-0 rounded-full", itemDot(item))} />
-                    <span className="min-w-0 flex-1 truncate font-semibold text-[#0F172A]">{item.title}</span>
-                    <StatusBadge tone={item.kind === "program" ? "red" : item.status === "done" ? "green" : "blue"}>
-                      {item.kind === "program" ? "공고 마감" : item.status === "done" ? "완료" : "할 일"}
-                    </StatusBadge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-      </Panel>
-
-      <Panel title="다가오는 마감" action={<Button variant="ghost" size="sm" onClick={reload} icon={<RefreshCw size={13} />}>새로고침</Button>}>
-        <LoadState
-          error={null}
-          loading={!data && !error}
-          empty={Boolean(data) && upcoming.length === 0}
-          emptyTitle="다가오는 마감이 없습니다"
-          emptyDescription="지원사업을 선택하거나 마감일이 있는 할 일을 추가하면 이곳에 표시됩니다."
-          emptyAction={<LinkButton href="/founder/todo">할 일 추가하기</LinkButton>}
-        />
-        <div className="space-y-2">
-          {upcoming.map((item) => {
-            // 다른 화면과 같은 규칙으로 셉니다. 실시간 밀리초로 빼면 "오늘"이 화면마다 달라집니다.
-            const dday = getDday(item.date) ?? 0;
-            return (
-              <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#E2E8F0] p-3">
-                <div className="min-w-0">
-                  <strong className="block truncate text-sm font-bold text-[#0F172A]">{item.title}</strong>
-                  <span className="text-xs text-[#94A3B8]">{item.date}</span>
-                </div>
-                <StatusBadge tone={dday <= 3 ? "red" : dday <= 7 ? "amber" : "slate"}>D-{Math.max(0, dday)}</StatusBadge>
-              </div>
-            );
-          })}
-        </div>
-      </Panel>
-    </div>
-  );
 }
 
 // ---------------------------------------------------------------- 서류 보관함
@@ -345,6 +194,8 @@ const statusLabel: Record<TrackedSubmission["status"], string> = {
   approved: "승인",
   rejected: "반려",
 };
+
+const MS_DAY = 86_400_000;
 
 /** 제출 후 며칠 지났는지. 매니저 대기가 길어지는지를 팀이 스스로 판단할 수 있어야 합니다. */
 function waitingDays(from: string, to = new Date().toISOString()) {

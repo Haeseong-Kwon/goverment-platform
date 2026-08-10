@@ -1,4 +1,4 @@
-import type { CalendarItem, ConversionCode, TeamInvite, TeamMember, TrackedSubmission, VaultDocument, VaultFolder } from "../services/FounderWorkspaceService";
+import { buildAnnouncementUrl, type CalendarItem, type ConversionCode, type TeamInvite, type TeamMember, type TrackedSubmission, type VaultDocument, type VaultFolder } from "../services/FounderWorkspaceService";
 import type { ManagerReviewSubmission, PersistedTask, StartupProfile, SavedEligibilityReport, SubmissionEvidenceFile } from "../services/WorkspaceService";
 import type { EligibilityAnswers, EligibilityReport } from "@/features/startup-workspace/domain";
 import {
@@ -38,7 +38,11 @@ export function devTasks(): PersistedTask[] {
     .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"));
 }
 
-export function devCreateTask(title: string, dueDate?: string): PersistedTask {
+export function devCreateTask(title: string, dueDate?: string, announcementSn?: number): PersistedTask {
+  // 실제 DB의 (팀, 공고) 유니크 인덱스와 같은 규칙을 개발 모드에서도 적용합니다.
+  if (announcementSn !== undefined && devState().tasks.some((task) => task.announcement_sn === announcementSn)) {
+    throw new Error("이미 캘린더에 담은 공고입니다.");
+  }
   const created: PersistedTask = {
     id: nextId(),
     title: title.trim(),
@@ -48,6 +52,7 @@ export function devCreateTask(title: string, dueDate?: string): PersistedTask {
     is_hidden: false,
     assignee_id: null,
     comment_count: 0,
+    announcement_sn: announcementSn ?? null,
   };
   devUpdate((current) => ({ ...current, tasks: [...current.tasks, created] }));
   return created;
@@ -163,15 +168,45 @@ export function devRejectionReasonCodes(): string[] {
 }
 
 export function devCalendarItems(): CalendarItem[] {
-  const tasks: CalendarItem[] = devState()
-    .tasks.filter((task) => !task.is_hidden && task.due_date)
-    .map((task) => ({ id: task.id, title: task.title, date: task.due_date as string, kind: "task", status: task.status }));
+  const state = devState();
+  const commentCount = (taskId: string) => state.comments.filter((comment) => comment.taskId === taskId).length;
+
+  const tasks: CalendarItem[] = state.tasks
+    .filter((task) => !task.is_hidden && task.due_date)
+    .map((task) => {
+      const sn = task.announcement_sn ?? null;
+      const announcement = devAnnouncements().find((item) => item.pbanc_sn === sn);
+      return {
+        id: task.id,
+        taskId: task.id,
+        title: task.title,
+        date: task.due_date as string,
+        kind: sn === null ? ("task" as const) : ("announcement" as const),
+        status: task.status,
+        commentCount: commentCount(task.id),
+        ...(sn === null
+          ? {}
+          : {
+              announcement: {
+                sn,
+                detailUrl: announcement?.detail_url ?? buildAnnouncementUrl(sn),
+                startDate: announcement?.start_date ?? null,
+                endDate: announcement?.end_date ?? null,
+                supportField: announcement?.support_field ?? null,
+                regions: announcement?.regions ?? [],
+                resolved: Boolean(announcement),
+              },
+            }),
+      };
+    });
 
   const programs: CalendarItem[] = DEV_PROGRAM_DEADLINES.map((program) => ({
     id: `program-${program.id}`,
+    taskId: null,
     title: `${program.name} 마감`,
     date: program.deadline,
     kind: "program",
+    commentCount: 0,
   }));
 
   return [...tasks, ...programs].sort((a, b) => a.date.localeCompare(b.date));

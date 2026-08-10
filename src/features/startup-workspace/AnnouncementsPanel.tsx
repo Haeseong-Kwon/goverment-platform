@@ -261,7 +261,9 @@ export function AnnouncementsPanel() {
     setAddingId(announcement.pbanc_sn);
     setNotice(null);
     try {
-      await createWorkspaceTask(`[공고] ${announcement.title} 접수 마감`, announcement.end_date);
+      // 공고 일련번호를 함께 넘겨야 캘린더가 팀 일정과 구분해 공고 색으로 그리고,
+      // 접수 기간·원문 링크를 다시 붙일 수 있습니다.
+      await createWorkspaceTask(`[공고] ${announcement.title} 접수 마감`, announcement.end_date, announcement.pbanc_sn);
       setAddedIds((current) => [...current, announcement.pbanc_sn]);
       setNotice({ tone: "success", text: `마감일(${formatDate(announcement.end_date)})을 팀 TODO와 마감 캘린더에 추가했습니다.` });
     } catch (reason) {

@@ -10,12 +10,13 @@ import {
 import { getDday, getFounderDashboardSummary, getMonthlyDiagnosticUsage } from "./logic";
 import { EligibilityPanel } from "./EligibilityPanel";
 import { AnnouncementsPanel } from "./AnnouncementsPanel";
-import { CalendarPanel, IncorporationPanel, TeamSettingsPanel, TrackerPanel, VaultPanel } from "./FounderPanels";
+import { TaskCommentThread } from "./TaskCommentThread";
+import { IncorporationPanel, TeamSettingsPanel, TrackerPanel, VaultPanel } from "./FounderPanels";
+import { CalendarPanel } from "./CalendarPanel";
 import { getSelectedPrograms, getTeamMembers, listVaultDocuments, type BudgetLine, type SelectedProgram, type TeamMember, type VaultDocument } from "@/lib/services/FounderWorkspaceService";
 import { RequireFounderSession, WorkspaceShell } from "./shell";
 import { DEV_BYPASS } from "@/lib/dev/devMode";
 import {
-  addTaskComment,
   assignTask,
   createWorkspaceTask,
   convertPrepTeam,
@@ -23,7 +24,6 @@ import {
   getAuthHeaders,
   getBizplanDiagnosisEvents,
   getBizplanHistory,
-  getTaskComments,
   getWaitlistEntries,
   getWorkspaceTasks,
   trackWorkspaceEvent,
@@ -32,7 +32,6 @@ import {
   updateWorkspaceTask,
   type BizplanHistoryEntry,
   type PersistedTask,
-  type TaskComment,
 } from "@/lib/services/WorkspaceService";
 import { Button, EmptyState, Field, IconButton, LinkButton, Notice, PageHeader, Panel, ProgressBar, Skeleton, StatusBadge, focusRing, inputClass, interactive, textareaClass, useToast } from "./ui";
 import { ExpenseValidator } from "@/features/expense-rules/ExpenseValidator";
@@ -178,70 +177,6 @@ function TaskRow({
 }
 
 /** 칸반 열은 폭이 좁습니다. 제목을 자르는 대신 줄바꿈하고 이동 버튼을 카드 안에 둡니다. */
-/**
- * 할 일 코멘트 스레드.
- *
- * 실시간 채팅 대신 업무 객체에 붙습니다. 열었을 때만 조회해 목록 로딩을 무겁게 하지 않습니다.
- */
-function TaskCommentThread({ taskId, onAdded }: { taskId: string; onAdded: () => void }) {
-  const [comments, setComments] = useState<TaskComment[] | null>(null);
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-    getTaskComments(taskId)
-      .then((rows) => { if (mounted) setComments(rows); })
-      .catch((reason) => { if (mounted) { setComments([]); setError(toMessage(reason, "코멘트를 불러오지 못했습니다.")); } });
-    return () => { mounted = false; };
-  }, [taskId]);
-
-  const submit = async () => {
-    if (saving || !draft.trim()) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const created = await addTaskComment(taskId, draft);
-      setComments((current) => [...(current ?? []), created]);
-      setDraft("");
-      onAdded();
-    } catch (reason) {
-      setError(toMessage(reason, "코멘트를 남기지 못했습니다."));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="mt-3 space-y-2 rounded-lg bg-[#F8FAFC] p-3">
-      {comments === null && <p className="text-xs text-[#94A3B8]">불러오는 중…</p>}
-      {comments?.length === 0 && <p className="text-xs text-[#94A3B8]">첫 코멘트를 남겨 보세요.</p>}
-      {comments?.map((comment) => (
-        <div key={comment.id} className="rounded-lg bg-white p-2.5">
-          <div className="flex items-baseline justify-between gap-2">
-            <strong className="text-xs font-bold text-[#0F172A]">{comment.authorName}</strong>
-            <span className="shrink-0 text-[11px] text-[#94A3B8]">{comment.createdAt.slice(0, 10)}</span>
-          </div>
-          <p className="mt-1 break-keep text-xs leading-5 text-[#475569]">{comment.content}</p>
-        </div>
-      ))}
-      {error && <p className="text-xs font-semibold text-[#DC2626]">{error}</p>}
-      <div className="flex gap-1.5">
-        <input
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Enter") void submit(); }}
-          placeholder="코멘트 남기기"
-          aria-label="코멘트 입력"
-          className={cn(inputClass, "h-9 text-xs")}
-        />
-        <Button size="sm" loading={saving} disabled={!draft.trim()} onClick={() => void submit()}>등록</Button>
-      </div>
-    </div>
-  );
-}
-
 function TaskCard({
   task,
   pending,
@@ -583,7 +518,7 @@ type FounderFeature = "announcements" | "todo" | "calendar" | "diagnostics" | "c
 const FEATURE_META: Record<FounderFeature, { title: string; description: string }> = {
   announcements: { title: "지원사업 공고", description: "K-Startup 공식 오픈API에서 매일 받아 오는 정부지원사업 공고입니다. 내 조건으로 걸러 보고, 마감일을 캘린더로 보냅니다." },
   todo: { title: "팀 TODO", description: "공고 마감 기준 자동 마일스톤과 직접 추가한 할 일을 함께 관리합니다." },
-  calendar: { title: "마감 캘린더", description: "선택한 지원사업 공고 마감과 팀 할 일 마감을 한 달력에서 확인합니다." },
+  calendar: { title: "마감 캘린더", description: "K-Startup 공고 마감·지원사업 마감·팀 일정을 색으로 구분해 한 달력에서 봅니다. 날짜를 골라 일정을 추가하고, 각 일정에 팀원과 코멘트를 주고받습니다." },
   diagnostics: { title: "AI 진단", description: "자격 요건을 룰셋으로 판정하고 사업계획서를 PSST 구조로 점검합니다." },
   calculator: { title: "계산기", description: "4대보험 실부담액, 인건비 총부담액, 법인 vs 개인 세금을 비교합니다. 모든 결과는 참고용 추정입니다." },
   library: { title: "무료 자료실", description: "출처가 표기된 창업 표준 양식을 받습니다. 계약서·IR·인사·정부지원 행정 서식." },

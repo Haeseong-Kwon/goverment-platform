@@ -26,6 +26,8 @@ export interface DevTask {
   is_hidden: boolean;
   assignee_id: string | null;
   comment_count: number;
+  /** K-Startup 공고에서 담은 일정이면 그 공고 일련번호. */
+  announcement_sn?: number | null;
 }
 
 export interface DevComment {
@@ -85,11 +87,14 @@ const seedTasks = (): DevTask[] => [
   { id: "t7", title: "팀 소개 페이지 초안", due_date: null, status: "todo", task_type: "custom", is_hidden: false, assignee_id: null, comment_count: 0 },
   { id: "t8", title: "사업자 통장 개설", due_date: day(-6), status: "done", task_type: "custom", is_hidden: false, assignee_id: DEV_USER.id, comment_count: 0 },
   { id: "t9", title: "아이템 한 줄 소개 확정", due_date: day(-9), status: "done", task_type: "custom", is_hidden: false, assignee_id: null, comment_count: 0 },
+  // 공고에서 담은 일정. 캘린더가 팀 일정과 다른 색으로 구분하는지 개발 모드에서도 보입니다.
+  { id: "t10", title: "[공고] 2026년 웰컴 투 팁스 1차 참가기업 모집 (충청권) 접수 마감", due_date: day(5), status: "todo", task_type: "custom", is_hidden: false, assignee_id: null, comment_count: 1, announcement_sn: 178845 },
 ];
 
 const seedComments = (): DevComment[] => [
   { id: "c1", taskId: "t1", authorId: "dev-2", authorName: "박민준", content: "문제 인식 파트에 시장 손실 규모 수치를 넣어야 할 것 같습니다.", createdAt: iso(-2) },
   { id: "c2", taskId: "t1", authorId: DEV_USER.id, authorName: DEV_USER.fullName, content: "통계청 자료로 보완했습니다. 오늘 중 초안 공유할게요.", createdAt: iso(-1) },
+  { id: "c4", taskId: "t10", authorId: "dev-2", authorName: "박민준", content: "충청권 소재 요건이라 사무실 주소 이전 일정부터 확인해야 합니다.", createdAt: iso(-1) },
   { id: "c3", taskId: "t5", authorId: "dev-3", authorName: "정서연", content: "경쟁사 두 곳은 가격을 공개하지 않아 문의 메일 보냈습니다.", createdAt: iso(-1) },
 ];
 

@@ -196,15 +196,45 @@ export async function joinTeamByInvite(code: string) {
   return data as string;
 }
 
-export interface CalendarItem {
-  id: string;
-  title: string;
-  date: string;
-  kind: "task" | "program";
-  status?: "todo" | "in_progress" | "done";
+/**
+ * 캘린더 한 칸에 들어가는 항목의 종류.
+ *
+ * `announcement`(K-Startup 공고에서 담은 마감)와 `task`(팀이 직접 만든 일정)를 갈라 둡니다.
+ * 둘 다 workspace_tasks 한 행이지만 성격이 달라 화면에서 색과 설명이 달라야 합니다.
+ * `program`은 온보딩에서 고른 지원사업의 마감이라 팀이 지울 수 없는 고정 항목입니다.
+ */
+export type CalendarKind = "announcement" | "program" | "task";
+
+/** 캘린더 항목에 붙는 공고 원본 정보. 공고가 캐시에서 정리되면 링크만 남습니다. */
+export interface CalendarAnnouncement {
+  sn: number;
+  detailUrl: string;
+  startDate: string | null;
+  endDate: string | null;
+  supportField: string | null;
+  regions: string[];
+  /** 공고 캐시에서 다시 찾은 값인지. false면 보관 기간이 지나 링크만 살아 있습니다. */
+  resolved: boolean;
 }
 
-/** 마감 캘린더 원본: 팀 TODO 마감일 + 선택한 지원사업 공고 마감일. */
+export interface CalendarItem {
+  id: string;
+  /** 코멘트를 달 수 있는 항목(=workspace_tasks 행)만 값이 있습니다. */
+  taskId: string | null;
+  title: string;
+  date: string;
+  kind: CalendarKind;
+  status?: "todo" | "in_progress" | "done";
+  commentCount: number;
+  announcement?: CalendarAnnouncement;
+}
+
+/** 공고가 캐시에서 정리돼도 원문으로는 갈 수 있어야 합니다. 일련번호만으로 조립되는 주소입니다. */
+export function buildAnnouncementUrl(sn: number) {
+  return `https://www.k-startup.go.kr/web/contents/bizpbanc-ongoing.do?schM=view&pbancSn=${sn}`;
+}
+
+/** 마감 캘린더 원본: 팀 일정 + 공고에서 담은 마감 + 선택한 지원사업 마감. */
 export async function getCalendarItems(): Promise<CalendarItem[]> {
   if (DEV_BYPASS) return (await import("../dev/devServices")).devCalendarItems();
   const client = requireClient();
@@ -212,7 +242,8 @@ export async function getCalendarItems(): Promise<CalendarItem[]> {
 
   const { data: tasks, error: taskError } = await client
     .from("workspace_tasks")
-    .select("id, title, due_date, status")
+    // 코멘트 개수는 집계로 함께 받습니다. 항목마다 따로 조회하면 한 달치가 수십 번 왕복합니다.
+    .select("id, title, due_date, status, announcement_sn, task_comments(count)")
     .eq("prep_team_id", teamId)
     .eq("is_hidden", false)
     .not("due_date", "is", null);
@@ -224,18 +255,58 @@ export async function getCalendarItems(): Promise<CalendarItem[]> {
     .eq("prep_team_id", teamId);
   if (projectError) throw projectError;
 
-  const taskItems: CalendarItem[] = (tasks ?? []).map((row) => ({
-    id: row.id as string,
-    title: row.title as string,
-    date: row.due_date as string,
-    kind: "task",
-    status: row.status as "todo" | "in_progress" | "done",
-  }));
+  // 담은 공고의 접수 기간·분야를 캘린더에서 바로 보여 주기 위해 한 번에 붙입니다.
+  const announcementSns = Array.from(
+    new Set((tasks ?? []).map((row) => row.announcement_sn as number | null).filter((sn): sn is number => typeof sn === "number")),
+  );
+  const announcementBySn = new Map<string, Record<string, unknown>>();
+  if (announcementSns.length > 0) {
+    const { data: announcements } = await client
+      .from("kstartup_announcements")
+      .select("pbanc_sn, detail_url, start_date, end_date, support_field, regions")
+      .in("pbanc_sn", announcementSns);
+    (announcements ?? []).forEach((row) => announcementBySn.set(String(row.pbanc_sn), row));
+  }
+
+  const taskItems: CalendarItem[] = (tasks ?? []).map((row) => {
+    const counts = row.task_comments as Array<{ count: number }> | null;
+    const sn = row.announcement_sn as number | null;
+    const source = sn === null ? null : announcementBySn.get(String(sn));
+    return {
+      id: row.id as string,
+      taskId: row.id as string,
+      title: row.title as string,
+      date: row.due_date as string,
+      kind: sn === null ? "task" : "announcement",
+      status: row.status as "todo" | "in_progress" | "done",
+      commentCount: counts?.[0]?.count ?? 0,
+      ...(sn === null
+        ? {}
+        : {
+            announcement: {
+              sn,
+              detailUrl: (source?.detail_url as string | undefined) ?? buildAnnouncementUrl(sn),
+              startDate: (source?.start_date as string | undefined) ?? null,
+              endDate: (source?.end_date as string | undefined) ?? null,
+              supportField: (source?.support_field as string | undefined) ?? null,
+              regions: (source?.regions as string[] | undefined) ?? [],
+              resolved: Boolean(source),
+            },
+          }),
+    };
+  });
 
   const programItems: CalendarItem[] = (projects ?? []).flatMap((row) => {
     const program = (Array.isArray(row.programs) ? row.programs[0] : row.programs) as { id?: string; name?: string; deadline?: string } | null;
     if (!program?.deadline) return [];
-    return [{ id: `program-${program.id}`, title: `${program.name} 마감`, date: program.deadline, kind: "program" as const }];
+    return [{
+      id: `program-${program.id}`,
+      taskId: null,
+      title: `${program.name} 마감`,
+      date: program.deadline,
+      kind: "program" as const,
+      commentCount: 0,
+    }];
   });
 
   return [...taskItems, ...programItems].sort((a, b) => a.date.localeCompare(b.date));

@@ -300,6 +300,8 @@ export interface PersistedTask {
   is_hidden: boolean;
   assignee_id: string | null;
   comment_count: number;
+  /** K-Startup 공고에서 담은 일정이면 그 공고 일련번호. 직접 만든 일정은 null입니다. */
+  announcement_sn?: number | null;
 }
 
 /** 제출 건에 첨부된 실제 증빙 파일. 매니저가 만료형 링크로 열 대상입니다. */
@@ -810,13 +812,27 @@ export async function getRejectionReasonCodes(): Promise<string[]> {
   return (data ?? []).flatMap((row) => String(row.reason_code ?? "").split(",")).filter(Boolean);
 }
 
-export async function createWorkspaceTask(title: string, dueDate?: string) {
-  if (!title.trim()) throw new Error("할 일 제목을 입력해 주세요.");
-  if (DEV_BYPASS) return (await import("../dev/devServices")).devCreateTask(title, dueDate);
+/**
+ * 팀 일정 한 건을 만듭니다.
+ *
+ * `announcementSn`을 주면 K-Startup 공고에서 담은 일정이 되어 캘린더가 팀 일정과
+ * 다른 색으로 구분하고 공고 정보를 다시 붙입니다. 같은 공고를 두 번 담으면
+ * 유니크 인덱스가 막고, 사용자에게는 "이미 담았다"로 알려 줍니다.
+ */
+export async function createWorkspaceTask(title: string, dueDate?: string, announcementSn?: number) {
+  if (!title.trim()) throw new Error("일정 제목을 입력해 주세요.");
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devCreateTask(title, dueDate, announcementSn);
   const client = requireClient();
   const teamId = await getCurrentPrepTeamId();
-  const { data, error } = await client.from("workspace_tasks").insert({ prep_team_id: teamId, title: title.trim(), due_date: dueDate || null, task_type: "custom" }).select("id,title,due_date,status,task_type,is_hidden,assignee_id").single();
-  if (error) throw error;
+  const { data, error } = await client
+    .from("workspace_tasks")
+    .insert({ prep_team_id: teamId, title: title.trim(), due_date: dueDate || null, task_type: "custom", announcement_sn: announcementSn ?? null })
+    .select("id,title,due_date,status,task_type,is_hidden,assignee_id,announcement_sn")
+    .single();
+  if (error) {
+    if (error.code === "23505") throw new Error("이미 캘린더에 담은 공고입니다.");
+    throw error;
+  }
   return data as PersistedTask;
 }
 

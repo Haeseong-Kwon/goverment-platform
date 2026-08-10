@@ -169,14 +169,14 @@
   "hotPaths": [
     {
       "path": "src/lib/services/WorkspaceService.ts",
-      "accessCount": 75,
-      "lastAccessed": 1785815434161,
+      "accessCount": 77,
+      "lastAccessed": 1786327998428,
       "type": "file"
     },
     {
       "path": "src/features/startup-workspace/components.tsx",
-      "accessCount": 75,
-      "lastAccessed": 1786322975488,
+      "accessCount": 76,
+      "lastAccessed": 1786328416431,
       "type": "file"
     },
     {
@@ -187,14 +187,14 @@
     },
     {
       "path": "src/features/startup-workspace/FounderPanels.tsx",
-      "accessCount": 32,
-      "lastAccessed": 1785810421410,
+      "accessCount": 33,
+      "lastAccessed": 1786328231367,
       "type": "file"
     },
     {
       "path": "src/lib/services/FounderWorkspaceService.ts",
-      "accessCount": 29,
-      "lastAccessed": 1785815358913,
+      "accessCount": 30,
+      "lastAccessed": 1786328040972,
       "type": "file"
     },
     {
