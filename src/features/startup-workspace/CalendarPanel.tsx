@@ -205,7 +205,7 @@ const FEED_VISIBLE = 6;
  * 캘린더가 공고 실데이터를 보여 주는 지점입니다. 여기서 바로 담으면 코멘트를 달 수 있는
  * 팀 일정이 되고, 그때부터 위쪽 목록으로 올라갑니다.
  */
-function DayAnnouncementFeed({ deadlines, onAdded }: { deadlines: AnnouncementDeadline[]; onAdded: () => void }) {
+function DayAnnouncementFeed({ deadlines, onAdded }: { deadlines: AnnouncementDeadline[]; onAdded: (item: CalendarItem) => void }) {
   const [addingSn, setAddingSn] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -214,8 +214,26 @@ function DayAnnouncementFeed({ deadlines, onAdded }: { deadlines: AnnouncementDe
     setAddingSn(deadline.sn);
     setError(null);
     try {
-      await createWorkspaceTask(`[공고] ${deadline.title} 접수 마감`, deadline.endDate, deadline.sn);
-      onAdded();
+      const created = await createWorkspaceTask(`[공고] ${deadline.title} 접수 마감`, deadline.endDate, deadline.sn);
+      onAdded({
+        id: created.id,
+        taskId: created.id,
+        title: created.title,
+        date: created.due_date ?? deadline.endDate,
+        kind: "announcement",
+        status: created.status,
+        commentCount: 0,
+        // 접수 시작일은 목록 질의에 없어 비워 둡니다. 이어지는 새로고침이 채웁니다.
+        announcement: {
+          sn: deadline.sn,
+          detailUrl: deadline.detailUrl,
+          startDate: null,
+          endDate: deadline.endDate,
+          supportField: deadline.supportField,
+          regions: deadline.regions,
+          resolved: true,
+        },
+      });
     } catch (reason) {
       setError(toMessage(reason, "공고를 담지 못했습니다."));
     } finally {
@@ -270,7 +288,7 @@ function DayAnnouncementFeed({ deadlines, onAdded }: { deadlines: AnnouncementDe
   );
 }
 
-function AddScheduleForm({ date, onAdded }: { date: string; onAdded: () => void }) {
+function AddScheduleForm({ date, onAdded }: { date: string; onAdded: (item: CalendarItem) => void }) {
   const [title, setTitle] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -280,9 +298,19 @@ function AddScheduleForm({ date, onAdded }: { date: string; onAdded: () => void 
     setSaving(true);
     setError(null);
     try {
-      await createWorkspaceTask(title, date);
+      const created = await createWorkspaceTask(title, date);
       setTitle("");
-      onAdded();
+      // 저장된 행을 그대로 화면에 얹습니다. 목록을 다시 받아 오는 데 실패해도
+      // 방금 추가한 일정은 반드시 보여야 합니다(저장은 됐는데 화면은 그대로인 상태 방지).
+      onAdded({
+        id: created.id,
+        taskId: created.id,
+        title: created.title,
+        date: created.due_date ?? date,
+        kind: "task",
+        status: created.status,
+        commentCount: 0,
+      });
     } catch (reason) {
       setError(toMessage(reason, "일정을 추가하지 못했습니다."));
     } finally {
@@ -331,6 +359,19 @@ export function CalendarPanel() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  /**
+   * 방금 저장한 일정을 즉시 화면에 얹고, 이어서 서버 상태로 맞춥니다.
+   *
+   * 다시 받아 오기에만 기대면 저장은 성공했는데 조회가 실패했을 때 화면이 그대로여서
+   * "저장이 안 됐다"로 보입니다(오류 배너는 페이지 맨 위라 눈에 띄지도 않습니다).
+   * 저장된 행을 먼저 반영하면 그 상태가 나오지 않습니다.
+   */
+  const applyCreated = useCallback((item: CalendarItem) => {
+    setItems((current) => [...(current ?? []), item].sort((a, b) => a.date.localeCompare(b.date)));
+    setSelected(item.date);
+    void load();
+  }, [load]);
 
   const { cells, label } = useMemo(() => {
     const base = new Date();
@@ -391,8 +432,8 @@ export function CalendarPanel() {
           {selectedItems.map((item) => <DayItemRow key={item.id} item={item} onCommentAdded={() => void load()} />)}
         </ul>
       )}
-      <AddScheduleForm date={selected} onAdded={() => void load()} />
-      <DayAnnouncementFeed deadlines={feedByDate[selected] ?? []} onAdded={() => void load()} />
+      <AddScheduleForm date={selected} onAdded={applyCreated} />
+      <DayAnnouncementFeed deadlines={feedByDate[selected] ?? []} onAdded={applyCreated} />
     </Panel>
   );
 
