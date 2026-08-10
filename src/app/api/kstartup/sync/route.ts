@@ -3,6 +3,13 @@ import { createAdminClient } from "@/lib/supabaseAdmin";
 import { normalizeAnnouncement, toIsoDate, type Announcement } from "@/lib/kstartup/announcements";
 import { toKstDateKey } from "@/features/startup-workspace/logic";
 
+/**
+ * 페이지를 순차로 받아 오는 작업이라 기본 함수 타임아웃(초 단위)에 걸릴 수 있습니다.
+ * 로컬 실측은 31페이지에 6.9초였고, 배포 리전에서 data.go.kr까지의 지연이 더해집니다.
+ * 잘리면 "일부만 동기화"가 아니라 502로 끝나 이전 데이터가 그대로 남습니다(무해하지만 갱신 정지).
+ */
+export const maxDuration = 60;
+
 const BASE_URL = "https://apis.data.go.kr/B552735/kisedKstartupService01/getAnnouncementInformation01";
 const PER_PAGE = 100;
 
@@ -12,11 +19,33 @@ const PER_PAGE = 100;
  * 다만 마감일이 페이지마다 섞여 있어 "0건인 페이지 하나"로 끊으면 뒤쪽 공고를 놓칩니다.
  * 빈 페이지가 연속 3장 나올 때까지만 더 봅니다.
  */
-const MAX_PAGES = 25;
+/**
+ * 상한은 폭주 방지용이지 정상 종료 수단이 아닙니다. 실측(2026-08) 기준 유효 공고는
+ * 26페이지까지 드문드문 남아 있고 40페이지부터 완전히 사라집니다. 25로 두었더니
+ * 상한에서 잘려 뒤쪽 공고를 조용히 놓쳤습니다. 빈 페이지 연속 규칙이 먼저 걸리도록
+ * 넉넉히 잡습니다(60요청/일은 개발계정 10,000 한도에 영향 없음).
+ */
+const MAX_PAGES = 60;
 const EMPTY_PAGE_STREAK_LIMIT = 3;
 
 /** 지난 공고를 언제까지 남길지. 마감 직후 "그 공고 어디 갔냐"를 막는 최소한의 여유입니다. */
 const KEEP_CLOSED_DAYS = 14;
+
+/**
+ * 공공데이터포털은 같은 인증키를 Encoding·Decoding 두 형태로 나란히 보여 줍니다.
+ * 아래에서 URLSearchParams가 한 번 더 인코딩하므로, Encoding 값을 그대로 넣으면
+ * `%2B`가 `%252B`가 되어 "등록되지 않은 서비스키(30)"로 거절당합니다.
+ * 어느 쪽을 붙여 넣어도 되게 여기서 한 번 되돌립니다.
+ */
+export function normalizeServiceKey(rawKey: string): string {
+  if (!rawKey.includes("%")) return rawKey;
+  try {
+    return decodeURIComponent(rawKey);
+  } catch {
+    // 퍼센트가 인코딩이 아닌 일반 문자인 키. 그대로 씁니다.
+    return rawKey;
+  }
+}
 
 async function fetchPage(serviceKey: string, page: number): Promise<Record<string, unknown>[]> {
   const url = new URL(BASE_URL);
@@ -58,7 +87,8 @@ function shiftDateKey(dateKey: string, days: number): string {
  */
 export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET?.trim();
-  const serviceKey = process.env.DATA_GO_KR_API_KEY?.trim();
+  const rawServiceKey = process.env.DATA_GO_KR_API_KEY?.trim();
+  const serviceKey = rawServiceKey ? normalizeServiceKey(rawServiceKey) : rawServiceKey;
 
   if (!cronSecret) return NextResponse.json({ error: "CRON_SECRET이 설정되지 않아 동기화가 꺼져 있습니다." }, { status: 503 });
   if (request.headers.get("authorization") !== `Bearer ${cronSecret}`) {
@@ -71,6 +101,9 @@ export async function GET(request: NextRequest) {
   const collected = new Map<number, Announcement>();
   let emptyStreak = 0;
   let pagesRead = 0;
+  // 상한에서 끊긴 것과 다 읽고 끝난 것을 구분해 응답에 남깁니다.
+  // 구분이 없으면 "동기화 성공"이 곧 "빠짐없이 받았다"로 읽혀 누락을 못 알아챕니다.
+  let reachedPageLimit = false;
 
   try {
     for (let page = 1; page <= MAX_PAGES; page += 1) {
@@ -89,6 +122,7 @@ export async function GET(request: NextRequest) {
       kept.forEach((announcement) => collected.set(announcement.pbanc_sn, announcement));
       emptyStreak = kept.length === 0 ? emptyStreak + 1 : 0;
       if (emptyStreak >= EMPTY_PAGE_STREAK_LIMIT) break;
+      reachedPageLimit = page === MAX_PAGES;
     }
   } catch (error) {
     // 부분 실패로 테이블을 반쯤 비우지 않습니다. 이전 동기화 결과를 그대로 두는 편이
@@ -118,5 +152,14 @@ export async function GET(request: NextRequest) {
     .lt("end_date", cutoff);
   if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
 
-  return NextResponse.json({ synced: announcements.length, removed: removed ?? 0, pagesRead, syncedAt });
+  return NextResponse.json({
+    synced: announcements.length,
+    removed: removed ?? 0,
+    pagesRead,
+    syncedAt,
+    reachedPageLimit,
+    ...(reachedPageLimit
+      ? { warning: `${MAX_PAGES}페이지 상한에서 멈췄습니다. 뒤쪽 공고가 빠졌을 수 있으니 MAX_PAGES를 올리세요.` }
+      : {}),
+  });
 }
