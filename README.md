@@ -76,10 +76,19 @@ npm run build     # next build
 
 ```
 schema.sql → 002-manager-review.sql → 003-profile-role-lock.sql → 004-seed.sql → 005-vault-and-team.sql
-           → 006-submission-evidence.sql → 007-onboarding-team-read.sql
+           → 006-submission-evidence.sql → 007-onboarding-team-read.sql → 008-completion.sql
+           → 010-kstartup-announcements.sql → 011-calendar-announcement-link.sql
+           → 012-comment-attachments.sql → 013-real-announcement-deadlines.sql
 ```
 
 `007`은 반드시 적용해야 합니다. 없으면 가입 후 온보딩 마지막 단계가 항상 실패합니다.
+
+`009-refresh-seed-deadlines.sql`은 **폐기**되었습니다(전체 주석 처리). `013`이 임시 마감일을
+없애고 일정의 출처를 K-Startup 실공고로 옮겼는데, `009`는 그 임시 날짜를 다시 채우던 스크립트입니다.
+
+`013`은 `programs.deadline`을 비웁니다. 지원사업 마감일은 이제 `kstartup_announcements`에서
+사업명으로 찾아 씁니다 — 접수 중인 공고가 없으면 날짜를 지어내지 않고 "접수 중인 공고 없음"으로 표시됩니다.
+따라서 `010` 적용과 공고 동기화가 선행되어야 대시보드·캘린더에 마감이 나타납니다.
 
 인증 메일 문안은 코드가 아니라 Supabase 프로젝트 설정에 있습니다 → `supabase/email-templates/README.md`
 

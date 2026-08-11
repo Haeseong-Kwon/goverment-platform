@@ -5,27 +5,36 @@ import { CalendarCheck, Radar, ShieldCheck } from "lucide-react";
 import { inputClass } from "@/features/startup-workspace/ui";
 import { cn } from "@/lib/utils";
 
-const HIGHLIGHTS = [
+export interface AuthHighlight {
+  Icon: typeof Radar;
+  title: string;
+  desc: string;
+}
+
+const HIGHLIGHTS: AuthHighlight[] = [
   { Icon: Radar, title: "AI 자격·계획서 진단", desc: "근거 조항과 함께 판정 결과를 돌려줍니다." },
   { Icon: CalendarCheck, title: "마감 기준 자동 TODO", desc: "공고 마감일에서 준비 마일스톤을 역산합니다." },
   { Icon: ShieldCheck, title: "정산 사전검증", desc: "반려될 항목을 제출 전에 먼저 찾습니다." },
 ];
 
 /** 로그인·회원가입·비밀번호 재설정이 같은 화면 구조와 어조를 쓰도록 합니다. */
-export function AuthShell({ title, description, children, footer }: {
+export function AuthShell({ title, description, children, footer, lead, highlights = HIGHLIGHTS }: {
   title: string;
   description: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** 왼쪽 소개면의 큰 문구. 기관 화면은 창업자와 다른 이야기를 합니다. */
+  lead?: React.ReactNode;
+  highlights?: AuthHighlight[];
 }) {
   return (
     <div className="grid min-h-screen bg-white text-[#0F172A] lg:grid-cols-2">
       <aside className="hidden flex-col justify-between bg-[#F8FAFC] p-12 lg:flex">
         <Link href="/" className="text-xl font-bold">StartUp Pilot</Link>
         <div>
-          <h2 className="text-[32px] font-bold leading-tight">정부 창업지원사업 행정을<br />한 워크스페이스에서</h2>
+          <h2 className="text-[32px] font-bold leading-tight">{lead ?? <>정부 창업지원사업 행정을<br />한 워크스페이스에서</>}</h2>
           <ul className="mt-10 space-y-6">
-            {HIGHLIGHTS.map(({ Icon, title: label, desc }) => (
+            {highlights.map(({ Icon, title: label, desc }) => (
               <li key={label} className="flex gap-4">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#EFF6FF] text-[#2563EB]"><Icon size={18} /></span>
                 <span>

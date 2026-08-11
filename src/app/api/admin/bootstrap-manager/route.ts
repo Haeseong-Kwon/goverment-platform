@@ -54,9 +54,8 @@ export async function POST(request: NextRequest) {
       );
     if (profileError) throw profileError;
 
-    // 자동 마일스톤 TODO는 programs.deadline이 있어야 생성됩니다.
-    const deadline = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
-    await admin.from("programs").update({ deadline }).is("deadline", null);
+    // programs.deadline은 채우지 않습니다. 자동 마일스톤 기준일은 K-Startup 공고의
+    // 실제 마감일이며, 여기서 임시 날짜를 넣으면 그 값이 다시 대시보드 D-day로 나갑니다.
 
     const { data: codes } = await admin
       .from("conversion_codes")

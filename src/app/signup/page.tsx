@@ -119,7 +119,8 @@ export default function SignupPage() {
         <Button type="submit" size="lg" block loading={loading}>가입하고 인증 메일 받기</Button>
 
         <p className="text-xs leading-6 text-[#94A3B8]">
-          주관기관 매니저 계정은 기관이 직접 발급합니다. 기관 담당자에게 문의해 주세요.
+          주관기관 매니저 계정은 기관이 직접 발급합니다. 이미 발급받으셨다면{" "}
+          <Link href="/manager/login" className="font-bold text-[#2563EB]">주관기관 로그인</Link>으로 들어가 주세요.
         </p>
       </form>
     </AuthShell>

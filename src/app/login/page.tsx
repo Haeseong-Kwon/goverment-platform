@@ -118,10 +118,16 @@ export default function LoginPage() {
       title="워크스페이스 로그인"
       description="팀 TODO, 진단 결과, 서류 보관함은 팀 계정에 저장됩니다."
       footer={
-        <p className="flex flex-wrap items-center justify-between gap-2 text-[#475569]">
-          아직 계정이 없으신가요?
-          <Link href="/signup" className="font-bold text-[#2563EB]">회원가입</Link>
-        </p>
+        <div className="space-y-3 text-[#475569]">
+          <p className="flex flex-wrap items-center justify-between gap-2">
+            아직 계정이 없으신가요?
+            <Link href="/signup" className="font-bold text-[#2563EB]">회원가입</Link>
+          </p>
+          <p className="flex flex-wrap items-center justify-between gap-2">
+            주관기관 담당자이신가요?
+            <Link href="/manager/login" className="font-bold text-[#2563EB]">주관기관 로그인</Link>
+          </p>
+        </div>
       }
     >
       <form onSubmit={submitLogin} className="space-y-5">

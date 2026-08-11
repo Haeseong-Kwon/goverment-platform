@@ -315,7 +315,7 @@ export function RequireFounderSession({
  * 로그아웃 방문자와 일반 창업자에게도 검토 큐가 그대로 열려, 자기 제출 건이
  * 목록에 뜨고 승인·반려 버튼까지 눌리는 상태였습니다(서버는 막지만 화면은 허용).
  */
-export function RequireManagerSession({ children, deniedFallback }: { children: React.ReactNode; deniedFallback?: React.ReactNode }) {
+export function RequireManagerSession({ children }: { children: React.ReactNode }) {
   const session = useSession();
 
   if (session.status === "loading") {
@@ -337,14 +337,14 @@ export function RequireManagerSession({ children, deniedFallback }: { children: 
           검토 큐와 팀 관리는 주관기관 매니저 계정에만 열립니다.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
-          <LinkButton href="/login" size="lg">로그인</LinkButton>
+          <LinkButton href="/manager/login" size="lg">주관기관 로그인</LinkButton>
           <LinkButton href="/" variant="secondary" size="lg">창업자 화면으로</LinkButton>
         </div>
       </Gate>
     );
   }
 
-  // 기관 소속이 없으면 매니저가 아닙니다. 부트스트랩 카드는 이 안쪽에서만 보여야 합니다.
+  // 기관 소속이 없으면 매니저가 아닙니다. 기관 연결은 주관기관 로그인 화면이 처리합니다.
   if (session.profile?.role !== "manager" || !session.profile.institutionId) {
     return (
       <Gate role="manager">
@@ -352,13 +352,13 @@ export function RequireManagerSession({ children, deniedFallback }: { children: 
         <h1 className="mt-4 text-2xl font-bold">기관 매니저 계정이 아닙니다</h1>
         <p className="mt-3 text-sm leading-6 text-[#475569]">
           이 화면은 주관기관이 정산 검토를 처리하는 곳입니다. 창업자 계정이라면 준비 워크스페이스를 이용해 주세요.
+          기관 담당자시라면 기관에 등록된 업무 이메일로 주관기관 로그인을 이용해 주세요.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
-          <LinkButton href="/founder" size="lg">준비 워크스페이스로</LinkButton>
+          <LinkButton href="/manager/login" size="lg">주관기관 로그인</LinkButton>
+          <LinkButton href="/founder" variant="secondary" size="lg">준비 워크스페이스로</LinkButton>
           <LinkButton href="/manager/landing" variant="secondary" size="lg">기관 도입 안내</LinkButton>
         </div>
-        {/* 기관 계정 활성화는 로그인한 사용자에게만, 그것도 이 안쪽에서만 노출합니다. */}
-        {deniedFallback && <div className="mt-8 border-t border-[#E2E8F0] pt-6">{deniedFallback}</div>}
       </Gate>
     );
   }

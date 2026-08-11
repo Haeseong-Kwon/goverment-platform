@@ -82,14 +82,28 @@ describe.skipIf(!LIVE)("실제 DB 통합 — 로그인 후 창업자 흐름", ()
     const profile = await ws.getStartupProfile();
     expect(profile?.onboardingComplete, "온보딩 후 프로필 캐시가 갱신되어야 합니다").toBe(true);
 
-    // 4) 자동 마일스톤 4건 — programs.deadline 이 채워져 있어야 생깁니다
+    // 4) 자동 마일스톤 — 013 이후로는 접수 중인 K-Startup 공고가 있을 때만 생깁니다.
+    //    공고가 없으면 날짜를 지어내지 않는 것이 정상 동작이라, 두 경우를 갈라서 봅니다.
+    const today = new Date().toISOString().slice(0, 10);
+    const selected = await fws.getSelectedPrograms();
+    const chosen = selected.find((p) => p.id === "modu-2026");
+    expect(chosen, "온보딩에서 고른 사업이 담겨야 합니다").toBeTruthy();
+
     const tasks = await ws.getWorkspaceTasks();
     const auto = tasks.filter((t) => t.task_type === "auto");
-    expect(auto.length, `자동 마일스톤이 생성되어야 합니다. 받은 할 일: ${JSON.stringify(tasks.map((t) => t.title))}`).toBe(4);
-    expect(auto.every((t) => t.due_date), "마일스톤에는 마감일이 있어야 합니다").toBe(true);
 
-    // 5) 담당자 지정
-    const target = auto[0];
+    if (chosen!.deadline) {
+      expect(chosen!.deadline >= today, `공고 마감이 이미 지났습니다(${chosen!.deadline}). 접수 중 공고만 골라야 합니다`).toBe(true);
+      expect(chosen!.announcementTitle, "마감일의 출처인 공고 제목이 함께 와야 합니다").toBeTruthy();
+      expect(auto.length, `자동 마일스톤이 생성되어야 합니다. 받은 할 일: ${JSON.stringify(tasks.map((t) => t.title))}`).toBe(4);
+      expect(auto.every((t) => t.due_date && t.due_date >= today), `자동 마일스톤이 전부 미래여야 합니다: ${JSON.stringify(auto.map((t) => t.due_date))}`).toBe(true);
+    } else {
+      expect(auto.length, "접수 중인 공고가 없으면 임시 날짜로 마일스톤을 만들지 않습니다").toBe(0);
+    }
+
+    // 5) 담당자 지정 — 공고가 없어 마일스톤이 비었을 수 있으므로 대상 할 일을 확보해 둡니다.
+    if (auto.length === 0) await ws.createWorkspaceTask("E2E 대상 할 일", today);
+    const target = auto[0] ?? (await ws.getWorkspaceTasks()).find((t) => t.title === "E2E 대상 할 일")!;
     await ws.assignTask(target.id, userId);
     const afterAssign = (await ws.getWorkspaceTasks()).find((t) => t.id === target.id);
     expect(afterAssign?.assignee_id).toBe(userId);
@@ -110,15 +124,13 @@ describe.skipIf(!LIVE)("실제 DB 통합 — 로그인 후 창업자 흐름", ()
     expect(restored?.report, "저장한 자격 진단이 복원되어야 합니다").toBeTruthy();
     expect(restored?.programId).toBe("modu-2026");
 
-    // 8) 선택한 지원사업과 캘린더
-    const programs = await fws.getSelectedPrograms();
-    expect(programs.map((p) => p.id)).toContain("modu-2026");
-    expect(programs[0].deadline, "공고 마감일이 있어야 캘린더·히어로가 채워집니다").toBeTruthy();
-    const today = new Date().toISOString().slice(0, 10);
-    expect(programs[0].deadline! >= today, `공고 마감이 이미 지났습니다(${programs[0].deadline}). 신규 팀이 지난 마감으로 찬 보드를 받습니다`).toBe(true);
-    expect(auto.every((t) => t.due_date! >= today), `자동 마일스톤이 전부 미래여야 합니다: ${JSON.stringify(auto.map((t) => t.due_date))}`).toBe(true);
+    // 8) 캘린더 — 공고 마감은 실공고가 있을 때만 그려집니다(4번과 같은 조건).
+    expect(selected.map((p) => p.id)).toContain("modu-2026");
     const calendar = await fws.getCalendarItems();
-    expect(calendar.some((i) => i.kind === "program"), "캘린더에 공고 마감이 들어와야 합니다").toBe(true);
+    expect(
+      calendar.some((i) => i.kind === "program"),
+      "접수 중인 공고가 있으면 캘린더에 마감이 들어와야 하고, 없으면 그리지 않아야 합니다",
+    ).toBe(Boolean(chosen!.deadline));
 
     // 9) 팀 초대 코드 발급 → 조회
     const invite = await fws.createTeamInvite();

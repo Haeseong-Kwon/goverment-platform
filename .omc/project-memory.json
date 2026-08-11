@@ -181,8 +181,8 @@
     },
     {
       "path": "src/features/startup-workspace/ManagerScreens.tsx",
-      "accessCount": 55,
-      "lastAccessed": 1785809934062,
+      "accessCount": 56,
+      "lastAccessed": 1786420881892,
       "type": "file"
     },
     {
@@ -211,8 +211,8 @@
     },
     {
       "path": "src/features/startup-workspace/shell.tsx",
-      "accessCount": 21,
-      "lastAccessed": 1786416121297,
+      "accessCount": 24,
+      "lastAccessed": 1786420906239,
       "type": "file"
     },
     {
@@ -253,20 +253,20 @@
     },
     {
       "path": "src/features/startup-workspace/Landing.tsx",
-      "accessCount": 10,
-      "lastAccessed": 1785808001082,
+      "accessCount": 11,
+      "lastAccessed": 1786420936452,
       "type": "file"
     },
     {
       "path": "src/app/signup/page.tsx",
-      "accessCount": 9,
-      "lastAccessed": 1785338901734,
+      "accessCount": 10,
+      "lastAccessed": 1786420919173,
       "type": "file"
     },
     {
       "path": "README.md",
-      "accessCount": 9,
-      "lastAccessed": 1785387981697,
+      "accessCount": 10,
+      "lastAccessed": 1786421124200,
       "type": "file"
     },
     {
@@ -312,6 +312,18 @@
       "type": "file"
     },
     {
+      "path": "src/app/api/admin/bootstrap-manager/route.ts",
+      "accessCount": 6,
+      "lastAccessed": 1786420645460,
+      "type": "file"
+    },
+    {
+      "path": "src/app/login/page.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1786420925462,
+      "type": "file"
+    },
+    {
       "path": "src/components/layout/Footer.tsx",
       "accessCount": 5,
       "lastAccessed": 1785338010662,
@@ -339,12 +351,6 @@
       "path": "src/app/auth/callback/page.tsx",
       "accessCount": 4,
       "lastAccessed": 1785337277512,
-      "type": "file"
-    },
-    {
-      "path": "src/app/login/page.tsx",
-      "accessCount": 4,
-      "lastAccessed": 1785338897862,
       "type": "file"
     },
     {
@@ -378,12 +384,6 @@
       "type": "file"
     },
     {
-      "path": "src/app/api/admin/bootstrap-manager/route.ts",
-      "accessCount": 4,
-      "lastAccessed": 1785809480640,
-      "type": "file"
-    },
-    {
       "path": "src/features/expense-rules/ruleset.ts",
       "accessCount": 3,
       "lastAccessed": 1785808994418,
@@ -393,6 +393,12 @@
       "path": "src/features/expense-rules/engine.test.ts",
       "accessCount": 3,
       "lastAccessed": 1785809153815,
+      "type": "file"
+    },
+    {
+      "path": "src/features/auth/AuthShell.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1786420811892,
       "type": "file"
     },
     {
@@ -447,12 +453,6 @@
       "path": "supabase/005-vault-and-team.sql",
       "accessCount": 1,
       "lastAccessed": 1785327257586,
-      "type": "file"
-    },
-    {
-      "path": "src/features/auth/AuthShell.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1785337186185,
       "type": "file"
     },
     {

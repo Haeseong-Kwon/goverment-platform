@@ -211,7 +211,7 @@ export function ManagerLanding() {
             선정 팀의 검토 요청, 반려 사유, 지연 팀을 고밀도 테이블로 확인합니다. 창업자 준비 데이터와 진단 점수는 매니저 화면에 노출되지 않습니다.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <LinkButton href="/manager" size="lg">대시보드 열기</LinkButton>
+            <LinkButton href="/manager/login" size="lg">주관기관 로그인</LinkButton>
             <LinkButton href={nav.counterpartHref} variant="secondary" size="lg" className="border-[#2563EB] text-[#2563EB]">창업자 화면 보기</LinkButton>
           </div>
         </div>

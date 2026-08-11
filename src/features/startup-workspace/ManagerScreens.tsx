@@ -4,13 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Download, FileText, Inbox } from "lucide-react";
 import {
-  bootstrapManagerAccess,
   claimSubmissionForReview,
   getManagerReviewSubmissions,
   getRejectionReasonCodes,
   issueConversionCode,
   submitReviewDecision,
-  type ManagerBootstrapResult,
   type ManagerReviewSubmission,
   type SubmissionEvidenceFile,
 } from "@/lib/services/WorkspaceService";
@@ -118,57 +116,9 @@ function StatRow({ summary, loading }: { summary: Summary; loading: boolean }) {
   );
 }
 
-/** 아직 기관 계정이 아닌 경우, 실제 기관·전환 코드를 만들어 검토 큐를 돌려볼 수 있게 합니다. */
-function ManagerBootstrapCard() {
-  const [result, setResult] = useState<ManagerBootstrapResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const run = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setResult(await bootstrapManagerAccess());
-      // 프로필 역할이 바뀌었으므로 세션 판단을 처음부터 다시 하게 합니다.
-      window.location.reload();
-    } catch (reason) {
-      setError(toMessage(reason, "기관 계정 전환에 실패했습니다."));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (result) {
-    return (
-      <section className="mb-6 rounded-2xl border border-[#BBF7D0] bg-[#F0FDF4] p-5">
-        <StatusBadge tone="green">기관 계정 활성화됨</StatusBadge>
-        <h2 className="mt-3 text-xl font-bold">{result.institutionName}</h2>
-        <p className="mt-2 text-sm text-[#475569]">
-          창업자 계정에서 아래 코드를 <strong>합격 전환</strong>에 입력하면 이 기관의 검토 큐로 연결됩니다.
-        </p>
-        <p className="mt-3 inline-block rounded-lg bg-white px-4 py-2 font-mono text-lg font-bold tracking-widest text-[#16A34A]">
-          {result.conversionCode}
-        </p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="rounded-2xl border border-[#FDE68A] bg-[#FFFBEB] p-5">
-      <StatusBadge tone="amber">기관 담당자이신가요?</StatusBadge>
-      <h2 className="mt-3 text-lg font-bold">기관 계정 활성화</h2>
-      <p className="mt-2 text-sm leading-6 text-[#475569]">
-        기관 담당자로 사전 등록된 계정만 전환됩니다. 등록되지 않은 계정은 눌러도 거절됩니다.
-      </p>
-      <Button className="mt-4" loading={loading} onClick={() => void run()}>기관 계정 활성화</Button>
-      {error && <div className="mt-3"><Notice tone="error" onDismiss={() => setError(null)}>{error}</Notice></div>}
-    </section>
-  );
-}
-
 export function ManagerDashboard() {
   return (
-    <RequireManagerSession deniedFallback={<ManagerBootstrapCard />}>
+    <RequireManagerSession>
       <ManagerDashboardBody />
     </RequireManagerSession>
   );
@@ -445,7 +395,7 @@ function waitingDays(createdAt: string) {
 
 export function ManagerReviewQueuePage() {
   return (
-    <RequireManagerSession deniedFallback={<ManagerBootstrapCard />}>
+    <RequireManagerSession>
       <ManagerReviewQueueBody />
     </RequireManagerSession>
   );
@@ -588,7 +538,7 @@ const FEATURE_META: Record<ManagerFeature, { title: string; description: string 
 
 export function ManagerFeaturePage({ feature }: { feature: ManagerFeature }) {
   return (
-    <RequireManagerSession deniedFallback={<ManagerBootstrapCard />}>
+    <RequireManagerSession>
       <ManagerFeatureBody feature={feature} />
     </RequireManagerSession>
   );

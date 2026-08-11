@@ -11,38 +11,41 @@
 -- 조치: 시드로 넣은 세 사업에 한해, 마감이 이미 지났으면 앞으로 당겨 둡니다.
 --       사업 간 간격은 유지해 "복수 지원사업의 마감 충돌"을 계속 볼 수 있게 합니다.
 --
--- ⚠ 실제 공고문 마감일을 입력한 뒤에는 이 스크립트를 다시 실행하지 마세요.
---   지난 실제 공고까지 미래로 밀어 버립니다. 아래 WHERE의 id 목록을 비우거나
---   파일을 지우는 편이 안전합니다.
+-- ⛔ 폐기됨 — 013-real-announcement-deadlines.sql로 대체되었습니다. 실행하지 마세요.
+--
+-- 이 스크립트가 채우던 임시 마감일 자체가 문제였습니다. 어떤 공고문에도 없는 날짜가
+-- 대시보드에 D-day로 나갔고, 그 날짜에서 자동 마일스톤까지 역산되었습니다.
+-- 013이 `programs.deadline`을 비우고 일정의 출처를 K-Startup 실공고로 옮겼으므로,
+-- 이 파일을 다시 실행하면 013이 지운 가짜 날짜가 그대로 되살아납니다.
+--
+-- 아래 UPDATE는 그래서 주석 처리했습니다. 이력을 남기려고 파일만 보존합니다.
+--
+-- UPDATE programs SET deadline = (current_date + INTERVAL '30 days')::date
+--   WHERE id = 'yechang-2026' AND (deadline IS NULL OR deadline < current_date);
+--
+-- UPDATE programs SET deadline = (current_date + INTERVAL '55 days')::date
+--   WHERE id = 'chocang-2026' AND (deadline IS NULL OR deadline < current_date);
+--
+-- UPDATE programs SET deadline = (current_date + INTERVAL '80 days')::date
+--   WHERE id = 'modu-2026' AND (deadline IS NULL OR deadline < current_date);
 
-UPDATE programs SET deadline = (current_date + INTERVAL '30 days')::date
-  WHERE id = 'yechang-2026' AND (deadline IS NULL OR deadline < current_date);
-
-UPDATE programs SET deadline = (current_date + INTERVAL '55 days')::date
-  WHERE id = 'chocang-2026' AND (deadline IS NULL OR deadline < current_date);
-
-UPDATE programs SET deadline = (current_date + INTERVAL '80 days')::date
-  WHERE id = 'modu-2026' AND (deadline IS NULL OR deadline < current_date);
-
--- 이미 만들어진 자동 마일스톤도 지난 마감을 그대로 들고 있습니다.
--- 아직 끝내지 않은 것만 새 공고 마감 기준으로 역산해 다시 맞춥니다.
--- 완료한 할 일은 건드리지 않습니다. 지난 기록을 고쳐 쓰면 안 됩니다.
--- UPDATE ... FROM 의 JOIN 조건에는 대상 테이블(t)을 쓸 수 없습니다.
--- 마일스톤 이름 대응은 CROSS JOIN 뒤 WHERE에서 겁니다.
-UPDATE workspace_tasks t
-SET due_date = (p.deadline - (offsets.days || ' days')::interval)::date,
-    updated_at = now()
-FROM prep_projects pp
-JOIN programs p ON p.id = pp.program_id
-CROSS JOIN (VALUES
-  ('사업계획서 초안 완성', 14),
-  ('증빙 서류 준비', 10),
-  ('발표 리허설', 7),
-  ('최종 제출', 1)
-) AS offsets(title, days)
-WHERE t.prep_project_id = pp.id
-  AND t.title = offsets.title
-  AND t.task_type = 'auto'
-  AND t.status <> 'done'
-  AND p.deadline IS NOT NULL
-  AND t.due_date < current_date;
+-- 마일스톤 재계산도 013이 실공고 기준으로 대신합니다.
+-- (013 적용 후에는 p.deadline이 전부 NULL이라 아래 문장은 어차피 한 행도 바꾸지 않습니다.)
+--
+-- UPDATE workspace_tasks t
+-- SET due_date = (p.deadline - (offsets.days || ' days')::interval)::date,
+--     updated_at = now()
+-- FROM prep_projects pp
+-- JOIN programs p ON p.id = pp.program_id
+-- CROSS JOIN (VALUES
+--   ('사업계획서 초안 완성', 14),
+--   ('증빙 서류 준비', 10),
+--   ('발표 리허설', 7),
+--   ('최종 제출', 1)
+-- ) AS offsets(title, days)
+-- WHERE t.prep_project_id = pp.id
+--   AND t.title = offsets.title
+--   AND t.task_type = 'auto'
+--   AND t.status <> 'done'
+--   AND p.deadline IS NOT NULL
+--   AND t.due_date < current_date;
