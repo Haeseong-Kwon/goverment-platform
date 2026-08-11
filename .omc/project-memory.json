@@ -169,14 +169,14 @@
   "hotPaths": [
     {
       "path": "src/features/startup-workspace/components.tsx",
-      "accessCount": 95,
-      "lastAccessed": 1786417153460,
+      "accessCount": 100,
+      "lastAccessed": 1786418217007,
       "type": "file"
     },
     {
       "path": "src/lib/services/WorkspaceService.ts",
-      "accessCount": 86,
-      "lastAccessed": 1786347623395,
+      "accessCount": 91,
+      "lastAccessed": 1786418155539,
       "type": "file"
     },
     {
@@ -187,8 +187,8 @@
     },
     {
       "path": "src/lib/services/FounderWorkspaceService.ts",
-      "accessCount": 36,
-      "lastAccessed": 1786347648027,
+      "accessCount": 43,
+      "lastAccessed": 1786418063476,
       "type": "file"
     },
     {
@@ -204,27 +204,27 @@
       "type": "file"
     },
     {
+      "path": "src/features/startup-workspace/EligibilityPanel.tsx",
+      "accessCount": 24,
+      "lastAccessed": 1786418205944,
+      "type": "file"
+    },
+    {
       "path": "src/features/startup-workspace/shell.tsx",
       "accessCount": 21,
       "lastAccessed": 1786416121297,
       "type": "file"
     },
     {
-      "path": "src/features/startup-workspace/EligibilityPanel.tsx",
-      "accessCount": 19,
-      "lastAccessed": 1786322259844,
-      "type": "file"
-    },
-    {
       "path": "src/features/startup-workspace/logic.test.ts",
-      "accessCount": 18,
-      "lastAccessed": 1786323063910,
+      "accessCount": 21,
+      "lastAccessed": 1786417763898,
       "type": "file"
     },
     {
       "path": "src/features/startup-workspace/logic.ts",
-      "accessCount": 17,
-      "lastAccessed": 1786322930258,
+      "accessCount": 19,
+      "lastAccessed": 1786417638934,
       "type": "file"
     },
     {
@@ -282,6 +282,12 @@
       "type": "file"
     },
     {
+      "path": "src/features/startup-workspace/rules.ts",
+      "accessCount": 8,
+      "lastAccessed": 1786417974789,
+      "type": "file"
+    },
+    {
       "path": "src/features/expense-rules/planImport.ts",
       "accessCount": 7,
       "lastAccessed": 1785808951507,
@@ -306,12 +312,6 @@
       "type": "file"
     },
     {
-      "path": "src/features/startup-workspace/rules.ts",
-      "accessCount": 6,
-      "lastAccessed": 1786322271115,
-      "type": "file"
-    },
-    {
       "path": "src/components/layout/Footer.tsx",
       "accessCount": 5,
       "lastAccessed": 1785338010662,
@@ -327,6 +327,12 @@
       "path": "src/features/expense-rules/types.ts",
       "accessCount": 5,
       "lastAccessed": 1785811289396,
+      "type": "file"
+    },
+    {
+      "path": "supabase/schema.sql",
+      "accessCount": 5,
+      "lastAccessed": 1786418236260,
       "type": "file"
     },
     {
@@ -375,12 +381,6 @@
       "path": "src/app/api/admin/bootstrap-manager/route.ts",
       "accessCount": 4,
       "lastAccessed": 1785809480640,
-      "type": "file"
-    },
-    {
-      "path": "supabase/schema.sql",
-      "accessCount": 4,
-      "lastAccessed": 1786322259589,
       "type": "file"
     },
     {

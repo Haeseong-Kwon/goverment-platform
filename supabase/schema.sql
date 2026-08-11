@@ -228,20 +228,27 @@ CREATE TABLE IF NOT EXISTS programs (
   is_active BOOLEAN NOT NULL DEFAULT true
 );
 
--- deadline은 반드시 채웁니다. NULL이면 자동 마일스톤도 캘린더 공고 마감도 만들어지지 않아
--- 사용자는 지원사업을 골라도 빈 보드를 받게 됩니다(실패 표시도 없습니다).
+-- deadline은 채우지 않습니다.
 --
--- 날짜를 고정값으로 박지 않습니다. 실제 공고가 뜨기 전까지 쓰는 임시값인데,
--- 고정하면 적용 시점이 지나는 순간 전부 과거가 되어 신규 가입자가 "이미 지남"으로
--- 빨갛게 찬 보드를 받습니다. 적용 시점 기준 미래로 잡고, 사업마다 간격을 벌려
--- "복수 지원사업의 마감 충돌"을 한 화면에서 볼 수 있게 합니다.
--- 실제 공고가 나오면 이 값을 공고문 마감일로 갱신하세요.
-INSERT INTO programs (id, name, year, ruleset_version, requires_no_business_registration, blocks_prior_benefit, deadline)
+-- 예전에는 임시값(current_date + 30일 등)을 넣어 두었습니다. 그 날짜는 어떤 공고문에도
+-- 없는 값이라, 대시보드가 존재하지 않는 마감을 D-day로 띄우고 그 날짜를 기준으로
+-- 자동 마일스톤까지 만들어 냈습니다. 화면에 뜨는 모든 마감은 근거가 있어야 합니다.
+--
+-- 일정은 `kstartup_announcements`(K-Startup 공개 API 캐시)에서 사업명으로 찾아 씁니다.
+-- 접수 중인 공고가 없으면 화면은 날짜를 지어내는 대신 "접수 중인 공고 없음"으로 말합니다.
+-- 이 테이블은 자격 판정 룰셋(requires_no_business_registration 등)만 담당합니다.
+INSERT INTO programs (id, name, year, ruleset_version, requires_no_business_registration, blocks_prior_benefit)
 VALUES
-  ('yechang-2026', '2026 예비창업패키지', 2026, 'v1', true, true, (current_date + INTERVAL '30 days')::date),
-  ('chocang-2026', '2026 초기창업패키지', 2026, 'v1', false, true, (current_date + INTERVAL '55 days')::date),
-  ('modu-2026', '2026 모두의창업', 2026, 'v1', false, false, (current_date + INTERVAL '80 days')::date)
+  ('yechang-2026', '예비창업패키지', 2026, 'v1', true, true),
+  ('chocang-2026', '초기창업패키지', 2026, 'v1', false, true),
+  ('modu-2026', '창업도약패키지', 2026, 'v1', false, false)
 ON CONFLICT (id) DO NOTHING;
+
+-- 이미 임시 마감일이 들어간 환경을 위한 정리. 이름도 연도 접두사를 뗍니다.
+UPDATE programs SET deadline = NULL WHERE deadline IS NOT NULL;
+UPDATE programs SET name = '예비창업패키지' WHERE id = 'yechang-2026';
+UPDATE programs SET name = '초기창업패키지' WHERE id = 'chocang-2026';
+UPDATE programs SET name = '창업도약패키지' WHERE id = 'modu-2026';
 
 CREATE TABLE IF NOT EXISTS prep_teams (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

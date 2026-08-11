@@ -4,8 +4,32 @@ import {
   createMilestones,
   evaluateEligibility,
   getDiagnosisCreditBalance,
+  matchProgramByTitle,
   recommendPrograms,
+  STARTUP_PROGRAMS,
 } from "./rules";
+
+describe("STARTUP_PROGRAMS", () => {
+  // 연도가 박히면 해가 바뀔 때마다 코드를 고쳐야 하고, 그 전까지 지난 연도가 화면에 남습니다.
+  it("사업명에 연도를 박지 않는다", () => {
+    for (const program of STARTUP_PROGRAMS) expect(program.name, program.id).not.toMatch(/\d{4}/);
+  });
+
+  it("마감일을 룰셋에 두지 않는다", () => {
+    for (const program of STARTUP_PROGRAMS) expect(program, program.id).not.toHaveProperty("deadline");
+  });
+});
+
+describe("matchProgramByTitle", () => {
+  it("연도·차수가 붙은 실제 K-Startup 공고 제목에서 사업을 찾는다", () => {
+    expect(matchProgramByTitle("2026년 예비창업패키지 예비창업자 모집 공고")?.id).toBe("yechang-2026");
+    expect(matchProgramByTitle("2027년도 제2차 초기창업패키지 창업기업 모집")?.id).toBe("chocang-2026");
+  });
+
+  it("관계없는 공고에는 사업을 붙이지 않는다", () => {
+    expect(matchProgramByTitle("2026년 웰컴 투 팁스 1차 참가기업 모집 (충청권)")).toBeUndefined();
+  });
+});
 
 describe("createMilestones", () => {
   it("creates the documented D-14, D-10, D-7 and D-1 tasks", () => {

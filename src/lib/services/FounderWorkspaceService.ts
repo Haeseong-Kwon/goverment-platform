@@ -1,5 +1,7 @@
 import { supabase } from "../supabase";
-import { getCurrentPrepTeamId, getProfileNames, requireClient, type TaskCommentFile } from "./WorkspaceService";
+import { getCurrentPrepTeamId, getProfileNames, getProgramDeadlines, requireClient, type TaskCommentFile } from "./WorkspaceService";
+
+export { getProgramDeadlines, type ProgramDeadline } from "./WorkspaceService";
 import { DEV_BYPASS } from "../dev/devMode";
 import { getAuthUserId, invalidateTeamCache, requireAuthUserId } from "./sessionCache";
 
@@ -332,9 +334,10 @@ export async function getCalendarItems(): Promise<CalendarItem[]> {
 
   const { data: projects, error: projectError } = await client
     .from("prep_projects")
-    .select("id, programs(id, name, deadline)")
+    .select("id, programs(id, name)")
     .eq("prep_team_id", teamId);
   if (projectError) throw projectError;
+  const programDeadlines = await getProgramDeadlines();
 
   // 담은 공고의 접수 기간·분야를 캘린더에서 바로 보여 주기 위해 한 번에 붙입니다.
   const announcementSns = Array.from(
@@ -378,13 +381,14 @@ export async function getCalendarItems(): Promise<CalendarItem[]> {
   });
 
   const programItems: CalendarItem[] = (projects ?? []).flatMap((row) => {
-    const program = (Array.isArray(row.programs) ? row.programs[0] : row.programs) as { id?: string; name?: string; deadline?: string } | null;
-    if (!program?.deadline) return [];
+    const program = (Array.isArray(row.programs) ? row.programs[0] : row.programs) as { id?: string; name?: string } | null;
+    const announcement = program?.id ? programDeadlines[program.id] : null;
+    if (!announcement) return [];
     return [{
-      id: `program-${program.id}`,
+      id: `program-${program?.id}`,
       taskId: null,
-      title: `${program.name} 마감`,
-      date: program.deadline,
+      title: `${program?.name} 마감`,
+      date: announcement.endDate,
       kind: "program" as const,
       commentCount: 0,
     }];
@@ -448,19 +452,14 @@ export async function saveBudgetAllocation(category: string, allocatedAmount: nu
   if (error) throw error;
 }
 
-/** 전체 지원사업의 공고 마감일. 추천 카드가 "언제 마감인지"를 함께 보여주기 위한 값입니다. */
-export async function getProgramDeadlines(): Promise<Record<string, string | null>> {
-  if (DEV_BYPASS) return (await import("../dev/devServices")).devProgramDeadlines();
-  const client = requireClient();
-  const { data, error } = await client.from("programs").select("id, deadline").eq("is_active", true);
-  if (error) return {};
-  return Object.fromEntries((data ?? []).map((row) => [row.id as string, (row.deadline as string | null) ?? null]));
-}
-
 export interface SelectedProgram {
   id: string;
   name: string;
+  /** 실제 K-Startup 공고 마감일. 공고가 아직 없으면 null입니다(임시 날짜를 채우지 않습니다). */
   deadline: string | null;
+  /** 마감일이 나온 공고의 원문 제목·링크. 화면이 근거를 함께 보여 줄 수 있게 같이 넘깁니다. */
+  announcementTitle: string | null;
+  announcementUrl: string | null;
 }
 
 /**
@@ -473,12 +472,20 @@ export async function getSelectedPrograms(): Promise<SelectedProgram[]> {
   if (DEV_BYPASS) return (await import("../dev/devServices")).devSelectedPrograms();
   const client = requireClient();
   const teamId = await getCurrentPrepTeamId();
-  const { data, error } = await client.from("prep_projects").select("programs(id, name, deadline)").eq("prep_team_id", teamId);
+  const { data, error } = await client.from("prep_projects").select("programs(id, name)").eq("prep_team_id", teamId);
   if (error) throw error;
+  const deadlines = await getProgramDeadlines();
   return (data ?? []).flatMap((row) => {
-    const program = (Array.isArray(row.programs) ? row.programs[0] : row.programs) as { id?: string; name?: string; deadline?: string } | null;
+    const program = (Array.isArray(row.programs) ? row.programs[0] : row.programs) as { id?: string; name?: string } | null;
     if (!program?.id || !program.name) return [];
-    return [{ id: program.id, name: program.name, deadline: program.deadline ?? null }];
+    const announcement = deadlines[program.id] ?? null;
+    return [{
+      id: program.id,
+      name: program.name,
+      deadline: announcement?.endDate ?? null,
+      announcementTitle: announcement?.title ?? null,
+      announcementUrl: announcement?.detailUrl ?? null,
+    }];
   });
 }
 

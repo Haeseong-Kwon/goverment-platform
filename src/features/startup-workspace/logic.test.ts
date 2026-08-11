@@ -105,7 +105,7 @@ describe("canManagerSeeReviewItem", () => {
 describe("getSidebarItems", () => {
   it("returns role-specific fixed navigation", () => {
     expect(getSidebarItems("pre_founder")).toContain("AI 진단");
-    expect(getSidebarItems("founder")).toEqual(["홈", "정산 사전검증", "사전심의 합본", "상태 트래커", "계산기", "무료 자료실", "서류 보관함", "팀 설정"]);
+    expect(getSidebarItems("founder")).toEqual(["홈", "정산 사전검증", "사전심의 합본", "상태 트래커", "계산기", "서류 보관함", "팀 설정"]);
     expect(getSidebarItems("manager")).toEqual(["대시보드", "검토 큐", "사업비 계획 검토", "팀 관리", "리포트", "설정"]);
   });
 });
@@ -120,9 +120,9 @@ describe("getSidebarLinks", () => {
       "/founder/diagnostics",
       "/founder/plan-check",
       // 사이드바 링크는 전부 워크스페이스 안에 머물러야 합니다.
-      // 계산기·자료실에는 비로그인 공개판(/calculator·/library)이 따로 있지만, 메뉴는 안쪽을 가리킵니다.
+      // 계산기에는 비로그인 공개판(/calculator)이 따로 있지만, 메뉴는 안쪽을 가리킵니다.
       "/founder/calculator",
-      "/founder/library",
+      // 무료 자료실은 서류 보관함 탭입니다. 메뉴로 중복 노출하지 않습니다.
       "/founder/incorporation",
       "/founder/connect",
       "/founder/vault",
@@ -160,7 +160,6 @@ describe("getSidebarLinks", () => {
       "/workspace/tracker",
       // 협약 팀도 같은 도구를 쓰되, 링크는 /workspace 안쪽을 가리켜야 합니다.
       "/workspace/calculator",
-      "/workspace/library",
       "/workspace/vault",
       "/workspace/settings",
     ]);

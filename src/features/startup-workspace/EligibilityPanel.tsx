@@ -7,7 +7,7 @@ import { getDday } from "./logic";
 import type { EligibilityAnswers, EligibilityReport, EligibilityState } from "./domain";
 import { Button, ChoiceChip, Notice, Panel, StatusBadge, type StatusTone } from "./ui";
 import { getLatestEligibilityReport, saveEligibilityReport, createWorkspaceTask } from "@/lib/services/WorkspaceService";
-import { getProgramDeadlines, getSelectedPrograms } from "@/lib/services/FounderWorkspaceService";
+import { getProgramDeadlines, getSelectedPrograms, type ProgramDeadline } from "@/lib/services/FounderWorkspaceService";
 import { toMessage } from "@/lib/errors";
 
 const stateTone: Record<EligibilityState, StatusTone> = { eligible: "green", review: "amber", ineligible: "red", pending: "slate" };
@@ -130,7 +130,7 @@ export function EligibilityPanel() {
   const [status, setStatus] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [restored, setRestored] = useState<string | null>(null);
-  const [programDeadlines, setProgramDeadlines] = useState<Record<string, string | null>>({});
+  const [programDeadlines, setProgramDeadlines] = useState<Record<string, ProgramDeadline | null>>({});
   const [addedPrograms, setAddedPrograms] = useState<string[]>([]);
   const [addingProgram, setAddingProgram] = useState<string | null>(null);
   const [calendarMessage, setCalendarMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
@@ -149,17 +149,17 @@ export function EligibilityPanel() {
 
   /** 추천 → 캘린더 → TODO로 이어지는 지점. 공고 마감일을 팀 할 일로 만들어 캘린더에 올립니다. */
   const addToCalendar = useCallback(async (programId: string, programName: string) => {
-    const deadline = programDeadlines[programId];
-    if (!deadline) {
-      setCalendarMessage({ tone: "error", text: "이 사업은 아직 공고 일정이 등록되지 않았습니다." });
+    const announcement = programDeadlines[programId];
+    if (!announcement) {
+      setCalendarMessage({ tone: "error", text: "이 사업은 접수 중인 K-Startup 공고가 아직 없습니다." });
       return;
     }
     setAddingProgram(programId);
     setCalendarMessage(null);
     try {
-      await createWorkspaceTask(`${programName} 신청 마감`, deadline);
+      await createWorkspaceTask(`${programName} 신청 마감`, announcement.endDate);
       setAddedPrograms((current) => (current.includes(programId) ? current : [...current, programId]));
-      setCalendarMessage({ tone: "success", text: `${programName} 마감(${deadline})을 캘린더와 팀 TODO에 추가했습니다.` });
+      setCalendarMessage({ tone: "success", text: `${programName} 마감(${announcement.endDate})을 캘린더와 팀 TODO에 추가했습니다.` });
     } catch (reason) {
       setCalendarMessage({ tone: "error", text: toMessage(reason, "캘린더에 추가하지 못했습니다.") });
     } finally {
@@ -238,7 +238,8 @@ export function EligibilityPanel() {
         <Panel title="지원 가능한 다른 사업">
           <div className="grid gap-3 md:grid-cols-3">
             {recommendations.map((item) => {
-              const deadline = programDeadlines[item.programId] ?? null;
+              const announcement = programDeadlines[item.programId] ?? null;
+              const deadline = announcement?.endDate ?? null;
               const dday = getDday(deadline);
               const added = addedPrograms.includes(item.programId);
               return (
@@ -250,7 +251,7 @@ export function EligibilityPanel() {
                   </p>
                   {/* 공고 시기를 함께 보여야 "이 사업 지금 되나"까지 한 카드에서 판단됩니다. */}
                   <p className="mt-2 text-xs font-semibold text-[#94A3B8]">
-                    {deadline ? `공고 마감 ${deadline}${dday !== null && dday >= 0 ? ` · D-${dday}` : dday !== null ? " · 마감 지남" : ""}` : "공고 일정 미정"}
+                    {deadline ? `공고 마감 ${deadline}${dday !== null && dday >= 0 ? ` · D-${dday}` : dday !== null ? " · 마감 지남" : ""}` : "접수 중인 공고 없음"}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-1">
                     <Button variant="ghost" size="sm" onClick={() => setProgramId(item.programId)} className="-ml-3 text-[#2563EB] hover:text-[#1D4ED8]">

@@ -3,7 +3,8 @@ import type { EligibilityAnswers, EligibilityReport, StartupRole } from "@/featu
 import type { TaskStatus } from "@/features/startup-workspace/domain";
 import type { ManagerSubmissionInput } from "@/features/startup-workspace/types";
 import type { ExpenseInput, ExpenseVerdict } from "@/features/expense-rules/types";
-import { createMilestones, evaluateEligibility } from "../../features/startup-workspace/rules";
+import { STARTUP_PROGRAMS, createMilestones, evaluateEligibility, matchProgramByTitle } from "../../features/startup-workspace/rules";
+import { toKstDateKey } from "@/features/startup-workspace/logic";
 import { DEV_BYPASS } from "../dev/devMode";
 import { cached, getAuthUserId, invalidateProfileCache, invalidateTeamCache, requireAuthUserId } from "./sessionCache";
 
@@ -168,14 +169,10 @@ export async function completeOnboarding(input: OnboardingInput) {
       .eq("task_type", "auto");
     if (existingTaskError) throw existingTaskError;
     const seeded = new Set((existingAutoTasks ?? []).map((task) => task.prep_project_id));
-    const { data: programRows, error: programsError } = await client
-      .from("programs")
-      .select("id, deadline")
-      .in("id", input.programIds);
-    if (programsError) throw programsError;
-    const deadlineByProgram = new Map((programRows ?? []).map((program) => [program.id, program.deadline]));
+    // 마일스톤 기준일은 실제 K-Startup 공고 마감입니다. 공고가 아직 없으면 할 일을 만들지 않습니다.
+    const deadlineByProgram = await getProgramDeadlines();
     const automaticTasks = (projects ?? []).filter((project) => !seeded.has(project.id)).flatMap((project) => {
-      const deadline = deadlineByProgram.get(project.program_id);
+      const deadline = deadlineByProgram[project.program_id as string]?.endDate;
       return deadline ? createMilestones(project.id, new Date(`${deadline}T00:00:00Z`)).map((task) => ({
         prep_team_id: team.id,
         prep_project_id: project.id,
@@ -384,6 +381,50 @@ function getTeamName(row: RawSubmission) {
  * 화면 하나가 이 값을 5번 넘게 묻습니다(할 일·보관함·캘린더·진단·팀설정이 각자 호출).
  * 매번 조회하면 같은 답을 받으려고 200ms씩 더 씁니다. 세션 동안 재사용합니다.
  */
+/** 지원사업에 걸린 실제 K-Startup 공고 한 건. 날짜는 공고문에서 온 값만 씁니다. */
+export interface ProgramDeadline {
+  endDate: string;
+  /** 공고 원문 제목. 대시보드는 사업명이 아니라 이 제목을 보여 줍니다. */
+  title: string;
+  sn: number;
+  detailUrl: string;
+}
+
+/**
+ * 지원사업별 다음 마감. K-Startup 공고 캐시에서 접수 중·예정 건만 봅니다.
+ *
+ * 예전에는 `programs.deadline`에 채워 둔 임시 날짜를 읽었습니다. 그 값은 실제 공고와
+ * 무관해서 대시보드가 존재하지 않는 마감을 D-day로 띄웠습니다. 공고가 아직 안 떴으면
+ * 날짜를 지어내는 대신 `null`로 두고 화면에서 "공고 미등록"으로 말합니다.
+ */
+export async function getProgramDeadlines(): Promise<Record<string, ProgramDeadline | null>> {
+  const empty: Record<string, ProgramDeadline | null> = Object.fromEntries(STARTUP_PROGRAMS.map((program) => [program.id, null]));
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devProgramDeadlines();
+  if (!supabase) return empty;
+
+  const { data, error } = await supabase
+    .from("kstartup_announcements")
+    .select("pbanc_sn, title, end_date, detail_url")
+    .gte("end_date", toKstDateKey())
+    .or(STARTUP_PROGRAMS.map((program) => `title.ilike.*${program.announcementKeyword}*`).join(","))
+    .order("end_date", { ascending: true });
+  if (error) return empty;
+
+  // end_date 오름차순이라 각 사업에서 처음 걸리는 공고가 곧 다음 마감입니다.
+  const found = { ...empty };
+  for (const row of data ?? []) {
+    const program = matchProgramByTitle(row.title as string);
+    if (!program || found[program.id]) continue;
+    found[program.id] = {
+      endDate: row.end_date as string,
+      title: row.title as string,
+      sn: row.pbanc_sn as number,
+      detailUrl: (row.detail_url as string | null) ?? "",
+    };
+  }
+  return found;
+}
+
 export async function getCurrentPrepTeamId() {
   if (DEV_BYPASS) return "dev-team";
   return cached("prepTeamId", async () => {

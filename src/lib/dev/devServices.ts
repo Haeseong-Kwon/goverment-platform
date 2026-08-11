@@ -1,12 +1,12 @@
 import { buildAnnouncementUrl, type CalendarItem, type ConversionCode, type TeamInvite, type TeamMember, type TrackedSubmission, type VaultDocument, type VaultFolder } from "../services/FounderWorkspaceService";
-import type { ManagerReviewSubmission, PersistedTask, StartupProfile, SavedEligibilityReport, SubmissionEvidenceFile, TaskCommentFile } from "../services/WorkspaceService";
+import type { ManagerReviewSubmission, PersistedTask, ProgramDeadline, StartupProfile, SavedEligibilityReport, SubmissionEvidenceFile, TaskCommentFile } from "../services/WorkspaceService";
+import { STARTUP_PROGRAMS, matchProgramByTitle } from "@/features/startup-workspace/rules";
 import type { EligibilityAnswers, EligibilityReport } from "@/features/startup-workspace/domain";
 import {
   DEV_CONVERSION_CODES,
   DEV_INSTITUTION,
   DEV_INVITE,
   DEV_MEMBERS,
-  DEV_PROGRAM_DEADLINES,
   DEV_TEAM_NAME,
   devState,
   devUpdate,
@@ -200,7 +200,7 @@ export function devCalendarItems(): CalendarItem[] {
       };
     });
 
-  const programs: CalendarItem[] = DEV_PROGRAM_DEADLINES.map((program) => ({
+  const programs: CalendarItem[] = devSelectedPrograms().map((program) => ({
     id: `program-${program.id}`,
     taskId: null,
     title: `${program.name} 마감`,
@@ -326,12 +326,36 @@ export function devSaveBudget(category: string, allocatedAmount: number) {
   devUpdate((current) => ({ ...current, budgets: { ...current.budgets, [category]: Math.round(allocatedAmount) } }));
 }
 
-export function devProgramDeadlines(): Record<string, string | null> {
-  return Object.fromEntries(DEV_PROGRAM_DEADLINES.map((program) => [program.id, program.deadline]));
+/**
+ * 개발용 진입 모드에서도 마감일은 공고 예시에서 뽑습니다.
+ * 따로 박아 둔 날짜를 쓰면 개발 화면과 실제 화면이 서로 다른 값을 보여 줍니다.
+ */
+export function devProgramDeadlines(): Record<string, ProgramDeadline | null> {
+  const found: Record<string, ProgramDeadline | null> = Object.fromEntries(STARTUP_PROGRAMS.map((program) => [program.id, null]));
+  const upcoming = devAnnouncements()
+    .filter((row) => row.end_date && row.end_date >= toKstDateKey())
+    .sort((a, b) => (a.end_date ?? "").localeCompare(b.end_date ?? ""));
+  for (const row of upcoming) {
+    const program = matchProgramByTitle(row.title);
+    if (!program || found[program.id]) continue;
+    found[program.id] = { endDate: row.end_date as string, title: row.title, sn: row.pbanc_sn, detailUrl: row.detail_url ?? "" };
+  }
+  return found;
 }
 
+/** 개발용 진입 모드의 "담은 지원사업". 공고가 걸린 사업만 골라 실제 흐름과 같게 둡니다. */
 export function devSelectedPrograms() {
-  return DEV_PROGRAM_DEADLINES.map((program) => ({ id: program.id, name: program.name, deadline: program.deadline }));
+  const deadlines = devProgramDeadlines();
+  return STARTUP_PROGRAMS.filter((program) => deadlines[program.id]).map((program) => {
+    const announcement = deadlines[program.id]!;
+    return {
+      id: program.id,
+      name: program.name,
+      deadline: announcement.endDate,
+      announcementTitle: announcement.title,
+      announcementUrl: announcement.detailUrl,
+    };
+  });
 }
 
 export function devInstitutionName(): string | null {

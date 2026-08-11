@@ -7,11 +7,23 @@ import type {
   WorkspaceTaskSeed,
 } from "./domain";
 
+/**
+ * 자격 판정 룰셋.
+ *
+ * 마감일은 여기에 두지 않습니다. 연도를 박아 두면 해가 바뀔 때마다 코드를 고쳐야 하고,
+ * 임시 마감일을 채워 두면 실제 공고와 어긋난 날짜가 대시보드에 그대로 뜹니다.
+ * 일정은 `announcementKeyword`로 K-Startup 공고(kstartup_announcements)에서 찾아 씁니다.
+ */
 export const STARTUP_PROGRAMS = [
-  { id: "yechang-2026", name: "2026 예비창업패키지", requiresNoBusinessRegistration: true, blocksPriorBenefit: true },
-  { id: "chocang-2026", name: "2026 초기창업패키지", requiresNoBusinessRegistration: false, blocksPriorBenefit: true },
-  { id: "modu-2026", name: "2026 모두의창업", requiresNoBusinessRegistration: false, blocksPriorBenefit: false },
+  { id: "yechang-2026", name: "예비창업패키지", announcementKeyword: "예비창업패키지", requiresNoBusinessRegistration: true, blocksPriorBenefit: true },
+  { id: "chocang-2026", name: "초기창업패키지", announcementKeyword: "초기창업패키지", requiresNoBusinessRegistration: false, blocksPriorBenefit: true },
+  { id: "modu-2026", name: "창업도약패키지", announcementKeyword: "창업도약패키지", requiresNoBusinessRegistration: false, blocksPriorBenefit: false },
 ] as const;
+
+/** 공고 제목에서 지원사업을 알아냅니다. 제목 표기(연도·차수)가 해마다 달라도 열쇠말은 그대로입니다. */
+export function matchProgramByTitle(title: string): (typeof STARTUP_PROGRAMS)[number] | undefined {
+  return STARTUP_PROGRAMS.find((program) => title.includes(program.announcementKeyword));
+}
 
 const MILESTONES = [
   ["사업계획서 초안 완성", 14],

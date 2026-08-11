@@ -41,7 +41,6 @@ import { CATEGORIES, RULESET_VERSION } from "@/features/expense-rules/ruleset";
 import { ExpenseValidator } from "@/features/expense-rules/ExpenseValidator";
 import { BudgetPanel } from "@/features/expense-rules/BudgetPanel";
 import { CalculatorSuite } from "./CalculatorSuite";
-import { LibraryPanel } from "./LibraryPanel";
 import { PreDeliberationPanel } from "@/features/expense-rules/PreDeliberation";
 import { cn } from "@/lib/utils";
 import { toMessage } from "@/lib/errors";
@@ -424,11 +423,15 @@ function FounderHome({ founder }: { founder: boolean }) {
               </>
             ) : nextProgram ? (
               <>
-                <p className="text-sm font-semibold opacity-90">가장 임박한 공고 마감</p>
+                <p className="text-sm font-semibold opacity-90">가장 임박한 공고 마감 · K-Startup</p>
                 <h2 className="mt-2 text-2xl font-bold">
                   {nextProgram.name}
                   {programDday !== null && (programDday === 0 ? " · 오늘" : ` · D-${programDday}`)}
                 </h2>
+                {/* 사업명이 아니라 공고 원문 제목을 함께 보여야 어느 공고 기준인지 확인됩니다. */}
+                {nextProgram.announcementTitle && (
+                  <p className="mt-1 truncate text-sm opacity-80" title={nextProgram.announcementTitle}>{nextProgram.announcementTitle}</p>
+                )}
                 <p className="mt-2 text-sm opacity-90">
                   {nextProgram.deadline} 마감
                   {summary.nextDueDate && ` · 다음 할 일 ${summary.nextDueDate}`}
@@ -519,7 +522,7 @@ function FounderCore({ founder = false }: { founder?: boolean }) {
   );
 }
 
-type FounderFeature = "announcements" | "plancheck" | "todo" | "calendar" | "diagnostics" | "calculator" | "library" | "incorporation" | "connect" | "vault" | "settings" | "precheck" | "predeliberation" | "tracker";
+type FounderFeature = "announcements" | "plancheck" | "todo" | "calendar" | "diagnostics" | "calculator" | "incorporation" | "connect" | "vault" | "settings" | "precheck" | "predeliberation" | "tracker";
 
 const FEATURE_META: Record<FounderFeature, { title: string; description: string }> = {
   announcements: { title: "지원사업 공고", description: "K-Startup 공식 오픈API에서 매일 받아 오는 정부지원사업 공고입니다. 내 조건으로 걸러 보고, 마감일을 캘린더로 보냅니다." },
@@ -528,7 +531,6 @@ const FEATURE_META: Record<FounderFeature, { title: string; description: string 
   calendar: { title: "마감 캘린더", description: "K-Startup 공고 마감·지원사업 마감·팀 일정을 색으로 구분해 한 달력에서 봅니다. 날짜를 골라 일정을 추가하고, 각 일정에 팀원과 코멘트를 주고받습니다." },
   diagnostics: { title: "AI 진단", description: "자격 요건을 룰셋으로 판정하고 사업계획서를 PSST 구조로 점검합니다." },
   calculator: { title: "계산기", description: "4대보험 실부담액, 인건비 총부담액, 법인 vs 개인 세금을 비교합니다. 모든 결과는 참고용 추정입니다." },
-  library: { title: "무료 자료실", description: "출처가 표기된 창업 표준 양식을 받습니다. 계약서·IR·인사·정부지원 행정 서식." },
   incorporation: { title: "법인 설립", description: "사업별 설립 타이밍과 절차를 확인합니다. 순서를 잘못 밟으면 자격이 사라집니다." },
   connect: { title: "커넥트", description: "팀빌딩·멘토·투자 연결 대기 신청을 접수합니다." },
   vault: { title: "서류 보관함", description: "내 제출 서류와 참고 자료, 실무에서 실제로 겪은 문제 사례를 한곳에서 봅니다." },
@@ -559,7 +561,6 @@ function FounderFeaturePage({
         {feature === "calendar" && <CalendarPanel />}
         {feature === "diagnostics" && <div className="space-y-6"><EligibilityPanel /><BizPlanCard /></div>}
         {feature === "calculator" && <CalculatorSuite />}
-        {feature === "library" && <LibraryPanel />}
         {feature === "incorporation" && <IncorporationPanel />}
         {feature === "connect" && <ConnectCard />}
         {feature === "vault" && <VaultTabs founder={founder} initialTab={vaultTab} />}

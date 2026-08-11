@@ -87,10 +87,10 @@ interface DevState {
 const agreement = { agreementStart: `${thisYear}-04-01`, agreementEnd: `${thisYear}-12-31` };
 
 const seedTasks = (): DevTask[] => [
-  { id: "t1", title: "예비창업패키지 사업계획서 초안 완성", due_date: day(3), status: "in_progress", task_type: "auto", is_hidden: false, assignee_id: DEV_USER.id, comment_count: 2 },
-  { id: "t2", title: "예비창업패키지 증빙 서류 준비", due_date: day(7), status: "todo", task_type: "auto", is_hidden: false, assignee_id: "dev-2", comment_count: 0 },
-  { id: "t3", title: "예비창업패키지 발표 리허설", due_date: day(10), status: "todo", task_type: "auto", is_hidden: false, assignee_id: null, comment_count: 0 },
-  { id: "t4", title: "예비창업패키지 최종 제출", due_date: day(16), status: "todo", task_type: "auto", is_hidden: false, assignee_id: null, comment_count: 0 },
+  { id: "t1", title: "사업계획서 초안 완성", due_date: day(3), status: "in_progress", task_type: "auto", is_hidden: false, assignee_id: DEV_USER.id, comment_count: 2 },
+  { id: "t2", title: "증빙 서류 준비", due_date: day(7), status: "todo", task_type: "auto", is_hidden: false, assignee_id: "dev-2", comment_count: 0 },
+  { id: "t3", title: "발표 리허설", due_date: day(10), status: "todo", task_type: "auto", is_hidden: false, assignee_id: null, comment_count: 0 },
+  { id: "t4", title: "최종 제출", due_date: day(16), status: "todo", task_type: "auto", is_hidden: false, assignee_id: null, comment_count: 0 },
   { id: "t5", title: "경쟁사 3곳 가격 정책 정리", due_date: day(-2), status: "todo", task_type: "custom", is_hidden: false, assignee_id: "dev-3", comment_count: 1 },
   { id: "t6", title: "베타 사용자 인터뷰 5건", due_date: day(1), status: "in_progress", task_type: "custom", is_hidden: false, assignee_id: "dev-2", comment_count: 0 },
   { id: "t7", title: "팀 소개 페이지 초안", due_date: null, status: "todo", task_type: "custom", is_hidden: false, assignee_id: null, comment_count: 0 },
@@ -110,7 +110,7 @@ const seedComments = (): DevComment[] => [
     content: "통계청 자료로 보완했습니다. 오늘 중 초안 공유할게요.",
     createdAt: iso(-1),
     files: [
-      { id: "cf1", fileName: "예비창업패키지_사업계획서_v3.hwp", storagePath: "dev/comments/c2/plan.hwp", mimeType: null, sizeBytes: 1_842_000 },
+      { id: "cf1", fileName: "사업계획서_v3.hwp", storagePath: "dev/comments/c2/plan.hwp", mimeType: null, sizeBytes: 1_842_000 },
       { id: "cf2", fileName: "시장규모_근거자료.pdf", storagePath: "dev/comments/c2/market.pdf", mimeType: "application/pdf", sizeBytes: 620_400 },
     ],
   },
@@ -248,8 +248,8 @@ const seedSubmissions = (): DevSubmission[] => [
 ];
 
 const seedVault = (): DevVaultDoc[] => [
-  { id: "v1", folder: "bizplan", fileName: "예비창업패키지_사업계획서.pdf", storagePath: "dev/bizplan/v3", version: 3, createdAt: iso(-1) },
-  { id: "v2", folder: "bizplan", fileName: "예비창업패키지_사업계획서.pdf", storagePath: "dev/bizplan/v2", version: 2, createdAt: iso(-8) },
+  { id: "v1", folder: "bizplan", fileName: "사업계획서.pdf", storagePath: "dev/bizplan/v3", version: 3, createdAt: iso(-1) },
+  { id: "v2", folder: "bizplan", fileName: "사업계획서.pdf", storagePath: "dev/bizplan/v2", version: 2, createdAt: iso(-8) },
   { id: "v3", folder: "evidence", fileName: "세금계산서_목업제작.pdf", storagePath: "dev/evidence/v1", version: 1, createdAt: iso(-4) },
   { id: "v4", folder: "evidence", fileName: "이체확인증_목업제작.png", storagePath: "dev/evidence/v1b", version: 1, createdAt: iso(-4) },
   { id: "v5", folder: "submission_archive", fileName: "정산검토요청_시제품목업.pdf", storagePath: "dev/archive/v1", version: 1, createdAt: iso(-1) },
@@ -333,7 +333,4 @@ export const DEV_CONVERSION_CODES = [
   { code: "HYU2026B", programId: "chocang-2026", expiresAt: iso(-3), useCount: 12, maxUses: 50 },
 ];
 
-export const DEV_PROGRAM_DEADLINES = [
-  { id: "yechang-2026", name: "2026 예비창업패키지", deadline: day(17) },
-  { id: "chocang-2026", name: "2026 초기창업패키지", deadline: day(45) },
-];
+// 지원사업 마감일 픽스처는 두지 않습니다. 개발 화면도 공고 예시(devAnnouncements)에서 날짜를 뽑습니다.
