@@ -50,3 +50,10 @@ CREATE POLICY "team members create comment files" ON task_comment_files
       WHERE c.id = comment_id AND is_prep_team_member(t.prep_team_id)
     )
   );
+
+-- PostgREST는 테이블 관계를 캐시해 두고 씁니다. 새 테이블을 만들어도 캐시를 갱신하지
+-- 않으면 코멘트 스레드가 아래 오류로 통째로 실패합니다(첨부만 빠지는 게 아닙니다):
+--   Could not find a relationship between 'task_comments' and 'task_comment_files'
+--   in the schema cache
+-- 자동 갱신은 몇 분 걸릴 수 있어 명시적으로 알립니다.
+NOTIFY pgrst, 'reload schema';

@@ -244,11 +244,8 @@ VALUES
   ('modu-2026', '창업도약패키지', 2026, 'v1', false, false)
 ON CONFLICT (id) DO NOTHING;
 
--- 이미 임시 마감일이 들어간 환경을 위한 정리. 이름도 연도 접두사를 뗍니다.
-UPDATE programs SET deadline = NULL WHERE deadline IS NOT NULL;
-UPDATE programs SET name = '예비창업패키지' WHERE id = 'yechang-2026';
-UPDATE programs SET name = '초기창업패키지' WHERE id = 'chocang-2026';
-UPDATE programs SET name = '창업도약패키지' WHERE id = 'modu-2026';
+-- 이미 임시 마감일이 들어간 기존 DB는 이 파일이 아니라 013-real-announcement-deadlines.sql로
+-- 정리합니다. schema.sql은 새 환경을 세우는 파일이라 기존 행을 고치지 않습니다.
 
 CREATE TABLE IF NOT EXISTS prep_teams (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -175,8 +175,8 @@
     },
     {
       "path": "src/lib/services/WorkspaceService.ts",
-      "accessCount": 91,
-      "lastAccessed": 1786418155539,
+      "accessCount": 92,
+      "lastAccessed": 1786421455399,
       "type": "file"
     },
     {
@@ -187,8 +187,8 @@
     },
     {
       "path": "src/lib/services/FounderWorkspaceService.ts",
-      "accessCount": 43,
-      "lastAccessed": 1786418063476,
+      "accessCount": 44,
+      "lastAccessed": 1786421479673,
       "type": "file"
     },
     {
@@ -324,6 +324,12 @@
       "type": "file"
     },
     {
+      "path": "supabase/schema.sql",
+      "accessCount": 6,
+      "lastAccessed": 1786421515070,
+      "type": "file"
+    },
+    {
       "path": "src/components/layout/Footer.tsx",
       "accessCount": 5,
       "lastAccessed": 1785338010662,
@@ -339,12 +345,6 @@
       "path": "src/features/expense-rules/types.ts",
       "accessCount": 5,
       "lastAccessed": 1785811289396,
-      "type": "file"
-    },
-    {
-      "path": "supabase/schema.sql",
-      "accessCount": 5,
-      "lastAccessed": 1786418236260,
       "type": "file"
     },
     {
