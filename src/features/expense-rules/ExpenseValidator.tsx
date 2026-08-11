@@ -7,6 +7,7 @@ import { CATEGORIES, CATEGORY_LIST, FRAUD_WARNING, ITEM_FLAG_LABELS, REASON_CODE
 import type { ExpenseCategory, ExpenseInput, ExpenseVerdict, ItemFlag, Severity } from "./types";
 import { getAuthHeaders } from "@/lib/services/WorkspaceService";
 import { Button, ChoiceChip, Field, Notice, Panel, StatusBadge, inputClass, textareaClass, type StatusTone } from "../startup-workspace/ui";
+import { RelatedCaseLine } from "../startup-workspace/RelatedCases";
 import { cn } from "@/lib/utils";
 import { toMessage } from "@/lib/errors";
 
@@ -50,7 +51,7 @@ const emptyExpense = (agreementStart: string, agreementEnd: string): ExpenseInpu
   vendor: { type: "business" },
 });
 
-function FindingRow({ finding }: { finding: ExpenseVerdict["findings"][number] }) {
+function FindingRow({ finding, context = "" }: { finding: ExpenseVerdict["findings"][number]; context?: string }) {
   const Icon = finding.severity === "block" ? AlertTriangle : finding.severity === "warn" ? Info : CheckCircle2;
   return (
     <li className="rounded-xl border border-[#E2E8F0] p-4">
@@ -65,11 +66,28 @@ function FindingRow({ finding }: { finding: ExpenseVerdict["findings"][number] }
       </p>
       <p className="mt-2 border-l-2 border-[#CBD5E1] pl-3 text-sm leading-6 text-[#475569]">근거 · {finding.clause}</p>
       <p className="mt-2 rounded-lg bg-[#EFF6FF] p-3 text-sm font-semibold text-[#2563EB]">수정 방법 · {finding.fix}</p>
+      {/* 확인 권고 건에만 답니다. 위반은 규정으로 끝나고, 안내는 사례까지 볼 일이 아닙니다. */}
+      {finding.severity === "warn" && (
+        <RelatedCaseLine text={`${finding.message} ${finding.fix} ${context}`} className="mt-3 border-t border-dashed border-[#E2E8F0] pt-3" />
+      )}
     </li>
   );
 }
 
-export function VerdictReport({ verdict, ai, onRequestReview, requestPending = false }: { verdict: ExpenseVerdict; ai?: AiJudgement | null; onRequestReview?: () => void; requestPending?: boolean }) {
+export function VerdictReport({
+  verdict,
+  ai,
+  onRequestReview,
+  requestPending = false,
+  context = "",
+}: {
+  verdict: ExpenseVerdict;
+  ai?: AiJudgement | null;
+  onRequestReview?: () => void;
+  requestPending?: boolean;
+  /** 집행 건 제목. 판정문에 없는 맥락(결제 수단 등)까지 보고 관련 사례를 찾습니다. */
+  context?: string;
+}) {
   return (
     <div className="space-y-5">
       <Panel>
@@ -106,7 +124,7 @@ export function VerdictReport({ verdict, ai, onRequestReview, requestPending = f
       {verdict.findings.length > 0 && (
         <Panel title={`규정 판정 ${verdict.findings.length}건`}>
           <ul className="space-y-3">
-            {verdict.findings.map((finding) => <FindingRow key={finding.code} finding={finding} />)}
+            {verdict.findings.map((finding) => <FindingRow key={finding.code} finding={finding} context={context} />)}
           </ul>
         </Panel>
       )}
@@ -443,7 +461,7 @@ export function ExpenseValidator({
       </div>
 
       <div className="space-y-5">
-        <VerdictReport verdict={shown} ai={remote?.ai} requestPending={requestPending} onRequestReview={onRequestReview ? () => onRequestReview(expense, shown) : undefined} />
+        <VerdictReport verdict={shown} ai={remote?.ai} context={expense.title} requestPending={requestPending} onRequestReview={onRequestReview ? () => onRequestReview(expense, shown) : undefined} />
         <Panel title={`${spec.name} 규정 요약`}>
           <p className="text-sm leading-6 text-[#475569]">{spec.definition}</p>
           <ul className="mt-3 space-y-2 text-sm leading-6 text-[#475569]">

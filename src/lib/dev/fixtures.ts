@@ -30,6 +30,14 @@ export interface DevTask {
   announcement_sn?: number | null;
 }
 
+export interface DevCommentFile {
+  id: string;
+  fileName: string;
+  storagePath: string;
+  mimeType: string | null;
+  sizeBytes: number;
+}
+
 export interface DevComment {
   id: string;
   taskId: string;
@@ -37,6 +45,7 @@ export interface DevComment {
   authorName: string;
   content: string;
   createdAt: string;
+  files: DevCommentFile[];
 }
 
 export interface DevSubmission {
@@ -92,10 +101,21 @@ const seedTasks = (): DevTask[] => [
 ];
 
 const seedComments = (): DevComment[] => [
-  { id: "c1", taskId: "t1", authorId: "dev-2", authorName: "박민준", content: "문제 인식 파트에 시장 손실 규모 수치를 넣어야 할 것 같습니다.", createdAt: iso(-2) },
-  { id: "c2", taskId: "t1", authorId: DEV_USER.id, authorName: DEV_USER.fullName, content: "통계청 자료로 보완했습니다. 오늘 중 초안 공유할게요.", createdAt: iso(-1) },
-  { id: "c4", taskId: "t10", authorId: "dev-2", authorName: "박민준", content: "충청권 소재 요건이라 사무실 주소 이전 일정부터 확인해야 합니다.", createdAt: iso(-1) },
-  { id: "c3", taskId: "t5", authorId: "dev-3", authorName: "정서연", content: "경쟁사 두 곳은 가격을 공개하지 않아 문의 메일 보냈습니다.", createdAt: iso(-1) },
+  { id: "c1", taskId: "t1", authorId: "dev-2", authorName: "박민준", content: "문제 인식 파트에 시장 손실 규모 수치를 넣어야 할 것 같습니다.", createdAt: iso(-2), files: [] },
+  {
+    id: "c2",
+    taskId: "t1",
+    authorId: DEV_USER.id,
+    authorName: DEV_USER.fullName,
+    content: "통계청 자료로 보완했습니다. 오늘 중 초안 공유할게요.",
+    createdAt: iso(-1),
+    files: [
+      { id: "cf1", fileName: "예비창업패키지_사업계획서_v3.hwp", storagePath: "dev/comments/c2/plan.hwp", mimeType: null, sizeBytes: 1_842_000 },
+      { id: "cf2", fileName: "시장규모_근거자료.pdf", storagePath: "dev/comments/c2/market.pdf", mimeType: "application/pdf", sizeBytes: 620_400 },
+    ],
+  },
+  { id: "c4", taskId: "t10", authorId: "dev-2", authorName: "박민준", content: "충청권 소재 요건이라 사무실 주소 이전 일정부터 확인해야 합니다.", createdAt: iso(-1), files: [] },
+  { id: "c3", taskId: "t5", authorId: "dev-3", authorName: "정서연", content: "경쟁사 두 곳은 가격을 공개하지 않아 문의 메일 보냈습니다.", createdAt: iso(-1), files: [] },
 ];
 
 /** 판정 결과가 통과·보완·위반으로 골고루 나오도록 서로 다른 성격의 집행 건을 섞었습니다. */

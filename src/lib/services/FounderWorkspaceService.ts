@@ -1,5 +1,5 @@
 import { supabase } from "../supabase";
-import { getCurrentPrepTeamId, getProfileNames, requireClient } from "./WorkspaceService";
+import { getCurrentPrepTeamId, getProfileNames, requireClient, type TaskCommentFile } from "./WorkspaceService";
 import { DEV_BYPASS } from "../dev/devMode";
 import { getAuthUserId, invalidateTeamCache, requireAuthUserId } from "./sessionCache";
 
@@ -105,6 +105,84 @@ export async function uploadVaultDocument(folder: VaultFolder, file: File): Prom
     storagePath: data.storage_path as string,
     version: data.version as number,
     createdAt: data.created_at as string,
+  };
+}
+
+/**
+ * 코멘트에 붙일 수 있는 확장자.
+ *
+ * 화이트리스트입니다. 무엇이든 받으면 팀 보관함이 실행 파일 배포 경로가 됩니다.
+ * 실제로 오가는 것은 사업계획서(hwp·docx·pdf)·증빙(xlsx·이미지)·압축본 정도입니다.
+ */
+export const ATTACHMENT_EXTENSIONS = [
+  "pdf", "hwp", "hwpx", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+  "txt", "csv", "png", "jpg", "jpeg", "gif", "webp", "zip",
+] as const;
+
+/** 파일 선택 창에서 미리 걸러 주는 값. 실제 판정은 아래 검사가 합니다. */
+export const ATTACHMENT_ACCEPT = ATTACHMENT_EXTENSIONS.map((ext) => `.${ext}`).join(",");
+
+/**
+ * 첨부 가능 여부. 문제가 없으면 null, 있으면 사용자에게 보여 줄 문장을 돌려줍니다.
+ *
+ * 업로드를 시작하기 전에 판단해야 합니다. 50MB를 다 올려 보내고 나서 거절하면
+ * 그 시간이 통째로 버려집니다.
+ */
+export function checkAttachment(file: { name: string; size: number }): string | null {
+  const extension = file.name.includes(".") ? file.name.split(".").pop()!.toLowerCase() : "";
+  if (!(ATTACHMENT_EXTENSIONS as readonly string[]).includes(extension)) {
+    return `${file.name}: 올릴 수 없는 형식입니다. 문서·표·이미지·압축 파일만 첨부할 수 있습니다.`;
+  }
+  if (file.size === 0) return `${file.name}: 빈 파일은 올릴 수 없습니다.`;
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return `${file.name}: 파일이 너무 큽니다. 최대 50MB까지 올릴 수 있습니다. (현재 ${(file.size / 1024 / 1024).toFixed(1)}MB)`;
+  }
+  return null;
+}
+
+/**
+ * 코멘트 첨부 업로드.
+ *
+ * 보관함이 아니라 코멘트에 종속된 부속물이라 vault_documents가 아닌 task_comment_files에
+ * 남깁니다. 다만 파일 자체는 같은 vault 버킷에 두어, 경로 첫 세그먼트가 팀 UUID인지로
+ * 접근을 가르는 기존 storage 정책을 그대로 씁니다.
+ */
+export async function uploadCommentFile(commentId: string, file: File): Promise<TaskCommentFile> {
+  const problem = checkAttachment(file);
+  if (problem) throw new Error(problem);
+  if (DEV_BYPASS) return (await import("../dev/devServices")).devUploadCommentFile(commentId, file);
+  const client = requireClient();
+  const userId = await requireAuthUserId();
+  const teamId = await getCurrentPrepTeamId();
+  // 같은 이름을 여러 코멘트에 올려도 부딪히지 않도록 코멘트 id로 폴더를 나눕니다.
+  const storagePath = `${teamId}/comments/${commentId}/${file.name}`;
+
+  const { error: uploadError } = await client.storage.from(BUCKET).upload(storagePath, file, { upsert: true });
+  if (uploadError) throw new Error(`파일 업로드에 실패했습니다. ${uploadError.message}`);
+
+  const { data, error } = await client
+    .from("task_comment_files")
+    .insert({
+      comment_id: commentId,
+      file_name: file.name,
+      storage_path: storagePath,
+      mime_type: file.type || null,
+      size_bytes: file.size,
+      created_by: userId,
+    })
+    .select("id, file_name, storage_path, mime_type, size_bytes")
+    .single();
+  if (error) {
+    // 메타데이터가 없으면 화면에서 영영 못 찾는 고아 파일이 됩니다. 되돌립니다.
+    await client.storage.from(BUCKET).remove([storagePath]);
+    throw error;
+  }
+  return {
+    id: data.id as string,
+    fileName: data.file_name as string,
+    storagePath: data.storage_path as string,
+    mimeType: (data.mime_type as string | null) ?? null,
+    sizeBytes: Number(data.size_bytes) || 0,
   };
 }
 

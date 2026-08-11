@@ -1,5 +1,5 @@
 import { buildAnnouncementUrl, type CalendarItem, type ConversionCode, type TeamInvite, type TeamMember, type TrackedSubmission, type VaultDocument, type VaultFolder } from "../services/FounderWorkspaceService";
-import type { ManagerReviewSubmission, PersistedTask, StartupProfile, SavedEligibilityReport, SubmissionEvidenceFile } from "../services/WorkspaceService";
+import type { ManagerReviewSubmission, PersistedTask, StartupProfile, SavedEligibilityReport, SubmissionEvidenceFile, TaskCommentFile } from "../services/WorkspaceService";
 import type { EligibilityAnswers, EligibilityReport } from "@/features/startup-workspace/domain";
 import {
   DEV_CONVERSION_CODES,
@@ -270,11 +270,30 @@ export function devAddTaskComment(taskId: string, content: string) {
     authorName: DEV_USER.fullName,
     content,
     createdAt: new Date().toISOString(),
+    files: [],
   };
   devUpdate((current) => ({
     ...current,
     comments: [...current.comments, created],
     tasks: current.tasks.map((task) => (task.id === taskId ? { ...task, comment_count: task.comment_count + 1 } : task)),
+  }));
+  return created;
+}
+
+/** 개발용 진입 모드에는 실제 저장소가 없어 파일 이름만 붙여 둡니다. 다운로드는 막힙니다. */
+export function devUploadCommentFile(commentId: string, file: File): TaskCommentFile {
+  const created: TaskCommentFile = {
+    id: nextId(),
+    fileName: file.name,
+    storagePath: `dev/comments/${commentId}/${file.name}`,
+    mimeType: file.type || null,
+    sizeBytes: file.size,
+  };
+  devUpdate((current) => ({
+    ...current,
+    comments: current.comments.map((comment) =>
+      comment.id === commentId ? { ...comment, files: [...comment.files, created] } : comment,
+    ),
   }));
   return created;
 }

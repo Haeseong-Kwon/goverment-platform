@@ -189,7 +189,7 @@ function DayItemRow({ item, onCommentAdded }: { item: CalendarItem; onCommentAdd
         <>
           {item.announcement && <AnnouncementMeta announcement={item.announcement} />}
           {/* 지원사업 마감은 팀 일정 행이 아니라 코멘트를 붙일 대상이 없습니다. */}
-          {item.taskId && <TaskCommentThread taskId={item.taskId} onAdded={onCommentAdded} />}
+          {item.taskId && <TaskCommentThread taskId={item.taskId} taskTitle={item.title} onAdded={onCommentAdded} />}
         </>
       )}
     </li>

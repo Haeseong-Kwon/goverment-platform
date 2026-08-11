@@ -637,6 +637,15 @@ export async function getBizplanDiagnosisEvents(): Promise<string[]> {
   return (data ?? []).map((row) => row.created_at as string);
 }
 
+/** 코멘트에 붙은 첨부 파일. 실제 파일은 vault 버킷에 있고 여기는 그 좌표만 갖습니다. */
+export interface TaskCommentFile {
+  id: string;
+  fileName: string;
+  storagePath: string;
+  mimeType: string | null;
+  sizeBytes: number;
+}
+
 export interface TaskComment {
   id: string;
   taskId: string;
@@ -644,6 +653,23 @@ export interface TaskComment {
   authorName: string;
   content: string;
   createdAt: string;
+  files: TaskCommentFile[];
+}
+
+/** 중첩 조회로 함께 받은 첨부 행. 관계 결과는 배열/누락 둘 다 올 수 있어 한 곳에서 흡수합니다. */
+function toCommentFiles(raw: unknown): TaskCommentFile[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((entry) => {
+    const row = entry as Record<string, unknown> | null;
+    if (!row || typeof row.storage_path !== "string") return [];
+    return [{
+      id: String(row.id ?? ""),
+      fileName: typeof row.file_name === "string" ? row.file_name : "이름 없는 파일",
+      storagePath: row.storage_path,
+      mimeType: typeof row.mime_type === "string" ? row.mime_type : null,
+      sizeBytes: Number(row.size_bytes) || 0,
+    }];
+  });
 }
 
 /**
@@ -675,7 +701,8 @@ export async function getTaskComments(taskId: string): Promise<TaskComment[]> {
   const client = requireClient();
   const { data, error } = await client
     .from("task_comments")
-    .select("id, task_id, author_id, content, created_at")
+    // 첨부는 중첩으로 함께 받습니다. 코멘트마다 따로 조회하면 스레드 하나에 왕복이 그만큼 늘어납니다.
+    .select("id, task_id, author_id, content, created_at, task_comment_files(id, file_name, storage_path, mime_type, size_bytes)")
     .eq("task_id", taskId)
     .order("created_at", { ascending: true });
   if (error) throw error;
@@ -690,6 +717,7 @@ export async function getTaskComments(taskId: string): Promise<TaskComment[]> {
     authorName: nameById.get(row.author_id as string) ?? "이름 미등록",
     content: row.content as string,
     createdAt: row.created_at as string,
+    files: toCommentFiles(row.task_comment_files),
   }));
 }
 
@@ -714,6 +742,7 @@ export async function addTaskComment(taskId: string, content: string): Promise<T
     authorName: nameById.get(userId) ?? "이름 미등록",
     content: data.content as string,
     createdAt: data.created_at as string,
+    files: [],
   };
 }
 

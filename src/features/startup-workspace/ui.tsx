@@ -381,12 +381,15 @@ export function Modal({
   description,
   onClose,
   footer,
+  wide,
   children,
 }: {
   title: string;
   description?: string;
   onClose: () => void;
   footer?: React.ReactNode;
+  /** 문서 미리보기처럼 확인 문구보다 넓은 내용을 담을 때. */
+  wide?: boolean;
   children?: React.ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -414,7 +417,10 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="animate-in relative w-full max-w-md rounded-2xl bg-white p-6 shadow-[0_24px_64px_rgba(15,23,42,0.24)] outline-none"
+        className={cn(
+          "animate-in relative w-full rounded-2xl bg-white p-6 shadow-[0_24px_64px_rgba(15,23,42,0.24)] outline-none",
+          wide ? "max-w-2xl" : "max-w-md",
+        )}
       >
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-lg font-bold text-[#0F172A]">{title}</h2>

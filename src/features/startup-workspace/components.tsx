@@ -11,7 +11,9 @@ import { getDday, getFounderDashboardSummary, getMonthlyDiagnosticUsage } from "
 import { EligibilityPanel } from "./EligibilityPanel";
 import { AnnouncementsPanel } from "./AnnouncementsPanel";
 import { TaskCommentThread } from "./TaskCommentThread";
-import { IncorporationPanel, TeamSettingsPanel, TrackerPanel, VaultPanel } from "./FounderPanels";
+import { IncorporationPanel, TeamSettingsPanel, TrackerPanel } from "./FounderPanels";
+import { VaultTabs, type VaultTabId } from "./VaultTabs";
+import { RelatedCaseLine } from "./RelatedCases";
 import { CalendarPanel } from "./CalendarPanel";
 import { getSelectedPrograms, getTeamMembers, listVaultDocuments, type BudgetLine, type SelectedProgram, type TeamMember, type VaultDocument } from "@/lib/services/FounderWorkspaceService";
 import { RequireFounderSession, WorkspaceShell } from "./shell";
@@ -254,7 +256,9 @@ function TaskCard({
         ))}
       </div>
 
-      {threadOpen && <TaskCommentThread taskId={task.id} onAdded={onCommentAdded} />}
+      <RelatedCaseLine text={task.title} variant="collapsible" className="mt-2.5 pl-[34px]" />
+
+      {threadOpen && <TaskCommentThread taskId={task.id} taskTitle={task.title} onAdded={onCommentAdded} />}
     </article>
   );
 }
@@ -527,14 +531,23 @@ const FEATURE_META: Record<FounderFeature, { title: string; description: string 
   library: { title: "무료 자료실", description: "출처가 표기된 창업 표준 양식을 받습니다. 계약서·IR·인사·정부지원 행정 서식." },
   incorporation: { title: "법인 설립", description: "사업별 설립 타이밍과 절차를 확인합니다. 순서를 잘못 밟으면 자격이 사라집니다." },
   connect: { title: "커넥트", description: "팀빌딩·멘토·투자 연결 대기 신청을 접수합니다." },
-  vault: { title: "서류 보관함", description: "같은 이름으로 올리면 버전이 쌓이고, 열람은 만료형 보안 링크로만 이뤄집니다." },
+  vault: { title: "서류 보관함", description: "내 제출 서류와 참고 자료, 실무에서 실제로 겪은 문제 사례를 한곳에서 봅니다." },
   settings: { title: "팀 설정", description: "팀 구성원과 초대 코드, 데이터 공개 범위를 관리합니다." },
   precheck: { title: "정산 사전검증", description: "집행 건을 「사업비 비목 해설」 룰셋으로 판정한 뒤 검토를 요청합니다." },
   predeliberation: { title: "사전심의 합본", description: "사전심의 대상 여부를 판정하고 합본 구비 서류를 점검합니다." },
   tracker: { title: "상태 트래커", description: "제출한 정산 건의 검토 단계와 매니저 판정을 확인합니다." },
 };
 
-function FounderFeaturePage({ feature, founder = false }: { feature: FounderFeature; founder?: boolean }) {
+function FounderFeaturePage({
+  feature,
+  founder = false,
+  vaultTab,
+}: {
+  feature: FounderFeature;
+  founder?: boolean;
+  /** 보관함 하위 라우트(/vault/cases)에서 어느 탭으로 열지 정합니다. */
+  vaultTab?: VaultTabId;
+}) {
   const meta = FEATURE_META[feature];
   return (
     <RequireFounderSession role={founder ? "founder" : "pre_founder"}>
@@ -549,7 +562,7 @@ function FounderFeaturePage({ feature, founder = false }: { feature: FounderFeat
         {feature === "library" && <LibraryPanel />}
         {feature === "incorporation" && <IncorporationPanel />}
         {feature === "connect" && <ConnectCard />}
-        {feature === "vault" && <VaultPanel />}
+        {feature === "vault" && <VaultTabs founder={founder} initialTab={vaultTab} />}
         {feature === "settings" && <TeamSettingsPanel founder={founder} />}
         {feature === "precheck" && <PrecheckPanel />}
         {feature === "predeliberation" && <PreDeliberationPanel />}

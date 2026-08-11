@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1786321064845,
+  "lastScanned": 1786414542463,
   "projectRoot": "/Users/haeseong/Desktop/Product/startup_meetup",
   "techStack": {
     "languages": [
@@ -81,7 +81,7 @@
       "path": "developer_docs",
       "purpose": null,
       "fileCount": 7,
-      "lastAccessed": 1786321064811,
+      "lastAccessed": 1786414542397,
       "keyFiles": [
         "사업비 비목 해설.pdf",
         "창업 파일럿 프로젝트 공유용.pdf",
@@ -93,21 +93,21 @@
     "docs": {
       "path": "docs",
       "purpose": "Documentation",
-      "fileCount": 6,
-      "lastAccessed": 1786321064812,
+      "fileCount": 7,
+      "lastAccessed": 1786414542399,
       "keyFiles": [
         "도메인-연결과-검색등록.md",
+        "사업비-비목-룰셋-갱신.md",
         "이메일-발송-설정.md",
         "창업 워크스페이스 설계 (오프라인).html",
-        "행정 시뮬레이터 (standalone).html",
-        "행정 시뮬레이터 - 제품 명세서.md"
+        "행정 시뮬레이터 (standalone).html"
       ]
     },
     "public": {
       "path": "public",
       "purpose": "Public files",
       "fileCount": 6,
-      "lastAccessed": 1786321064817,
+      "lastAccessed": 1786414542423,
       "keyFiles": [
         "file.svg",
         "globe.svg",
@@ -120,14 +120,14 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 0,
-      "lastAccessed": 1786321064818,
+      "lastAccessed": 1786414542424,
       "keyFiles": []
     },
     "supabase": {
       "path": "supabase",
       "purpose": null,
-      "fileCount": 10,
-      "lastAccessed": 1786321064818,
+      "fileCount": 13,
+      "lastAccessed": 1786414542424,
       "keyFiles": [
         "002-manager-review.sql",
         "003-profile-role-lock.sql",
@@ -140,7 +140,7 @@
       "path": "src/app",
       "purpose": "Application code",
       "fileCount": 12,
-      "lastAccessed": 1786321064820,
+      "lastAccessed": 1786414542427,
       "keyFiles": [
         "apple-icon.tsx",
         "error.tsx",
@@ -151,14 +151,14 @@
       "path": "src/components",
       "purpose": "UI components",
       "fileCount": 0,
-      "lastAccessed": 1786321064820,
+      "lastAccessed": 1786414542427,
       "keyFiles": []
     },
     "src/lib": {
       "path": "src/lib",
       "purpose": "Library code",
       "fileCount": 6,
-      "lastAccessed": 1786321064820,
+      "lastAccessed": 1786414542428,
       "keyFiles": [
         "errors.ts",
         "og.tsx",
@@ -169,14 +169,14 @@
   "hotPaths": [
     {
       "path": "src/features/startup-workspace/components.tsx",
-      "accessCount": 81,
-      "lastAccessed": 1786330812735,
+      "accessCount": 95,
+      "lastAccessed": 1786417153460,
       "type": "file"
     },
     {
       "path": "src/lib/services/WorkspaceService.ts",
-      "accessCount": 80,
-      "lastAccessed": 1786333234172,
+      "accessCount": 86,
+      "lastAccessed": 1786347623395,
       "type": "file"
     },
     {
@@ -186,27 +186,27 @@
       "type": "file"
     },
     {
-      "path": "src/features/startup-workspace/FounderPanels.tsx",
-      "accessCount": 33,
-      "lastAccessed": 1786328231367,
+      "path": "src/lib/services/FounderWorkspaceService.ts",
+      "accessCount": 36,
+      "lastAccessed": 1786347648027,
       "type": "file"
     },
     {
-      "path": "src/lib/services/FounderWorkspaceService.ts",
-      "accessCount": 33,
-      "lastAccessed": 1786333244631,
+      "path": "src/features/startup-workspace/FounderPanels.tsx",
+      "accessCount": 34,
+      "lastAccessed": 1786416271946,
       "type": "file"
     },
     {
       "path": "src/features/expense-rules/ExpenseValidator.tsx",
-      "accessCount": 23,
-      "lastAccessed": 1785809259806,
+      "accessCount": 32,
+      "lastAccessed": 1786417244569,
       "type": "file"
     },
     {
       "path": "src/features/startup-workspace/shell.tsx",
-      "accessCount": 20,
-      "lastAccessed": 1786322944532,
+      "accessCount": 21,
+      "lastAccessed": 1786416121297,
       "type": "file"
     },
     {
@@ -228,21 +228,21 @@
       "type": "file"
     },
     {
-      "path": "src/features/startup-workspace/session.ts",
-      "accessCount": 13,
-      "lastAccessed": 1785815635040,
-      "type": "file"
-    },
-    {
       "path": "src/features/startup-workspace/ui.tsx",
-      "accessCount": 13,
-      "lastAccessed": 1785895167469,
+      "accessCount": 17,
+      "lastAccessed": 1786416262748,
       "type": "file"
     },
     {
       "path": "src/features/expense-rules/engine.ts",
+      "accessCount": 14,
+      "lastAccessed": 1786417187105,
+      "type": "file"
+    },
+    {
+      "path": "src/features/startup-workspace/session.ts",
       "accessCount": 13,
-      "lastAccessed": 1786330323057,
+      "lastAccessed": 1785815635040,
       "type": "file"
     },
     {
