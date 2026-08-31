@@ -74,7 +74,7 @@ export const semesterColumns = (semester: CourseSemester = COURSE) => ({
 
 // ---------------------------------------------------------------- 게시판
 
-export type BoardId = "recruit" | "proposal" | "team" | "showcase";
+export type BoardId = "intro" | "recruit" | "proposal" | "team" | "showcase";
 
 export interface BoardConfig {
   id: BoardId;
@@ -89,6 +89,14 @@ export interface BoardConfig {
 }
 
 export const BOARDS: Record<BoardId, BoardConfig> = {
+  intro: {
+    id: "intro",
+    label: "자기소개",
+    description: "이번 학기 수강생들이 스스로를 소개하는 곳입니다. 아이디어가 아직 없어도 괜찮습니다 — 무엇을 할 수 있는지만 적어 두면 팀이 찾아옵니다.",
+    createLabel: "내 자기소개 등록",
+    emptyTitle: "아직 등록된 자기소개가 없습니다",
+    emptyDescription: "가장 먼저 올려 보세요. 전공과 할 수 있는 것만 적어도 충분합니다.",
+  },
   recruit: {
     id: "recruit",
     label: "팀빌딩 모집",
@@ -123,14 +131,19 @@ export const BOARDS: Record<BoardId, BoardConfig> = {
   },
 };
 
-export const BOARD_ORDER: BoardId[] = ["recruit", "proposal", "team", "showcase"];
+/**
+ * 게시판 순서는 학기가 흘러가는 순서입니다.
+ * 나를 알리고(자기소개) → 팀을 찾고(모집) → 아이템을 정하고(기업 제안) →
+ * 팀을 확정하고(확정 팀) → 결과를 냅니다(결과물).
+ */
+export const BOARD_ORDER: BoardId[] = ["intro", "recruit", "proposal", "team", "showcase"];
 
 /**
  * 주소의 `[board]` 자리가 우리가 아는 게시판인지.
  *
  * `value in BOARDS`로 쓰면 안 됩니다. `in`은 프로토타입 체인까지 봐서
  * `/course/__proto__`가 통과하고, 뒤이은 `BOARDS[board]`가 게시판 설정이 아닌
- * 것을 돌려주며 화면이 깨집니다. 아는 값 네 개와만 대조합니다.
+ * 것을 돌려주며 화면이 깨집니다. 아는 값과만 대조합니다.
  */
 export const isBoardId = (value: string): value is BoardId => (BOARD_ORDER as string[]).includes(value);
 
@@ -145,7 +158,7 @@ export const courseHref = (board?: BoardId, id?: string) =>
  */
 export const COURSE_WORKSPACE_HREF = "/course/me";
 
-/** 상단 탭이 가리킬 수 있는 곳 전부. 게시판 넷 + 과목 홈 + 내 워크스페이스. */
+/** 상단 탭이 가리킬 수 있는 곳 전부. 게시판 다섯 + 과목 홈 + 내 워크스페이스. */
 export type CourseTab = BoardId | "home" | "me";
 
 // ---------------------------------------------------------------- 값 목록
@@ -311,6 +324,7 @@ export interface SemesterProfile {
   portfolioUrl: string | null;
   status: StudentStatus;
   createdAt: string;
+  commentCount: number;
 }
 
 export interface CourseComment {
@@ -324,7 +338,7 @@ export interface CourseComment {
 }
 
 /** 목록에 실리는 어떤 글이든 갖는 최소 공통분모. 검색·정렬이 이것만 봅니다. */
-export type BoardEntry = RecruitPost | Proposal | CourseTeam | Deliverable;
+export type BoardEntry = SemesterProfile | RecruitPost | Proposal | CourseTeam | Deliverable;
 
 // ---------------------------------------------------------------- JSONB 파싱
 
@@ -458,11 +472,11 @@ export function getStudentSteps(input: StudentProgressInput): StudentStep[] {
   return [
     {
       id: "profile",
-      title: "수강생 프로필 등록",
+      title: "자기소개 등록",
       description: "전공과 희망 역할을 적어 두면 다른 팀이 먼저 찾아옵니다.",
       done: input.hasProfile,
-      href: courseHref(),
-      cta: "프로필 작성",
+      href: courseHref("intro"),
+      cta: "자기소개 작성",
     },
     {
       id: "recruit",

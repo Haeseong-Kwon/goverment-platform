@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  BOARDS,
+  BOARD_ORDER,
   COURSE,
   countOpenRoles,
   emptyToNull,
@@ -83,10 +85,22 @@ describe("학기", () => {
   });
 
   it("주소의 게시판 값만 통과시킨다", () => {
+    expect(isBoardId("intro")).toBe(true);
     expect(isBoardId("recruit")).toBe(true);
     expect(isBoardId("showcase")).toBe(true);
     expect(isBoardId("recruits")).toBe(false);
     expect(isBoardId("__proto__")).toBe(false);
+    expect(isBoardId("me")).toBe(false);
+  });
+
+  it("게시판 순서와 설정이 어긋나지 않는다", () => {
+    // 탭·홈 카드·라우트가 전부 BOARD_ORDER를 돌므로, 설정이 빠진 값이 섞이면
+    // 화면에서 undefined를 읽습니다.
+    expect(BOARD_ORDER).toEqual(["intro", "recruit", "proposal", "team", "showcase"]);
+    for (const board of BOARD_ORDER) {
+      expect(BOARDS[board]?.id).toBe(board);
+      expect(BOARDS[board].createLabel.length).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -259,7 +273,7 @@ describe("수강생 진행 단계", () => {
   const idsDone = (input: Parameters<typeof getStudentSteps>[0]) =>
     getStudentSteps(input).filter((step) => step.done).map((step) => step.id);
 
-  it("아무것도 안 했으면 전부 미완이고 다음 할 일은 프로필이다", () => {
+  it("아무것도 안 했으면 전부 미완이고 다음 할 일은 자기소개다", () => {
     const steps = getStudentSteps(base);
     expect(idsDone(base)).toEqual([]);
     expect(getStudentProgress(steps)).toMatchObject({ done: 0, total: 5, percent: 0 });
@@ -298,6 +312,11 @@ describe("수강생 진행 단계", () => {
       expect(step.href.startsWith("/course")).toBe(true);
       expect(step.cta.length).toBeGreaterThan(0);
     }
+  });
+
+  it("자기소개 단계는 자기소개 게시판을 가리킨다", () => {
+    const profileStep = getStudentSteps(base).find((step) => step.id === "profile");
+    expect(profileStep?.href).toBe("/course/intro");
   });
 });
 

@@ -326,7 +326,7 @@ export function CourseWorkspace() {
 function ProfileCard({ profile, onEdit }: { profile: SemesterProfile | null; onEdit: (() => void) | null }) {
   if (!profile) {
     return (
-      <Panel title="수강생 프로필">
+      <Panel title="내 자기소개">
         <EmptyState
           title="이번 학기 프로필이 아직 없습니다"
           description="전공과 희망 역할, 기술 스택을 적어 두면 팀을 찾는 쪽에서 먼저 연락이 옵니다. 학기마다 따로 저장됩니다."
@@ -338,7 +338,7 @@ function ProfileCard({ profile, onEdit }: { profile: SemesterProfile | null; onE
 
   return (
     <Panel
-      title="수강생 프로필"
+      title="내 자기소개"
       action={
         onEdit ? <Button variant="secondary" size="sm" icon={<Pencil size={13} />} onClick={onEdit}>수정</Button> : null
       }

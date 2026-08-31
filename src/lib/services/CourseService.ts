@@ -1,7 +1,7 @@
 /**
  * 과목 게시판 데이터 접근.
  *
- * 네 게시판(팀빌딩 모집·기업 제안·확정 팀·결과물)과 공용 댓글이 여기를 지납니다.
+ * 다섯 게시판(자기소개·팀빌딩 모집·기업 제안·확정 팀·결과물)과 공용 댓글이 여기를 지납니다.
  * 화면은 Supabase 이름을 모르고, 이 파일이 도메인 타입으로 바꿔서 넘깁니다.
  *
  * 접근 통제의 실제 경계는 RLS입니다(014-capstone-course.sql). 여기서 하는 검사는
@@ -480,7 +480,7 @@ export async function deleteComment(id: string) {
 const SEMESTER_PROFILE_COLUMNS =
   "id, user_id, full_name, role, major, bio, tech_stack, github_url, portfolio_url, status, created_at";
 
-const toSemesterProfile = (row: RecruitRow): SemesterProfile => ({
+const toSemesterProfile = (row: RecruitRow, counts: Map<string, number> = new Map()): SemesterProfile => ({
   id: row.id as string,
   userId: row.user_id as string,
   fullName: row.full_name as string,
@@ -492,7 +492,36 @@ const toSemesterProfile = (row: RecruitRow): SemesterProfile => ({
   portfolioUrl: (row.portfolio_url as string | null) ?? null,
   status: (["LOOKING", "TEAMED", "DONE"].includes(row.status as string) ? row.status : "LOOKING") as StudentStatus,
   createdAt: row.created_at as string,
+  commentCount: counts.get(row.id as string) ?? 0,
 });
+
+/** 자기소개 게시판 목록. 팀을 찾는 사람이 위에 오도록 상태 순으로 정렬합니다. */
+export async function getSemesterProfiles(): Promise<SemesterProfile[]> {
+  const { data, error } = await requireClient()
+    .from("semester_profiles")
+    .select(SEMESTER_PROFILE_COLUMNS)
+    .eq("semester_key", COURSE.key)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  const counts = await getCommentCounts("intro");
+  return ((data ?? []) as RecruitRow[]).map((row) => toSemesterProfile(row, counts));
+}
+
+export async function getSemesterProfileById(id: string): Promise<SemesterProfile | null> {
+  const { data, error } = await requireClient()
+    .from("semester_profiles")
+    .select(SEMESTER_PROFILE_COLUMNS)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return toSemesterProfile(data as RecruitRow, await getCommentCounts("intro"));
+}
+
+export async function deleteSemesterProfile(id: string) {
+  const { error } = await requireClient().from("semester_profiles").delete().eq("id", id);
+  if (error) throw error;
+}
 
 /** 내 이번 학기 프로필. 아직 안 썼으면 null이고, 워크스페이스가 작성부터 안내합니다. */
 export async function getMySemesterProfile(): Promise<SemesterProfile | null> {
@@ -634,6 +663,7 @@ export async function getMyCourseActivity(): Promise<StudentActivity> {
 // ---------------------------------------------------------------- 과목 홈
 
 export interface CourseStats {
+  introCount: number;
   recruitOpen: number;
   proposalCount: number;
   teamCount: number;
@@ -656,13 +686,14 @@ export async function getCourseStats(): Promise<CourseStats> {
     return total ?? 0;
   };
 
-  const [recruitOpen, proposalCount, teamCount, deliverableCount] = await Promise.all([
+  const [introCount, recruitOpen, proposalCount, teamCount, deliverableCount] = await Promise.all([
+    count("semester_profiles"),
     count("recruitment_posts", { status: "Recruiting" }),
     count("corporate_proposals"),
     count("team_registrations"),
     count("team_deliverables"),
   ]);
-  return { recruitOpen, proposalCount, teamCount, deliverableCount };
+  return { introCount, recruitOpen, proposalCount, teamCount, deliverableCount };
 }
 
 /** 현재 로그인한 사용자 id. 화면이 "내 글인가"를 판단해 수정·삭제를 보여 줍니다. */

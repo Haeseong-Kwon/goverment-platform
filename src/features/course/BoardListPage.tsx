@@ -8,6 +8,7 @@ import {
   getDeliverables,
   getProposals,
   getRecruitPosts,
+  getSemesterProfiles,
   getTeams,
 } from "@/lib/services/CourseService";
 import {
@@ -17,6 +18,8 @@ import {
   PROPOSAL_CATEGORIES,
   RECRUIT_STATUS_LABEL,
   ROLE_PRESETS,
+  STUDENT_STATUS_LABEL,
+  STUDENT_STATUS_TONE,
   TEAM_STATUS_LABEL,
   countOpenRoles,
   courseHref,
@@ -32,9 +35,11 @@ import {
   type DeliverablePhase,
   type Proposal,
   type RecruitPost,
+  type SemesterProfile,
+  type StudentStatus,
 } from "./course";
 import { CourseShell, WriteGate, useViewer } from "./CourseChrome";
-import { DeliverableForm, ProposalForm, RecruitForm, TeamForm } from "./forms";
+import { DeliverableForm, ProposalForm, RecruitForm, SemesterProfileForm, TeamForm } from "./forms";
 import {
   Button,
   ChoiceChip,
@@ -85,6 +90,34 @@ function TagRow({ items, tone = "slate" }: { items: string[]; tone?: "slate" | "
 }
 
 // ---------------------------------------------------------------- 카드
+
+/**
+ * 자기소개 카드.
+ *
+ * 이름보다 "지금 팀을 찾는가"와 "무엇을 할 수 있는가"를 먼저 보여 줍니다 —
+ * 이 게시판을 훑는 사람이 찾는 것이 그 둘이기 때문입니다.
+ */
+function IntroCard({ profile, isMine }: { profile: SemesterProfile; isMine: boolean }) {
+  return (
+    <Link
+      href={courseHref("intro", profile.id)}
+      className={cn(cardClass, isMine && "border-[#2563EB] ring-1 ring-[#BFDBFE]")}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge tone={STUDENT_STATUS_TONE[profile.status]} dot>{STUDENT_STATUS_LABEL[profile.status]}</StatusBadge>
+        {profile.role && profile.role !== "Student" && <StatusBadge tone="blue">{profile.role}</StatusBadge>}
+        {isMine && <StatusBadge tone="slate">내 자기소개</StatusBadge>}
+      </div>
+      <h3 className="mt-3 text-lg font-bold leading-6">
+        {profile.fullName}
+        {profile.major && <span className="ml-2 text-sm font-semibold text-[#94A3B8]">{profile.major}</span>}
+      </h3>
+      {profile.bio && <p className="mt-2 line-clamp-3 break-keep text-sm leading-6 text-[#475569]">{profile.bio}</p>}
+      <TagRow items={profile.techStack} tone="blue" />
+      <CardMeta createdAt={profile.createdAt} commentCount={profile.commentCount} />
+    </Link>
+  );
+}
 
 function RecruitCard({ post }: { post: RecruitPost }) {
   return (
@@ -177,12 +210,14 @@ function DeliverableCard({ deliverable }: { deliverable: Deliverable }) {
 // ---------------------------------------------------------------- 목록
 
 type BoardData =
+  | { board: "intro"; items: SemesterProfile[] }
   | { board: "recruit"; items: RecruitPost[] }
   | { board: "proposal"; items: Proposal[] }
   | { board: "team"; items: CourseTeam[] }
   | { board: "showcase"; items: Deliverable[] };
 
 const loaders: Record<BoardId, () => Promise<BoardData>> = {
+  intro: async () => ({ board: "intro", items: await getSemesterProfiles() }),
   recruit: async () => ({ board: "recruit", items: await getRecruitPosts() }),
   proposal: async () => ({ board: "proposal", items: await getProposals() }),
   team: async () => ({ board: "team", items: await getTeams() }),
@@ -191,6 +226,13 @@ const loaders: Record<BoardId, () => Promise<BoardData>> = {
 
 /** 게시판마다 다른 칩 한 줄. 전부 "전체 + 값들"이라 목록만 다르게 줍니다. */
 const filterOptions: Record<BoardId, Array<{ value: string; label: string }>> = {
+  intro: [
+    ...(Object.keys(STUDENT_STATUS_LABEL) as StudentStatus[]).map((status) => ({
+      value: status,
+      label: STUDENT_STATUS_LABEL[status],
+    })),
+    ...ROLE_PRESETS.map((role) => ({ value: `role:${role}`, label: role })),
+  ],
   recruit: [
     { value: "Recruiting", label: RECRUIT_STATUS_LABEL.Recruiting },
     { value: "Closed", label: RECRUIT_STATUS_LABEL.Closed },
@@ -235,6 +277,11 @@ export function BoardListPage({ board }: { board: BoardId }) {
   const visible = useMemo(() => filterBoard(data, query, filter), [data, query, filter]);
   const visibleCount = visible ? visible.items.length : 0;
 
+  // 자기소개는 학기당 한 장이라 "새 글"이 아닙니다. 이미 올렸다면 버튼도 그렇게 말해야 합니다.
+  const myIntro =
+    data?.board === "intro" ? data.items.find((item) => item.userId === viewer.id) ?? null : null;
+  const createLabel = board === "intro" && myIntro ? "내 자기소개 수정" : config.createLabel;
+
   const onCreated = (id: string) => {
     setWriting(false);
     router.push(courseHref(board, id));
@@ -248,8 +295,8 @@ export function BoardListPage({ board }: { board: BoardId }) {
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#475569]">{config.description}</p>
         </div>
         <div className="shrink-0 md:max-w-md">
-          <WriteGate viewer={viewer} action={config.createLabel}>
-            <Button size="lg" icon={<Plus size={16} />} onClick={() => setWriting(true)}>{config.createLabel}</Button>
+          <WriteGate viewer={viewer} action={createLabel}>
+            <Button size="lg" icon={<Plus size={16} />} onClick={() => setWriting(true)}>{createLabel}</Button>
           </WriteGate>
         </div>
       </header>
@@ -290,8 +337,8 @@ export function BoardListPage({ board }: { board: BoardId }) {
             query || filter !== "all" ? (
               <Button variant="secondary" onClick={() => { setQuery(""); setFilter("all"); }}>필터 초기화</Button>
             ) : (
-              <WriteGate viewer={viewer} action={config.createLabel}>
-                <Button onClick={() => setWriting(true)} icon={<Plus size={15} />}>{config.createLabel}</Button>
+              <WriteGate viewer={viewer} action={createLabel}>
+                <Button onClick={() => setWriting(true)} icon={<Plus size={15} />}>{createLabel}</Button>
               </WriteGate>
             )
           }
@@ -302,6 +349,9 @@ export function BoardListPage({ board }: { board: BoardId }) {
             <strong className="font-bold tabular-nums text-[#0F172A]">{visibleCount}</strong>건
           </p>
           <div className="animate-in-stagger grid gap-4 md:grid-cols-2">
+            {visible?.board === "intro" && visible.items.map((item) => (
+              <IntroCard key={item.id} profile={item} isMine={item.userId === viewer.id} />
+            ))}
             {visible?.board === "recruit" && visible.items.map((item) => <RecruitCard key={item.id} post={item} />)}
             {visible?.board === "proposal" && visible.items.map((item) => <ProposalCard key={item.id} proposal={item} />)}
             {visible?.board === "team" && visible.items.map((item) => <TeamCard key={item.id} team={item} />)}
@@ -310,6 +360,13 @@ export function BoardListPage({ board }: { board: BoardId }) {
         </>
       )}
 
+      {writing && board === "intro" && (
+        <SemesterProfileForm
+          current={myIntro}
+          onClose={() => setWriting(false)}
+          onSaved={(profile) => onCreated(profile.id)}
+        />
+      )}
       {writing && board === "recruit" && <RecruitForm onClose={() => setWriting(false)} onCreated={onCreated} />}
       {writing && board === "proposal" && <ProposalForm onClose={() => setWriting(false)} onCreated={onCreated} />}
       {writing && board === "team" && <TeamForm onClose={() => setWriting(false)} onCreated={onCreated} />}
@@ -326,6 +383,24 @@ export function BoardListPage({ board }: { board: BoardId }) {
  */
 function filterBoard(data: BoardData | null, query: string, filter: string): BoardData | null {
   if (!data) return null;
+
+  if (data.board === "intro") {
+    return {
+      board: "intro",
+      // 팀을 찾는 사람이 먼저 보여야 합니다. 이미 팀이 있는 사람은 아래로 내려갑니다.
+      items: [...data.items]
+        .sort((a, b) => {
+          const rank = (status: string) => (status === "LOOKING" ? 0 : status === "TEAMED" ? 1 : 2);
+          const gap = rank(a.status) - rank(b.status);
+          return gap !== 0 ? gap : b.createdAt.localeCompare(a.createdAt);
+        })
+        .filter((profile) => {
+          if (filter.startsWith("role:") && profile.role !== filter.slice(5)) return false;
+          if (["LOOKING", "TEAMED", "DONE"].includes(filter) && profile.status !== filter) return false;
+          return matchesQuery([profile.fullName, profile.major, profile.role, profile.bio, ...profile.techStack], query);
+        }),
+    };
+  }
 
   if (data.board === "recruit") {
     return {

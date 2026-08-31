@@ -81,7 +81,7 @@ schema.sql → 002-manager-review.sql → 003-profile-role-lock.sql → 004-seed
            → 010-kstartup-announcements.sql → 011-calendar-announcement-link.sql
            → 012-comment-attachments.sql → 013-real-announcement-deadlines.sql
            → 014-capstone-course.sql → 015-enable-legacy-rls.sql
-           → 016-course-membership.sql
+           → 016-course-membership.sql → 017-intro-board.sql
 ```
 
 `015`는 **반드시 적용해야 합니다.** `schema.sql`의 RLS 활성화 블록이 `ALTER TABLE IF EXISTS`
@@ -111,6 +111,10 @@ UUID를 넣어 다른 학생 이름으로 글을 올릴 수 있었습니다.
 도메인 규칙은 프런트엔드(`isCourseEmail`)와 DB(`is_course_member()`)가 같은 모양을 씁니다.
 `hanyang.ac.kr`로 **끝나는지**만 보면 `evil-hanyang.ac.kr`이 통과하므로 양쪽 다 앞뒤를 잠급니다.
 바꿀 때는 두 곳을 함께 고치고 `course.test.ts`의 위장 주소 케이스를 확인하세요.
+
+`017`은 자기소개 게시판을 엽니다. 새 테이블이 없습니다 — 자기소개는 `semester_profiles`
+그대로이며, 지금까지 본인 워크스페이스에서만 보이던 것을 게시판으로 여는 일입니다.
+이 파일은 댓글 대상(`course_comments.board`)에 `intro`를 더하고 삭제 연동 트리거만 붙입니다.
 
 학기는 코드 상수 하나(`src/features/course/course.ts`의 `COURSE`)가 정합니다.
 다음 학기를 열 때 이 값을 바꾸면 새 글은 새 `semester_key`로 쌓이고 지난 학기 글은 그대로 남습니다.

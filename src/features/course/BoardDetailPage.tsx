@@ -18,11 +18,13 @@ import {
   deleteDeliverable,
   deleteProposal,
   deleteRecruitPost,
+  deleteSemesterProfile,
   deleteTeam,
   getDeliverable,
   getDeliverables,
   getProposal,
   getRecruitPost,
+  getSemesterProfileById,
   getTeam,
   setRecruitStatus,
   setTeamStatus,
@@ -32,6 +34,8 @@ import {
   DELIVERABLE_PHASE_LABEL,
   PROJECT_PHASE_LABEL,
   RECRUIT_STATUS_LABEL,
+  STUDENT_STATUS_LABEL,
+  STUDENT_STATUS_TONE,
   TEAM_STATUS_LABEL,
   countOpenRoles,
   courseHref,
@@ -42,6 +46,7 @@ import {
   type Deliverable,
   type Proposal,
   type RecruitPost,
+  type SemesterProfile,
 } from "./course";
 import { CourseShell, useViewer } from "./CourseChrome";
 import { CommentThread } from "./CommentThread";
@@ -50,12 +55,17 @@ import { toMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
 type Entry =
+  | { board: "intro"; item: SemesterProfile }
   | { board: "recruit"; item: RecruitPost }
   | { board: "proposal"; item: Proposal }
   | { board: "team"; item: CourseTeam; deliverables: Deliverable[] }
   | { board: "showcase"; item: Deliverable };
 
 async function loadEntry(board: BoardId, id: string): Promise<Entry | null> {
+  if (board === "intro") {
+    const item = await getSemesterProfileById(id);
+    return item && { board, item };
+  }
   if (board === "recruit") {
     const item = await getRecruitPost(id);
     return item && { board, item };
@@ -193,7 +203,8 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
   const isOwner =
     viewer.id !== null &&
     viewer.id ===
-      (entry.board === "recruit" ? entry.item.authorId
+      (entry.board === "intro" ? entry.item.userId
+        : entry.board === "recruit" ? entry.item.authorId
         : entry.board === "proposal" ? entry.item.createdBy
         : entry.board === "team" ? entry.item.leaderId
         : entry.item.createdBy);
@@ -210,6 +221,7 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
       {error && <Notice tone="error" className="mb-4" onDismiss={() => setError(null)}>{error}</Notice>}
 
       <article className="animate-in rounded-2xl border border-[#E2E8F0] bg-white p-6 md:p-8">
+        {entry.board === "intro" && <IntroDetail profile={entry.item} />}
         {entry.board === "recruit" && <RecruitDetail post={entry.item} />}
         {entry.board === "proposal" && <ProposalDetail proposal={entry.item} />}
         {entry.board === "team" && <TeamDetail team={entry.item} deliverables={entry.deliverables} />}
@@ -251,7 +263,8 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
               disabled={busy}
               onClick={() =>
                 remove(() =>
-                  entry.board === "recruit" ? deleteRecruitPost(entry.item.id)
+                  entry.board === "intro" ? deleteSemesterProfile(entry.item.id)
+                  : entry.board === "recruit" ? deleteRecruitPost(entry.item.id)
                   : entry.board === "proposal" ? deleteProposal(entry.item.id)
                   : entry.board === "team" ? deleteTeam(entry.item.id)
                   : deleteDeliverable(entry.item.id),
@@ -272,6 +285,78 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
 }
 
 // ---------------------------------------------------------------- 게시판별 본문
+
+/**
+ * 자기소개 상세.
+ *
+ * 수정 버튼을 여기 두지 않습니다 — 자기소개는 학기당 한 장이라 목록의
+ * "내 자기소개" 버튼이 곧 수정 버튼이고, 같은 폼을 두 곳에서 열면 어느 쪽이
+ * 최신인지 헷갈립니다. 여기서는 삭제만 남깁니다(아래 소유자 영역).
+ */
+function IntroDetail({ profile }: { profile: SemesterProfile }) {
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge tone={STUDENT_STATUS_TONE[profile.status]} dot>{STUDENT_STATUS_LABEL[profile.status]}</StatusBadge>
+        {profile.role && profile.role !== "Student" && <StatusBadge tone="blue">{profile.role}</StatusBadge>}
+      </div>
+      <h1 className="mt-4 text-[26px] font-bold leading-tight tracking-tight md:text-[32px]">{profile.fullName}</h1>
+      <p className="mt-3 text-sm text-[#94A3B8]">
+        {profile.major && <span className="font-semibold text-[#475569]">{profile.major}</span>}
+        {profile.major && <span className="mx-2">·</span>}
+        <span className="tabular-nums">등록 {formatDateTime(profile.createdAt)}</span>
+      </p>
+
+      <div className="mt-8 space-y-8">
+        {profile.bio && <Section title="소개"><Body text={profile.bio} /></Section>}
+
+        {profile.techStack.length > 0 && (
+          <Section title="기술 스택">
+            <div className="flex flex-wrap gap-1.5">
+              {profile.techStack.map((item) => (
+                <span key={item} className="rounded-lg bg-[#EFF6FF] px-2.5 py-1 text-xs font-semibold text-[#2563EB]">{item}</span>
+              ))}
+            </div>
+          </Section>
+        )}
+
+        {(profile.githubUrl || profile.portfolioUrl) && (
+          <Section title="링크">
+            <div className="flex flex-wrap gap-2">
+              {profile.githubUrl && <ExternalLinkButton href={profile.githubUrl} icon={<Github size={15} />} label="GitHub" />}
+              {profile.portfolioUrl && <ExternalLinkButton href={profile.portfolioUrl} icon={<ExternalLink size={15} />} label="포트폴리오" />}
+            </div>
+          </Section>
+        )}
+      </div>
+
+      {profile.status === "LOOKING" && (
+        <p className="mt-8 rounded-xl bg-[#EFF6FF] px-4 py-3.5 text-sm leading-6 text-[#1D4ED8]">
+          아직 팀을 찾고 있습니다. 함께하고 싶다면 아래 댓글로 어떤 팀인지 알려 주세요.
+        </p>
+      )}
+    </>
+  );
+}
+
+/** 새 탭으로 여는 외부 링크. 결과물 링크와 같은 모양을 씁니다. */
+function ExternalLinkButton({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cn(
+        "inline-flex items-center gap-2 rounded-xl border border-[#CBD5E1] bg-white px-4 py-2.5 text-sm font-bold text-[#475569]",
+        focusRing,
+        "transition-colors hover:border-[#2563EB] hover:text-[#2563EB]",
+      )}
+    >
+      {icon}
+      {label}
+    </a>
+  );
+}
 
 function RecruitDetail({ post }: { post: RecruitPost }) {
   return (
