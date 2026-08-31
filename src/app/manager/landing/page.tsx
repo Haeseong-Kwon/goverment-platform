@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ManagerLanding } from "@/features/startup-workspace/Landing";
+import { SiteStructuredData } from "@/components/seo/StructuredData";
 
 const title = "주관기관 정산 검토 대시보드";
 const description =
@@ -13,4 +14,11 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", title, description },
 };
 
-export default ManagerLanding;
+export default function ManagerLandingPage() {
+  return (
+    <>
+      <SiteStructuredData />
+      <ManagerLanding />
+    </>
+  );
+}

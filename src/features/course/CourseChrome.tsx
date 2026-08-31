@@ -3,31 +3,57 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { GraduationCap, LogIn } from "lucide-react";
-import { getViewerId } from "@/lib/services/CourseService";
+import { GraduationCap, LogIn, ShieldAlert } from "lucide-react";
+import { getViewerId, isCourseMember } from "@/lib/services/CourseService";
 import { onAuthStateChange } from "@/lib/services/AuthService";
-import { BOARDS, BOARD_ORDER, COURSE, COURSE_WORKSPACE_HREF, courseHref, type CourseTab } from "./course";
+import {
+  BOARDS,
+  BOARD_ORDER,
+  COURSE,
+  COURSE_EMAIL_DOMAIN,
+  COURSE_LOGIN_HREF,
+  COURSE_SIGNUP_HREF,
+  COURSE_WORKSPACE_HREF,
+  courseHref,
+  type CourseTab,
+} from "./course";
 import { focusRing } from "@/features/startup-workspace/ui";
 import { cn } from "@/lib/utils";
 
 /**
  * 지금 보고 있는 사람.
  *
- * 과목 게시판은 로그인 없이 읽히고, 쓰기와 "내 글 수정·삭제"에만 로그인이 필요합니다.
- * 그래서 화면이 물어보는 것은 프로필 전체가 아니라 "누구인가" 하나뿐입니다.
- * (권한의 실제 경계는 RLS입니다. 이 값은 버튼을 보여줄지 정하는 용도입니다.)
+ * 과목 게시판은 로그인 없이 읽히고, 쓰기에는 두 가지가 필요합니다 —
+ * 로그인(`id`)과 과목 자격(`member`: 한양대 메일 인증 완료). 둘을 따로 두는 이유는
+ * 화면이 "로그인하세요"와 "학교 메일로 인증해 주세요"를 구분해 말해야 하기 때문입니다.
+ *
+ * 권한의 실제 경계는 RLS입니다(016). 이 값은 버튼과 안내 문구를 고르는 용도입니다.
  */
-export function useViewer() {
-  const [state, setState] = useState<{ id: string | null; loading: boolean }>({ id: null, loading: true });
+export interface Viewer {
+  id: string | null;
+  member: boolean;
+  loading: boolean;
+}
+
+export function useViewer(): Viewer {
+  const [state, setState] = useState<Viewer>({ id: null, member: false, loading: true });
 
   useEffect(() => {
     let mounted = true;
-    getViewerId()
-      .then((id) => { if (mounted) setState({ id, loading: false }); })
-      .catch(() => { if (mounted) setState({ id: null, loading: false }); });
-    const unsubscribe = onAuthStateChange((user) => {
-      if (mounted) setState({ id: user?.id ?? null, loading: false });
-    });
+
+    const resolve = async () => {
+      const id = await getViewerId().catch(() => null);
+      if (!mounted) return;
+      if (!id) {
+        setState({ id: null, member: false, loading: false });
+        return;
+      }
+      const member = await isCourseMember().catch(() => false);
+      if (mounted) setState({ id, member, loading: false });
+    };
+
+    void resolve();
+    const unsubscribe = onAuthStateChange(() => { void resolve(); });
     return () => { mounted = false; unsubscribe(); };
   }, []);
 
@@ -35,7 +61,7 @@ export function useViewer() {
 }
 
 /** 로그인 후 보던 화면으로 되돌아오게 합니다. 게시판에서 로그인했는데 워크스페이스로 떨어지면 길을 잃습니다. */
-export const loginHref = (returnTo: string) => `/login?next=${encodeURIComponent(returnTo)}`;
+export const loginHref = (returnTo: string) => `${COURSE_LOGIN_HREF}?next=${encodeURIComponent(returnTo)}`;
 
 function BoardTabs({ active, signedIn }: { active: CourseTab; signedIn: boolean }) {
   const tabs: Array<{ key: CourseTab; label: string; href: string }> = [
@@ -126,11 +152,10 @@ export function CourseShell({ active, children }: { active: CourseTab; children:
       <footer className="border-t border-[#E2E8F0] bg-white">
         <div className="mx-auto max-w-6xl px-4 py-8 text-xs leading-6 text-[#94A3B8] md:px-6">
           <p>
-            {COURSE.label} 수업 운영 게시판입니다. 게시글과 댓글은 과목 수강생에게 공개되며, 작성자 본인만 수정·삭제할 수 있습니다.
+            {COURSE.school} {COURSE.label} 수업 운영 게시판입니다. 게시글과 댓글은 작성자 본인만 수정·삭제할 수 있습니다.
           </p>
           <p className="mt-1">
-            <Link href="/" className={cn("font-semibold text-[#2563EB] hover:underline", focusRing)}>StartUp Pilot</Link>
-            에서 운영합니다.
+            글쓰기와 댓글은 @{COURSE_EMAIL_DOMAIN} 메일로 인증한 수강생만 가능합니다.
           </p>
         </div>
       </footer>
@@ -153,4 +178,50 @@ export function SignInPrompt({ action }: { action: string }) {
       <LogIn size={15} />로그인하고 {action}
     </Link>
   );
+}
+
+/**
+ * 로그인은 했지만 과목 자격이 없을 때.
+ *
+ * 저장 단계에서 RLS가 거절하면 사용자는 "권한이 없습니다"만 보고 이유를 모릅니다.
+ * 다른 메일로 가입한 것인지, 인증 링크를 아직 안 누른 것인지 두 경우를 함께 짚어
+ * 다음 행동을 정할 수 있게 합니다.
+ */
+export function MembershipNotice({ action }: { action: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-[#FDE68A] bg-[#FFFBEB] p-4">
+      <ShieldAlert size={17} className="mt-0.5 shrink-0 text-[#B45309]" />
+      <div className="min-w-0 text-sm leading-6 text-[#B45309]">
+        <p className="font-bold">학교 메일 인증이 끝나야 {action} 수 있습니다</p>
+        <p className="mt-1 font-medium">
+          @{COURSE_EMAIL_DOMAIN} 주소로 가입한 뒤 받은 인증 메일의 링크를 눌러 주세요.
+          다른 메일로 가입하셨다면 학교 메일로 새로 가입해야 합니다.
+        </p>
+        <Link href={COURSE_SIGNUP_HREF} className={cn("mt-2 inline-block font-bold underline", focusRing)}>
+          학교 메일로 가입하기
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 글쓰기 자리 하나를 통째로 맡습니다.
+ *
+ * 비로그인 → 로그인 안내, 로그인했지만 자격 없음 → 인증 안내, 자격 있음 → 실제 버튼.
+ * 게시판 넷과 워크스페이스가 각자 이 분기를 쓰면 문구가 제각각이 됩니다.
+ */
+export function WriteGate({
+  viewer,
+  action,
+  children,
+}: {
+  viewer: Viewer;
+  action: string;
+  children: React.ReactNode;
+}) {
+  if (viewer.loading) return <div className="h-11 w-40 animate-pulse rounded-xl bg-[#E2E8F0]" />;
+  if (!viewer.id) return <SignInPrompt action={action} />;
+  if (!viewer.member) return <MembershipNotice action={`${action}할`} />;
+  return <>{children}</>;
 }

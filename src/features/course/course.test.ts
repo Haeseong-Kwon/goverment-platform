@@ -8,6 +8,7 @@ import {
   getStudentSteps,
   groupDeliverables,
   isBoardId,
+  isCourseEmail,
   matchesQuery,
   parseRecruitRoles,
   parseTeamMembers,
@@ -86,6 +87,39 @@ describe("학기", () => {
     expect(isBoardId("showcase")).toBe(true);
     expect(isBoardId("recruits")).toBe(false);
     expect(isBoardId("__proto__")).toBe(false);
+  });
+});
+
+describe("가입 가능 메일 도메인", () => {
+  it("한양대 메일과 하위 도메인을 받는다", () => {
+    expect(isCourseEmail("hana@hanyang.ac.kr")).toBe(true);
+    expect(isCourseEmail("hana@office.hanyang.ac.kr")).toBe(true);
+    expect(isCourseEmail("hana.kim+capstone@hanyang.ac.kr")).toBe(true);
+  });
+
+  it("대소문자와 앞뒤 공백을 가리지 않는다", () => {
+    expect(isCourseEmail("HANA@HANYANG.AC.KR")).toBe(true);
+    expect(isCourseEmail("  hana@hanyang.ac.kr  ")).toBe(true);
+  });
+
+  it("다른 학교·일반 메일은 막는다", () => {
+    expect(isCourseEmail("hana@gmail.com")).toBe(false);
+    expect(isCourseEmail("hana@snu.ac.kr")).toBe(false);
+    expect(isCourseEmail("")).toBe(false);
+  });
+
+  it("도메인을 흉내 낸 주소를 막는다", () => {
+    // 여기가 이 함수의 존재 이유입니다. "hanyang.ac.kr로 끝나는가"로만 보면 전부 통과합니다.
+    expect(isCourseEmail("hana@evil-hanyang.ac.kr")).toBe(false);
+    expect(isCourseEmail("hana@myhanyang.ac.kr")).toBe(false);
+    expect(isCourseEmail("hana@hanyang.ac.kr.evil.com")).toBe(false);
+    expect(isCourseEmail("hana@hanyang-ac.kr")).toBe(false);
+  });
+
+  it("@가 여러 개거나 공백이 섞인 값을 막는다", () => {
+    expect(isCourseEmail("hana@evil.com@hanyang.ac.kr")).toBe(false);
+    expect(isCourseEmail("hana @hanyang.ac.kr")).toBe(false);
+    expect(isCourseEmail("hanyang.ac.kr")).toBe(false);
   });
 });
 

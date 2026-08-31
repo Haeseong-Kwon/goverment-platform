@@ -667,3 +667,22 @@ export async function getCourseStats(): Promise<CourseStats> {
 
 /** 현재 로그인한 사용자 id. 화면이 "내 글인가"를 판단해 수정·삭제를 보여 줍니다. */
 export const getViewerId = getAuthUserId;
+
+/**
+ * 이 계정이 과목 구성원인가 — 한양대 메일로 인증까지 마쳤는가.
+ *
+ * 판정은 DB 함수 하나(`is_course_member()`, 016)가 합니다. 화면에서 이메일을 다시
+ * 뜯어보지 않는 이유는, 두 곳이 각자 판단하면 언젠가 어긋나고 그때 화면은 "쓸 수
+ * 있다"고 하는데 저장은 거부되는 상태가 되기 때문입니다. 정책이 보는 그 함수에게
+ * 그대로 물어봅니다.
+ *
+ * 실패하면 false입니다. 못 물어봤을 때 열어 주는 쪽으로 기울면, 016을 적용하지 않은
+ * 환경에서 글쓰기 버튼이 열렸다가 저장에서 떨어집니다.
+ */
+export async function isCourseMember(): Promise<boolean> {
+  const userId = await getAuthUserId();
+  if (!userId) return false;
+  const { data, error } = await requireClient().rpc("is_course_member");
+  if (error) return false;
+  return data === true;
+}

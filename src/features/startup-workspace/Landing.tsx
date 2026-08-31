@@ -6,13 +6,11 @@ import {
   CalendarDays,
   ChevronRight,
   ClipboardCheck,
-  GraduationCap,
   Lock,
   MessageCircle,
   ShieldCheck,
   Users,
 } from "lucide-react";
-import { COURSE } from "@/features/course/course";
 import { FAQ_ITEMS } from "@/lib/seo";
 import { getLandingNavigation, getStartupMilestones } from "./logic";
 import type { StartupMilestone } from "./types";
@@ -28,7 +26,6 @@ function LandingNav({ role }: { role: "founder" | "manager" }) {
         <nav className="hidden gap-6 text-sm font-semibold text-[#475569] md:flex">
           <Link href="/" className={cn("hover:text-[#0F172A]", role === "founder" && "text-[#2563EB]")}>창업자</Link>
           <Link href="/manager/landing" className={cn("hover:text-[#0F172A]", role === "manager" && "text-[#2563EB]")}>주관기관</Link>
-          <Link href="/course" className="hover:text-[#0F172A]">캡스톤디자인</Link>
           <a href="#features" className="hover:text-[#0F172A]">기능</a>
         </nav>
         <div className="flex items-center gap-2">
@@ -142,37 +139,8 @@ export function FounderLanding() {
         </div>
       </section>
 
-      <CourseBand />
       <FaqSection />
     </main>
-  );
-}
-
-/**
- * 대학 과목 게시판으로 가는 길.
- *
- * 수업 첫 주에 학생들이 찾는 곳은 워크스페이스가 아니라 팀빌딩 게시판입니다.
- * 랜딩에서 한 번에 건너뛰지 못하면 로그인 화면부터 헤매게 됩니다.
- */
-function CourseBand() {
-  return (
-    <section className="border-t border-[#E2E8F0] bg-white">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-14 md:flex-row md:items-center md:justify-between md:py-16">
-        <div className="max-w-2xl">
-          <StatusBadge tone="blue">대학 과목</StatusBadge>
-          <h2 className="mt-4 text-[26px] font-bold leading-tight md:text-[32px]">
-            {COURSE.school} {COURSE.label}
-          </h2>
-          <p className="mt-3 text-sm leading-7 text-[#475569] md:text-base">
-            수강생을 위한 팀빌딩 모집, 기업 제안 프로젝트, 확정 팀 등록, 중간·기말 결과물 게시판이 열려 있습니다.
-            로그인 없이 둘러보고, 글과 댓글은 로그인 후 남깁니다.
-          </p>
-        </div>
-        <div className="shrink-0">
-          <LinkButton href="/course" size="lg" icon={<GraduationCap size={17} />}>과목 게시판 열기</LinkButton>
-        </div>
-      </div>
-    </section>
   );
 }
 
@@ -327,32 +295,6 @@ export function WorkspaceEntry() {
             <span className="mt-6 inline-flex items-center gap-2 font-bold text-[#2563EB]">기관 화면 열기 <ChevronRight size={18} className="transition-transform group-hover:translate-x-1" /></span>
           </Link>
 
-          {/*
-            수강생은 위 두 역할 어느 쪽도 아닙니다. 지원사업이 아니라 한 학기 수업을 하고,
-            보는 데이터도 게시판과 팀뿐입니다. 같은 줄에 세 칸으로 욱여넣는 대신 아래에
-            가로로 놓아 "역할 둘 + 과목 하나"라는 구조가 그대로 보이게 합니다.
-          */}
-          <Link
-            href="/course"
-            className={cn(
-              "group rounded-2xl border border-[#E2E8F0] bg-white p-7 md:col-span-2 md:p-8",
-              focusRing,
-              "transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-1 hover:border-[#CBD5E1] hover:shadow-[0_16px_40px_rgba(15,23,42,0.1)]",
-            )}
-          >
-            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-              <div className="min-w-0">
-                <GraduationCap className="text-[#2563EB]" />
-                <h2 className="mt-5 text-[26px] font-bold leading-tight md:text-[32px]">과목 수강생</h2>
-                <p className="mt-3 text-base leading-8 text-[#475569]">
-                  {COURSE.school} {COURSE.label}. 팀빌딩 모집, 기업 제안 프로젝트, 확정 팀, 중간·기말 결과물 게시판과 내 워크스페이스.
-                </p>
-              </div>
-              <span className="inline-flex shrink-0 items-center gap-2 font-bold text-[#2563EB]">
-                과목 게시판 열기 <ChevronRight size={18} className="transition-transform group-hover:translate-x-1" />
-              </span>
-            </div>
-          </Link>
         </div>
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2 md:grid-cols-4">

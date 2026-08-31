@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AppChrome } from "@/components/layout/AppChrome";
 import { Analytics } from "@/components/analytics/Analytics";
-import { SiteStructuredData } from "@/components/seo/StructuredData";
 import {
   IS_INDEXABLE_DEPLOYMENT,
   SITE_DESCRIPTION,
@@ -96,7 +95,6 @@ export default function RootLayout({
           rel="stylesheet"
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css"
         />
-        <SiteStructuredData />
       </head>
       <body className="bg-background text-foreground antialiased">
         <AppChrome>{children}</AppChrome>

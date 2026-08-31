@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { MessageSquare, Trash2 } from "lucide-react";
 import { addComment, deleteComment, getComments } from "@/lib/services/CourseService";
 import { formatDateTime, type BoardId, type CourseComment } from "./course";
-import { SignInPrompt, useViewer } from "./CourseChrome";
+import { MembershipNotice, SignInPrompt, useViewer } from "./CourseChrome";
 import { Button, IconButton, Skeleton, textareaClass } from "@/features/startup-workspace/ui";
 import { toMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
@@ -116,7 +116,11 @@ export function CommentThread({ board, targetId }: { board: BoardId; targetId: s
       <div className="mt-5 border-t border-[#F1F5F9] pt-5">
         {viewer.loading ? (
           <Skeleton className="h-24 w-full" />
-        ) : viewer.id ? (
+        ) : !viewer.id ? (
+          <SignInPrompt action="댓글 남기기" />
+        ) : !viewer.member ? (
+          <MembershipNotice action="댓글을 남길" />
+        ) : (
           <>
             <textarea
               value={draft}
@@ -129,8 +133,6 @@ export function CommentThread({ board, targetId }: { board: BoardId; targetId: s
               <Button loading={saving} disabled={!draft.trim()} onClick={() => void submit()}>댓글 등록</Button>
             </div>
           </>
-        ) : (
-          <SignInPrompt action="댓글 남기기" />
         )}
       </div>
     </section>

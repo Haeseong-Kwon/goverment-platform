@@ -17,22 +17,13 @@ const SECTIONS = [
       { href: "/manager/plan-review", label: "사업비 계획 검토" },
     ],
   },
-  {
-    title: "대학 과목",
-    links: [
-      { href: "/course", label: "SW창업캡스톤디자인" },
-      { href: "/course/recruit", label: "팀빌딩 모집" },
-      { href: "/course/showcase", label: "중간·기말 결과물" },
-    ],
-  },
 ];
 
 export function Footer() {
   return (
     <footer className="bg-[#0F172A] pt-16 pb-10 text-white">
       <div className="mx-auto max-w-7xl px-5">
-        {/* 브랜드가 두 칸을 쓰고 링크 묶음이 셋이라 다섯 칸입니다. 넷으로 두면 마지막 묶음이 아래로 접힙니다. */}
-        <div className="mb-12 grid grid-cols-1 gap-10 sm:grid-cols-2 md:grid-cols-5">
+        <div className="mb-12 grid grid-cols-1 gap-10 md:grid-cols-4">
           <div className="space-y-4 md:col-span-2">
             <span className="text-2xl font-bold tracking-tight">StartUp Pilot</span>
             <p className="max-w-md text-sm leading-relaxed text-slate-400">

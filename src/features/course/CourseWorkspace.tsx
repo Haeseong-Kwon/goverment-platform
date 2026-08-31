@@ -27,7 +27,7 @@ import {
   type DeliverablePhase,
   type SemesterProfile,
 } from "./course";
-import { CourseShell, SignInPrompt, useViewer } from "./CourseChrome";
+import { CourseShell, MembershipNotice, SignInPrompt, useViewer } from "./CourseChrome";
 import { DeliverableForm, RecruitForm, SemesterProfileForm, TeamForm } from "./forms";
 import {
   Button,
@@ -104,6 +104,10 @@ export function CourseWorkspace() {
   });
   const progress = getStudentProgress(steps);
 
+  // 로그인은 했지만 학교 메일 인증이 안 끝난 상태. 버튼을 눌러도 RLS가 거절하므로
+  // 아예 띄우지 않고 이유를 먼저 말합니다.
+  const canWrite = viewer.member;
+
   const openFor = (stepId: string) =>
     stepId === "profile" ? "profile"
     : stepId === "recruit" ? "recruit"
@@ -120,6 +124,12 @@ export function CourseWorkspace() {
       </header>
 
       {error && <Notice tone="error" className="mb-4" onDismiss={() => setError(null)}>{error}</Notice>}
+
+      {!canWrite && (
+        <div className="mb-6">
+          <MembershipNotice action="글을 남길" />
+        </div>
+      )}
 
       {activity === null ? (
         <div className="space-y-4">
@@ -140,7 +150,9 @@ export function CourseWorkspace() {
             {progress.next && (
               <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#EFF6FF] px-4 py-3.5">
                 <p className="text-sm font-bold text-[#1D4ED8]">다음 할 일 — {progress.next.title}</p>
-                <Button size="sm" onClick={() => setOpenForm(openFor(progress.next!.id))}>{progress.next.cta}</Button>
+                {canWrite && (
+                  <Button size="sm" onClick={() => setOpenForm(openFor(progress.next!.id))}>{progress.next.cta}</Button>
+                )}
               </div>
             )}
 
@@ -179,14 +191,16 @@ export function CourseWorkspace() {
             </ol>
           </Panel>
 
-          <ProfileCard profile={activity.profile} onEdit={() => setOpenForm("profile")} />
+          <ProfileCard profile={activity.profile} onEdit={canWrite ? () => setOpenForm("profile") : null} />
 
           <Panel
             title="내가 올린 모집글"
             action={
-              <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => setOpenForm("recruit")}>
-                모집글 쓰기
-              </Button>
+              canWrite ? (
+                <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => setOpenForm("recruit")}>
+                  모집글 쓰기
+                </Button>
+              ) : null
             }
           >
             {activity.posts.length === 0 ? (
@@ -219,9 +233,11 @@ export function CourseWorkspace() {
           <Panel
             title="내 팀"
             action={
-              <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => setOpenForm("team")}>
-                팀 등록
-              </Button>
+              canWrite ? (
+                <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => setOpenForm("team")}>
+                  팀 등록
+                </Button>
+              ) : null
             }
           >
             {activity.teams.length === 0 ? (
@@ -271,7 +287,7 @@ export function CourseWorkspace() {
                               <Link href={courseHref("showcase", submitted.id)} className={cn("shrink-0 font-bold text-[#2563EB] hover:underline", focusRing)}>
                                 보기
                               </Link>
-                            ) : team.leaderId === viewer.id ? (
+                            ) : team.leaderId === viewer.id && canWrite ? (
                               <button
                                 type="button"
                                 onClick={() => setOpenForm("deliverable")}
@@ -307,14 +323,14 @@ export function CourseWorkspace() {
 }
 
 /** 팀빌딩 게시판에서 남들이 보게 될 모습 그대로 보여 줍니다. 미리보기와 편집을 겸합니다. */
-function ProfileCard({ profile, onEdit }: { profile: SemesterProfile | null; onEdit: () => void }) {
+function ProfileCard({ profile, onEdit }: { profile: SemesterProfile | null; onEdit: (() => void) | null }) {
   if (!profile) {
     return (
       <Panel title="수강생 프로필">
         <EmptyState
           title="이번 학기 프로필이 아직 없습니다"
           description="전공과 희망 역할, 기술 스택을 적어 두면 팀을 찾는 쪽에서 먼저 연락이 옵니다. 학기마다 따로 저장됩니다."
-          action={<Button onClick={onEdit} icon={<Plus size={15} />}>프로필 작성</Button>}
+          action={onEdit ? <Button onClick={onEdit} icon={<Plus size={15} />}>프로필 작성</Button> : undefined}
         />
       </Panel>
     );
@@ -324,7 +340,7 @@ function ProfileCard({ profile, onEdit }: { profile: SemesterProfile | null; onE
     <Panel
       title="수강생 프로필"
       action={
-        <Button variant="secondary" size="sm" icon={<Pencil size={13} />} onClick={onEdit}>수정</Button>
+        onEdit ? <Button variant="secondary" size="sm" icon={<Pencil size={13} />} onClick={onEdit}>수정</Button> : null
       }
     >
       <div className="flex flex-wrap items-center gap-2">

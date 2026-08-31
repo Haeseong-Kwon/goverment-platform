@@ -33,7 +33,7 @@ import {
   type Proposal,
   type RecruitPost,
 } from "./course";
-import { CourseShell, SignInPrompt, useViewer } from "./CourseChrome";
+import { CourseShell, WriteGate, useViewer } from "./CourseChrome";
 import { DeliverableForm, ProposalForm, RecruitForm, TeamForm } from "./forms";
 import {
   Button,
@@ -247,14 +247,10 @@ export function BoardListPage({ board }: { board: BoardId }) {
           <h1 className="text-[26px] font-bold leading-tight tracking-tight md:text-[32px]">{config.label}</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#475569]">{config.description}</p>
         </div>
-        <div className="shrink-0">
-          {viewer.loading ? (
-            <Skeleton className="h-11 w-40" />
-          ) : viewer.id ? (
+        <div className="shrink-0 md:max-w-md">
+          <WriteGate viewer={viewer} action={config.createLabel}>
             <Button size="lg" icon={<Plus size={16} />} onClick={() => setWriting(true)}>{config.createLabel}</Button>
-          ) : (
-            <SignInPrompt action={config.createLabel} />
-          )}
+          </WriteGate>
         </div>
       </header>
 
@@ -293,10 +289,10 @@ export function BoardListPage({ board }: { board: BoardId }) {
           action={
             query || filter !== "all" ? (
               <Button variant="secondary" onClick={() => { setQuery(""); setFilter("all"); }}>필터 초기화</Button>
-            ) : viewer.id ? (
-              <Button onClick={() => setWriting(true)} icon={<Plus size={15} />}>{config.createLabel}</Button>
             ) : (
-              <SignInPrompt action={config.createLabel} />
+              <WriteGate viewer={viewer} action={config.createLabel}>
+                <Button onClick={() => setWriting(true)} icon={<Plus size={15} />}>{config.createLabel}</Button>
+              </WriteGate>
             )
           }
         />

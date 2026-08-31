@@ -7,7 +7,7 @@
 | 영역 | 경로 | 역할 |
 |------|------|------|
 | 공개 소개 | `/`, `/manager/landing`, `/workspace-entry` | 창업자·주관기관 랜딩과 역할 선택 |
-| 대학 과목 | `/course`, `/course/{recruit\|proposal\|team\|showcase}` | 한양대 ERICA SW창업캡스톤디자인 게시판(팀빌딩·기업제안·확정 팀·중간/기말 결과물) |
+| 대학 과목 | `/course/*` | 한양대 ERICA SW창업캡스톤디자인. StartUp Pilot과 분리된 영역이며 자체 인증(`/course/login`, `/course/signup`)과 수강생 워크스페이스(`/course/me`)를 가집니다 |
 | 인증 | `/login`, `/signup`, `/auth/callback`, `/auth/reset` | 이메일 로그인, 인증 메일 콜백, 비밀번호 재설정 |
 | 창업자 준비 (`pre_founder`) | `/onboarding`, `/founder/*` | 팀 TODO, 마감 캘린더, AI 진단, 계산기, 법인 설립, 보관함 |
 | 협약 수행 (`founder`) | `/workspace/*` | 정산 사전검증, 사전심의 합본, 상태 트래커, 보관함 |
@@ -81,6 +81,7 @@ schema.sql → 002-manager-review.sql → 003-profile-role-lock.sql → 004-seed
            → 010-kstartup-announcements.sql → 011-calendar-announcement-link.sql
            → 012-comment-attachments.sql → 013-real-announcement-deadlines.sql
            → 014-capstone-course.sql → 015-enable-legacy-rls.sql
+           → 016-course-membership.sql
 ```
 
 `015`는 **반드시 적용해야 합니다.** `schema.sql`의 RLS 활성화 블록이 `ALTER TABLE IF EXISTS`
@@ -102,8 +103,25 @@ RLS를 켜면 가입 직후(이메일 인증 전, 세션 없음) 브라우저의
 같은 파일에서 기존 INSERT 정책도 고칩니다 — 이전에는 로그인만 하면 `author_id`에 남의
 UUID를 넣어 다른 학생 이름으로 글을 올릴 수 있었습니다.
 
+`016`은 과목 데이터 **쓰기**를 한양대 메일 인증 계정으로 제한합니다(`is_course_member()`).
+경계를 "가입"이 아니라 "쓰기"에 두는 이유: `supabase.auth.signUp`은 브라우저가 anon 키로
+직접 부르는 호출이라 회원가입 화면의 도메인 검사는 우회할 수 있고, StartUp Pilot 쪽
+`/signup`으로 아무 메일이나 가입해 그 계정을 쓸 수도 있기 때문입니다. 읽기는 계속 공개입니다.
+
+도메인 규칙은 프런트엔드(`isCourseEmail`)와 DB(`is_course_member()`)가 같은 모양을 씁니다.
+`hanyang.ac.kr`로 **끝나는지**만 보면 `evil-hanyang.ac.kr`이 통과하므로 양쪽 다 앞뒤를 잠급니다.
+바꿀 때는 두 곳을 함께 고치고 `course.test.ts`의 위장 주소 케이스를 확인하세요.
+
 학기는 코드 상수 하나(`src/features/course/course.ts`의 `COURSE`)가 정합니다.
 다음 학기를 열 때 이 값을 바꾸면 새 글은 새 `semester_key`로 쌓이고 지난 학기 글은 그대로 남습니다.
+
+### 과목 영역 분리
+
+과목 페이지는 StartUp Pilot과 섞이지 않습니다. 랜딩·푸터·역할 선택 화면에 과목 링크를 두지
+않고, 인증도 `/course/login`·`/course/signup`을 따로 씁니다. `app/course/layout.tsx`가 제목
+템플릿과 발행자를 과목 것으로 덮어쓰며, StartUp Pilot의 JSON-LD(`SiteStructuredData`)는 루트
+레이아웃이 아니라 해당 제품의 공개 화면 다섯 곳에서만 선언합니다 — 루트에 두면 과목 페이지까지
+"이 페이지는 StartUp Pilot"이라고 검색엔진에 말하게 됩니다.
 
 `007`은 반드시 적용해야 합니다. 없으면 가입 후 온보딩 마지막 단계가 항상 실패합니다.
 

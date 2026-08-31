@@ -34,6 +34,36 @@ export const COURSE: CourseSemester = {
   school: "한양대학교 ERICA",
 };
 
+/**
+ * 가입 가능한 메일 도메인. 이 과목은 한양대 ERICA 수강생만 쓰는 곳입니다.
+ *
+ * 여기서 막는 것은 **안내**입니다. 실제 경계는 DB에 있습니다(016의 `is_course_member()`) —
+ * `supabase.auth.signUp`은 브라우저가 anon 키로 직접 부르는 호출이라, 폼 검사만으로는
+ * 개발자 도구를 연 사람에게 아무 의미가 없습니다. 두 곳의 규칙이 어긋나면 안 되므로
+ * 아래 정규식과 016의 정규식은 같은 모양이어야 합니다.
+ */
+export const COURSE_EMAIL_DOMAIN = "hanyang.ac.kr";
+
+/**
+ * `@hanyang.ac.kr`과 그 하위 도메인(`@office.hanyang.ac.kr` 등)만 통과시킵니다.
+ *
+ * 단순히 "hanyang.ac.kr로 끝나는가"로 보면 안 됩니다.
+ *   - `evil-hanyang.ac.kr` → 끝나기는 하지만 남의 도메인입니다. 앞이 점으로 끊겨야 합니다.
+ *   - `hanyang.ac.kr.evil.com` → 끝이 아닙니다. 그래서 `$`로 닫습니다.
+ */
+const COURSE_EMAIL_PATTERN = /@(?:[a-z0-9-]+\.)*hanyang\.ac\.kr$/i;
+
+export function isCourseEmail(email: string): boolean {
+  const trimmed = email.trim();
+  // 이메일 한 개인지부터 봅니다. `a@b@hanyang.ac.kr` 같은 값이 뒤 패턴만으로는 통과합니다.
+  if (!/^[^\s@]+@[^\s@]+$/.test(trimmed)) return false;
+  return COURSE_EMAIL_PATTERN.test(trimmed);
+}
+
+/** 과목 전용 인증 경로. StartUp Pilot의 `/login`·`/signup`과 섞지 않습니다. */
+export const COURSE_LOGIN_HREF = "/course/login";
+export const COURSE_SIGNUP_HREF = "/course/signup";
+
 /** 행에 함께 저장하는 학기 컬럼 묶음. 등록 경로가 넷이라 한곳에서 만듭니다. */
 export const semesterColumns = (semester: CourseSemester = COURSE) => ({
   semester_key: semester.key,

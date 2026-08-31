@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { LibraryPanel } from "@/features/startup-workspace/LibraryPanel";
 import { PublicToolPage } from "@/features/startup-workspace/PublicToolPage";
 import { IS_INDEXABLE_DEPLOYMENT, absoluteUrl } from "@/lib/seo";
+import { SiteStructuredData } from "@/components/seo/StructuredData";
 
 const TITLE = "창업 무료 자료실 — 동업계약서·NDA·KVCA 표준투자계약서·IR 템플릿";
 const DESCRIPTION =
@@ -21,6 +22,7 @@ export default function LibraryPage() {
       title="무료 자료실"
       description="감수·출처가 표기된 표준 양식만 모았습니다. 로그인 없이 받을 수 있습니다."
     >
+      <SiteStructuredData />
       <LibraryPanel />
     </PublicToolPage>
   );
