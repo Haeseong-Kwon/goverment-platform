@@ -5,17 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light only" />
     <meta name="supported-color-schemes" content="light only" />
-    <title>StartUp Pilot 이메일 인증</title>
+    <title>이메일 인증</title>
   </head>
   <!--
     Supabase Dashboard > Authentication > Emails > Confirm signup 에 붙입니다.
-    제목: [StartUp Pilot] 이메일 인증을 완료해 주세요
+
+    한 프로젝트에 템플릿은 종류당 하나뿐인데 이 프로젝트는 두 제품을 담습니다.
+    그래서 가입 경로 표식(`.Data.course`)으로 본문을 가릅니다 — 과목(/course/signup)으로
+    가입하면 그 키가 채워지고, StartUp Pilot 가입에는 없습니다.
+    (제목은 템플릿이 아니라 별도 설정값이라 분기되지 않습니다. README 참조.)
+
     이메일 클라이언트는 스타일 블록과 외부 CSS를 자주 지우므로 모든 스타일을 인라인으로 둡니다.
     이미지도 쓰지 않습니다. 이미지 차단이 기본인 환경에서 빈 칸만 남습니다.
   -->
   <body style="margin:0;padding:0;background-color:#F8FAFC;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
-      인증 링크를 누르면 팀 워크스페이스 설정으로 이동합니다. 링크는 24시간 후 만료됩니다.
+      {{ if .Data.course }}인증 링크를 누르면 과목 게시판으로 이동합니다.{{ else }}인증 링크를 누르면 팀 워크스페이스 설정으로 이동합니다.{{ end }} 링크는 24시간 후 만료됩니다.
     </div>
 
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F8FAFC;">
@@ -24,7 +29,7 @@
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;">
             <tr>
               <td style="padding-bottom:20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:18px;font-weight:700;color:#0F172A;">
-                StartUp Pilot
+                {{ if .Data.course }}SW창업캡스톤디자인 <span style="font-weight:400;color:#94A3B8;">· 한양대학교 ERICA</span>{{ else }}StartUp Pilot{{ end }}
               </td>
             </tr>
 
@@ -35,8 +40,13 @@
                   {{ if .Data.full_name }}{{ .Data.full_name }}님, {{ end }}가입을 마무리해 주세요
                 </h1>
                 <p style="margin:0 0 24px;font-size:14px;line-height:1.75;color:#475569;">
+                  {{ if .Data.course }}
+                  아래 버튼을 누르면 이메일 인증이 끝나고 과목 게시판으로 이동합니다.
+                  인증을 마쳐야 자기소개·팀원 모집글·댓글을 남길 수 있습니다.
+                  {{ else }}
                   아래 버튼을 누르면 이메일 인증이 끝나고 팀 정보 입력 화면으로 이동합니다.
                   팀 이름과 준비 중인 지원사업을 입력하면 공고 마감일을 기준으로 준비 마일스톤이 자동 생성됩니다.
+                  {{ end }}
                 </p>
 
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
@@ -72,8 +82,13 @@
 
             <tr>
               <td style="padding:20px 4px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:12px;line-height:1.7;color:#94A3B8;">
+                {{ if .Data.course }}
+                한양대학교 ERICA · SW창업캡스톤디자인 수업 운영 게시판<br />
+                수강생 전용이며, 학교 메일(@hanyang.ac.kr) 인증을 마쳐야 글을 쓸 수 있습니다.
+                {{ else }}
                 StartUp Pilot · 정부 창업지원사업 행정 워크스페이스<br />
                 자격 진단·사업비 판정은 참고용이며, 최종 기준은 각 사업 공고문과 관리지침입니다.
+                {{ end }}
               </td>
             </tr>
           </table>
