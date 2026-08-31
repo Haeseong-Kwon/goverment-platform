@@ -7,6 +7,22 @@ import { AuthShell } from "@/features/auth/AuthShell";
 import { LinkButton } from "@/features/startup-workspace/ui";
 import { completeAuthFromUrl, toAuthMessage } from "@/lib/services/AuthService";
 import { getStartupProfile, resolveWorkspaceDestination } from "@/lib/services/WorkspaceService";
+import { getCurrentUser } from "@/lib/services/AuthService";
+import { courseHref, isCourseAccount } from "@/features/course/course";
+
+/**
+ * 인증을 마친 사람을 어디로 보낼지.
+ *
+ * 과목 경로로 가입한 학생을 창업자 온보딩("팀 설정")으로 보내면 안 됩니다.
+ * 과목 가입은 자기 콜백(`/course/auth/callback`)을 쓰지만, 그 전에 발송된 링크와
+ * 비밀번호 재설정은 여전히 이 화면으로 돌아오므로 여기서도 갈라 줍니다.
+ */
+async function resolveDestination() {
+  const user = await getCurrentUser().catch(() => null);
+  if (isCourseAccount(user?.user_metadata)) return courseHref();
+  const profile = await getStartupProfile().catch(() => null);
+  return profile ? resolveWorkspaceDestination(profile) : "/onboarding";
+}
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -23,8 +39,8 @@ function AuthCallbackContent() {
         if (!authenticated) throw new Error("인증 정보가 올바르지 않거나 링크가 만료되었습니다.");
         setStatus("success");
         setMessage("이메일 인증이 완료되었습니다. 잠시 후 워크스페이스로 이동합니다.");
-        const profile = await getStartupProfile().catch(() => null);
-        setTimeout(() => router.replace(profile ? resolveWorkspaceDestination(profile) : "/onboarding"), 1200);
+        const destination = await resolveDestination();
+        setTimeout(() => router.replace(destination), 1200);
       })
       .catch((reason) => {
         if (!mounted) return;

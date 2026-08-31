@@ -64,6 +64,25 @@ export function isCourseEmail(email: string): boolean {
 export const COURSE_LOGIN_HREF = "/course/login";
 export const COURSE_SIGNUP_HREF = "/course/signup";
 
+/** 인증 메일의 링크가 돌아오는 곳. 파일럿의 `/auth/callback`과 분리합니다. */
+export const COURSE_CALLBACK_HREF = "/course/auth/callback";
+
+/**
+ * 이 계정이 과목 경로로 가입했는가.
+ *
+ * 가입할 때 `user_metadata.course`에 학기 키를 남겨 둡니다. 인증 메일 링크나 비밀번호
+ * 재설정이 파일럿 화면으로 돌아왔을 때, 이 학생을 창업자 온보딩(팀 설정)이 아니라
+ * 과목으로 보내기 위한 표식입니다.
+ *
+ * 메일 도메인으로 판단하지 않습니다 — 한양대 메일을 쓰는 창업자가 파일럿에 가입할 수도
+ * 있고, 그 사람을 과목으로 보내면 그쪽이 망가집니다. 어느 문으로 들어왔는지가 기준입니다.
+ */
+export const isCourseAccount = (metadata: unknown): boolean => {
+  if (!metadata || typeof metadata !== "object") return false;
+  const value = (metadata as { course?: unknown }).course;
+  return typeof value === "string" && value.trim().length > 0;
+};
+
 /** 행에 함께 저장하는 학기 컬럼 묶음. 등록 경로가 넷이라 한곳에서 만듭니다. */
 export const semesterColumns = (semester: CourseSemester = COURSE) => ({
   semester_key: semester.key,

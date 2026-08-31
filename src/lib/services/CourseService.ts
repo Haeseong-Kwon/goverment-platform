@@ -13,6 +13,7 @@ import { requireClient, getProfileNames } from "./WorkspaceService";
 import { requireAuthUserId, getAuthUserId } from "./sessionCache";
 import {
   COURSE,
+  COURSE_CALLBACK_HREF,
   parseRecruitRoles,
   parseStringArray,
   parseTeamMembers,
@@ -711,6 +712,33 @@ export const getViewerId = getAuthUserId;
  * 메일 주소가 필요한 이유: 자격이 없는 계정에게 "지금 어느 계정으로 로그인되어 있는지"를
  * 보여 줘야 무엇을 고쳐야 할지 압니다.
  */
+/**
+ * 과목 가입.
+ *
+ * `AuthService.signUp()`을 쓰지 않습니다. 그 함수는 StartUp Pilot 가입이라
+ *   - 인증 메일 링크를 파일럿 콜백(`/auth/callback`)으로 보내고
+ *   - `startup_profiles`에 `pre_founder / onboarding_complete:false` 행을 만듭니다
+ * 그 결과 학교 메일로 가입한 학생이 인증 링크를 누르면 창업자 온보딩(팀 설정)으로
+ * 떨어졌습니다. 과목 학생에게는 필요 없는 데이터이고, 필요 없는 화면입니다.
+ *
+ * `profiles` 행은 015의 `auth.users` 트리거가 만듭니다. 여기서 따로 넣지 않습니다.
+ */
+export async function signUpViewer(email: string, password: string, fullName: string) {
+  const client = requireClient();
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  const { data, error } = await client.auth.signUp({
+    email: email.trim(),
+    password,
+    options: {
+      emailRedirectTo: `${origin}${COURSE_CALLBACK_HREF}`,
+      // course 키가 이 계정이 과목 경로로 들어왔다는 표식입니다(isCourseAccount).
+      data: { full_name: fullName.trim(), course: COURSE.key },
+    },
+  });
+  if (error) throw error;
+  return data;
+}
+
 export async function signOutViewer() {
   // `AuthService.signOut()`을 쓰지 않습니다. 그쪽은 DEV_BYPASS일 때 아무 일도 하지
   // 않고 돌아가서, 개발 중에는 실제 세션이 끊기지 않습니다(getViewerAccount와 짝이 어긋납니다).

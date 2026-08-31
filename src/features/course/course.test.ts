@@ -10,6 +10,7 @@ import {
   getStudentSteps,
   groupDeliverables,
   isBoardId,
+  isCourseAccount,
   isCourseEmail,
   matchesQuery,
   parseRecruitRoles,
@@ -134,6 +135,23 @@ describe("가입 가능 메일 도메인", () => {
     expect(isCourseEmail("hana@evil.com@hanyang.ac.kr")).toBe(false);
     expect(isCourseEmail("hana @hanyang.ac.kr")).toBe(false);
     expect(isCourseEmail("hanyang.ac.kr")).toBe(false);
+  });
+});
+
+describe("과목 계정 표식", () => {
+  it("과목 경로로 가입한 계정만 과목으로 보낸다", () => {
+    expect(isCourseAccount({ course: COURSE.key })).toBe(true);
+    expect(isCourseAccount({ full_name: "김하나" })).toBe(false);
+    expect(isCourseAccount({ course: "" })).toBe(false);
+    expect(isCourseAccount({ course: "   " })).toBe(false);
+    expect(isCourseAccount(null)).toBe(false);
+    expect(isCourseAccount(undefined)).toBe(false);
+  });
+
+  it("메일 도메인으로 판단하지 않는다", () => {
+    // 한양대 메일을 쓰는 창업자가 파일럿에 가입할 수 있습니다.
+    // 그 사람을 과목으로 보내면 창업자 쪽이 망가집니다.
+    expect(isCourseAccount({ email: "hana@hanyang.ac.kr" })).toBe(false);
   });
 });
 

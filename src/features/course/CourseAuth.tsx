@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { GraduationCap, MailCheck, Presentation, Users } from "lucide-react";
-import { requestPasswordReset, signIn, signUp, toAuthMessage } from "@/lib/services/AuthService";
-import { signOutViewer } from "@/lib/services/CourseService";
+import { GraduationCap, Loader2, MailCheck, Presentation, TriangleAlert, Users } from "lucide-react";
+import { completeAuthFromUrl, requestPasswordReset, signIn, toAuthMessage } from "@/lib/services/AuthService";
+import { signOutViewer, signUpViewer } from "@/lib/services/CourseService";
 import {
   COURSE,
   COURSE_EMAIL_DOMAIN,
@@ -173,9 +173,53 @@ function SignedInAsOther({ email, mode }: { email: string | null; mode: "signup"
   );
 }
 
+// ---------------------------------------------------------------- 인증 메일 콜백
+
+/**
+ * 인증 메일 링크가 돌아오는 곳.
+ *
+ * 파일럿 콜백(`/auth/callback`)으로 보내면 안 됩니다. 그 화면은 `startup_profiles`를
+ * 읽어 온보딩 여부로 갈 곳을 정하기 때문에, 과목 학생은 창업자 "팀 설정"으로
+ * 떨어집니다. 여기서는 세션만 세우고 과목 메인으로 보냅니다.
+ */
+export function CourseAuthCallbackPage() {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    completeAuthFromUrl(new URLSearchParams(typeof window === "undefined" ? "" : window.location.search))
+      .then((authenticated) => {
+        if (!mounted) return;
+        if (!authenticated) throw new Error("인증 정보가 올바르지 않거나 링크가 만료되었습니다.");
+        router.replace(courseHref());
+      })
+      .catch((reason) => {
+        if (mounted) setError(toAuthMessage(reason, "이메일 인증을 처리하지 못했습니다."));
+      });
+    return () => { mounted = false; };
+  }, [router]);
+
+  return (
+    <CourseAuthShell
+      title={error ? "인증 실패" : "이메일 인증 확인 중"}
+      description={error ?? "잠시만 기다려 주세요. 확인이 끝나면 과목 게시판으로 이동합니다."}
+      footer={error ? <Link href={COURSE_LOGIN_HREF} className="font-bold text-[#2563EB]">로그인 화면으로</Link> : undefined}
+    >
+      <div className="flex items-center gap-3 rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-5">
+        {error ? <TriangleAlert className="text-[#DC2626]" size={20} /> : <Loader2 className="animate-spin text-[#2563EB]" size={20} />}
+        <span className="text-sm font-semibold text-[#475569]">
+          {error ? "링크를 다시 요청하거나 로그인 화면에서 재시도해 주세요." : "이 화면을 닫지 말아 주세요."}
+        </span>
+      </div>
+    </CourseAuthShell>
+  );
+}
+
 // ---------------------------------------------------------------- 회원가입
 
 export function CourseSignupPage() {
+  const router = useRouter();
   const [form, setForm] = useState({ fullName: "", email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -201,7 +245,17 @@ export function CourseSignupPage() {
       // 다른 계정 세션을 쥔 채 가입하면 새 계정과 옛 세션이 섞여 "로그인은 되어 있는데
       // 자격은 없는" 상태가 그대로 남습니다. 먼저 끊고 시작합니다.
       if (viewer.id) await signOutViewer().catch(() => undefined);
-      await signUp(form.email.trim(), form.password, form.fullName.trim());
+      const result = await signUpViewer(form.email, form.password, form.fullName);
+      /*
+       * 이메일 확인이 켜져 있는지는 프로젝트 설정이라 코드가 알 수 없습니다.
+       * 응답에 세션이 실려 오면 확인 없이 가입이 끝난 것이므로 곧장 게시판으로 보냅니다
+       * — 그 경우에도 "메일을 확인하세요" 화면을 띄우면 오지 않을 메일을 기다리게 됩니다.
+       * 세션이 없으면 확인 메일이 나간 것이고, 그때만 안내 화면을 보여 줍니다.
+       */
+      if (result.session) {
+        router.replace(courseHref());
+        return;
+      }
       setSentTo(form.email.trim());
     } catch (reason) {
       setError(toAuthMessage(reason, "회원가입에 실패했습니다."));

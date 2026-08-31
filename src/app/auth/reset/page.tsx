@@ -7,6 +7,22 @@ import { AuthError, AuthField, AuthShell, authInputClass } from "@/features/auth
 import { Button, LinkButton } from "@/features/startup-workspace/ui";
 import { completeAuthFromUrl, toAuthMessage, updatePassword } from "@/lib/services/AuthService";
 import { getStartupProfile, resolveWorkspaceDestination } from "@/lib/services/WorkspaceService";
+import { getCurrentUser } from "@/lib/services/AuthService";
+import { courseHref, isCourseAccount } from "@/features/course/course";
+
+/**
+ * 인증을 마친 사람을 어디로 보낼지.
+ *
+ * 과목 경로로 가입한 학생을 창업자 온보딩("팀 설정")으로 보내면 안 됩니다.
+ * 과목 가입은 자기 콜백(`/course/auth/callback`)을 쓰지만, 그 전에 발송된 링크와
+ * 비밀번호 재설정은 여전히 이 화면으로 돌아오므로 여기서도 갈라 줍니다.
+ */
+async function resolveDestination() {
+  const user = await getCurrentUser().catch(() => null);
+  if (isCourseAccount(user?.user_metadata)) return courseHref();
+  const profile = await getStartupProfile().catch(() => null);
+  return profile ? resolveWorkspaceDestination(profile) : "/onboarding";
+}
 
 const MIN_PASSWORD_LENGTH = 6;
 
@@ -41,8 +57,7 @@ function ResetPasswordContent() {
     setError(null);
     try {
       await updatePassword(password);
-      const profile = await getStartupProfile().catch(() => null);
-      router.replace(profile ? resolveWorkspaceDestination(profile) : "/onboarding");
+      router.replace(await resolveDestination());
     } catch (reason) {
       setError(toAuthMessage(reason, "비밀번호를 바꾸지 못했습니다."));
       setSaving(false);
