@@ -26,6 +26,8 @@ import {
   type RecruitPost,
   type RecruitRole,
   type RecruitStatus,
+  type SemesterProfile,
+  type StudentStatus,
   type TeamMember,
   type TeamStatus,
 } from "@/features/course/course";
@@ -471,6 +473,162 @@ export async function addComment(board: BoardId, targetId: string, content: stri
 export async function deleteComment(id: string) {
   const { error } = await requireClient().from("course_comments").delete().eq("id", id);
   if (error) throw error;
+}
+
+// ---------------------------------------------------------------- 수강생 프로필
+
+const SEMESTER_PROFILE_COLUMNS =
+  "id, user_id, full_name, role, major, bio, tech_stack, github_url, portfolio_url, status, created_at";
+
+const toSemesterProfile = (row: RecruitRow): SemesterProfile => ({
+  id: row.id as string,
+  userId: row.user_id as string,
+  fullName: row.full_name as string,
+  major: (row.major as string | null) ?? "",
+  role: (row.role as string | null) ?? "",
+  bio: (row.bio as string | null) ?? "",
+  techStack: parseStringArray(row.tech_stack),
+  githubUrl: (row.github_url as string | null) ?? null,
+  portfolioUrl: (row.portfolio_url as string | null) ?? null,
+  status: (["LOOKING", "TEAMED", "DONE"].includes(row.status as string) ? row.status : "LOOKING") as StudentStatus,
+  createdAt: row.created_at as string,
+});
+
+/** 내 이번 학기 프로필. 아직 안 썼으면 null이고, 워크스페이스가 작성부터 안내합니다. */
+export async function getMySemesterProfile(): Promise<SemesterProfile | null> {
+  const userId = await getAuthUserId();
+  if (!userId) return null;
+  const { data, error } = await requireClient()
+    .from("semester_profiles")
+    .select(SEMESTER_PROFILE_COLUMNS)
+    .eq("semester_key", COURSE.key)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? toSemesterProfile(data as RecruitRow) : null;
+}
+
+export interface SemesterProfileInput {
+  fullName: string;
+  major: string;
+  role: string;
+  bio: string;
+  techStack: string[];
+  githubUrl: string | null;
+  portfolioUrl: string | null;
+  status: StudentStatus;
+}
+
+/**
+ * 등록과 수정이 같은 경로입니다. `UNIQUE (user_id, semester_key)`라 학기당 한 장이며,
+ * 학기가 바뀌면 새 행이 생기고 지난 학기 프로필은 그대로 남습니다.
+ */
+export async function saveSemesterProfile(input: SemesterProfileInput): Promise<SemesterProfile> {
+  const userId = await requireAuthUserId();
+  const { data, error } = await requireClient()
+    .from("semester_profiles")
+    .upsert(
+      {
+        ...semesterColumns(),
+        user_id: userId,
+        full_name: input.fullName.trim(),
+        major: input.major.trim(),
+        role: input.role.trim(),
+        bio: input.bio.trim(),
+        tech_stack: input.techStack,
+        github_url: input.githubUrl,
+        portfolio_url: input.portfolioUrl,
+        status: input.status,
+      },
+      { onConflict: "user_id,semester_key" },
+    )
+    .select(SEMESTER_PROFILE_COLUMNS)
+    .single();
+  if (error) throw error;
+  return toSemesterProfile(data as RecruitRow);
+}
+
+// ---------------------------------------------------------------- 내 활동
+
+export interface StudentActivity {
+  profile: SemesterProfile | null;
+  posts: RecruitPost[];
+  teams: CourseTeam[];
+  deliverables: Deliverable[];
+}
+
+/**
+ * 내가 팀원으로 들어가 있는 팀.
+ *
+ * team_registrations.members는 이름 문자열만 담습니다(등록 폼이 이름을 받으므로).
+ * 사용자 id로 이을 길이 없어 이름으로 맞춥니다 — 팀장인 팀은 leader_id로 확실하게
+ * 잡고, 팀원으로 참여한 팀만 이 경로로 찾습니다.
+ *
+ * ponytail: 동명이인이면 남의 팀이 섞입니다. 팀 등록에서 팀원을 계정으로 고르게
+ * 바꾸면 member_ids로 정확해집니다 — 지금은 등록 폼이 이름을 받으므로 여기까지입니다.
+ */
+async function getTeamsByMemberName(name: string): Promise<RecruitRow[]> {
+  if (!name.trim()) return [];
+  const { data } = await requireClient()
+    .from("team_registrations")
+    .select(TEAM_COLUMNS)
+    .eq("semester_key", COURSE.key)
+    .contains("members", [{ name: name.trim() }]);
+  return (data ?? []) as RecruitRow[];
+}
+
+/**
+ * 수강생 워크스페이스가 한 번에 필요로 하는 것 전부.
+ *
+ * 화면이 조회를 네 번 따로 걸면 카드마다 로딩이 어긋나 화면이 계속 출렁입니다.
+ * 서로 의존하지 않는 조회라 한꺼번에 보냅니다.
+ */
+export async function getMyCourseActivity(): Promise<StudentActivity> {
+  const userId = await getAuthUserId();
+  if (!userId) return { profile: null, posts: [], teams: [], deliverables: [] };
+  const client = requireClient();
+
+  const [profile, postRows, ledRows] = await Promise.all([
+    getMySemesterProfile(),
+    client
+      .from("recruitment_posts")
+      .select(RECRUIT_COLUMNS)
+      .eq("semester_key", COURSE.key)
+      .eq("author_id", userId)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => (data ?? []) as RecruitRow[]),
+    client
+      .from("team_registrations")
+      .select(TEAM_COLUMNS)
+      .eq("semester_key", COURSE.key)
+      .eq("leader_id", userId)
+      .then(({ data }) => (data ?? []) as RecruitRow[]),
+  ]);
+
+  // 이름은 학기 프로필을 먼저 봅니다. 계정 이름과 다르게 적었다면 팀 명단에 적힌 쪽도 그쪽입니다.
+  const names = await getProfileNames([userId]);
+  const myName = profile?.fullName || names.get(userId) || "";
+  const memberRows = await getTeamsByMemberName(myName).catch(() => [] as RecruitRow[]);
+
+  // 팀장이면서 명단에도 이름이 있으면 두 경로에 같은 팀이 잡힙니다.
+  const teamRows = Array.from(
+    new Map([...ledRows, ...memberRows].map((row) => [row.id as string, row])).values(),
+  );
+
+  const teamIds = teamRows.map((row) => row.id as string);
+  const { data: deliverableRows } = teamIds.length
+    ? await client.from("team_deliverables").select(DELIVERABLE_COLUMNS).in("team_id", teamIds)
+    : { data: [] };
+
+  const teamNames = new Map(teamRows.map((row) => [row.id as string, row.team_name as string]));
+  const empty = new Map<string, number>();
+
+  return {
+    profile,
+    posts: postRows.map((row) => toRecruitPost(row, names, empty)),
+    teams: teamRows.map((row) => toTeam(row, names, empty)),
+    deliverables: ((deliverableRows ?? []) as RecruitRow[]).map((row) => toDeliverable(row, teamNames, empty)),
+  };
 }
 
 // ---------------------------------------------------------------- 과목 홈

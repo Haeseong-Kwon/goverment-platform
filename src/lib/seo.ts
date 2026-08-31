@@ -88,6 +88,8 @@ export const PRIVATE_PATH_PREFIXES = [
   "/manager/reports",
   "/manager/settings",
   "/manager/plan-review",
+  // 과목 게시판은 공개지만 수강생 개인 워크스페이스는 아닙니다.
+  "/course/me",
   "/onboarding",
   "/login",
   "/signup",

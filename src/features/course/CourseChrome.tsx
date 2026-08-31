@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { GraduationCap, LogIn } from "lucide-react";
 import { getViewerId } from "@/lib/services/CourseService";
 import { onAuthStateChange } from "@/lib/services/AuthService";
-import { BOARDS, BOARD_ORDER, COURSE, courseHref, type BoardId } from "./course";
+import { BOARDS, BOARD_ORDER, COURSE, COURSE_WORKSPACE_HREF, courseHref, type CourseTab } from "./course";
 import { focusRing } from "@/features/startup-workspace/ui";
 import { cn } from "@/lib/utils";
 
@@ -37,10 +37,13 @@ export function useViewer() {
 /** 로그인 후 보던 화면으로 되돌아오게 합니다. 게시판에서 로그인했는데 워크스페이스로 떨어지면 길을 잃습니다. */
 export const loginHref = (returnTo: string) => `/login?next=${encodeURIComponent(returnTo)}`;
 
-function BoardTabs({ active }: { active: BoardId | "home" }) {
-  const tabs: Array<{ key: BoardId | "home"; label: string; href: string }> = [
+function BoardTabs({ active, signedIn }: { active: CourseTab; signedIn: boolean }) {
+  const tabs: Array<{ key: CourseTab; label: string; href: string }> = [
     { key: "home", label: "과목 홈", href: courseHref() },
     ...BOARD_ORDER.map((id) => ({ key: id, label: BOARDS[id].label, href: courseHref(id) })),
+    // 내 활동만 모이는 곳이라 로그인해야 의미가 있습니다. 비로그인 방문자에게는
+    // 누르면 로그인 화면으로 튕기는 탭을 보여 주지 않습니다.
+    ...(signedIn ? [{ key: "me" as const, label: "내 워크스페이스", href: COURSE_WORKSPACE_HREF }] : []),
   ];
 
   return (
@@ -75,7 +78,7 @@ function BoardTabs({ active }: { active: BoardId | "home" }) {
  * 워크스페이스 사이드바를 쓰지 않습니다. 이 게시판은 로그인 이전에도 열리는
  * 공개 화면이고, 학생이 오가는 곳은 게시판 넷뿐이라 상단 탭이면 충분합니다.
  */
-export function CourseShell({ active, children }: { active: BoardId | "home"; children: React.ReactNode }) {
+export function CourseShell({ active, children }: { active: CourseTab; children: React.ReactNode }) {
   const viewer = useViewer();
   const pathname = usePathname();
 
@@ -99,7 +102,7 @@ export function CourseShell({ active, children }: { active: BoardId | "home"; ch
             {!viewer.loading && (
               viewer.id ? (
                 <Link
-                  href="/founder"
+                  href={COURSE_WORKSPACE_HREF}
                   className={cn("shrink-0 rounded-lg px-3 py-2 text-sm font-bold text-[#475569] hover:bg-[#F1F5F9]", focusRing)}
                 >
                   내 워크스페이스
@@ -114,7 +117,7 @@ export function CourseShell({ active, children }: { active: BoardId | "home"; ch
               )
             )}
           </div>
-          <BoardTabs active={active} />
+          <BoardTabs active={active} signedIn={Boolean(viewer.id)} />
         </div>
       </header>
 

@@ -9,12 +9,14 @@ import {
   createTeam,
   getMyLedTeams,
   saveDeliverable,
+  saveSemesterProfile,
 } from "@/lib/services/CourseService";
 import {
   DELIVERABLE_PHASE_LABEL,
   PROJECT_PHASE_LABEL,
   PROPOSAL_CATEGORIES,
   ROLE_PRESETS,
+  STUDENT_STATUS_LABEL,
   courseHref,
   emptyToNull,
   splitTags,
@@ -24,6 +26,8 @@ import {
   type DeliverablePhase,
   type ProjectPhase,
   type RecruitRole,
+  type SemesterProfile,
+  type StudentStatus,
   type TeamMember,
 } from "./course";
 import {
@@ -370,6 +374,135 @@ export function TeamForm({ onClose, onCreated }: FormProps) {
             팀원 추가
           </Button>
         </fieldset>
+
+        {error && <Notice tone="error" onDismiss={() => setError(null)}>{error}</Notice>}
+      </div>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------- 수강생 프로필
+
+/**
+ * 이번 학기 프로필.
+ *
+ * 다른 폼과 달리 이미 있는 값을 채워 열립니다 — 등록과 수정이 같은 화면입니다.
+ * 학기당 한 장이라 "새로 쓰기"가 따로 없습니다.
+ */
+export function SemesterProfileForm({
+  current,
+  onClose,
+  onSaved,
+}: {
+  current: SemesterProfile | null;
+  onClose: () => void;
+  onSaved: (profile: SemesterProfile) => void;
+}) {
+  const [fullName, setFullName] = useState(current?.fullName ?? "");
+  const [major, setMajor] = useState(current?.major ?? "");
+  const [role, setRole] = useState(current && current.role !== "Student" ? current.role : "");
+  const [bio, setBio] = useState(current?.bio ?? "");
+  const [techStack, setTechStack] = useState((current?.techStack ?? []).join(", "));
+  const [github, setGithub] = useState(current?.githubUrl ?? "");
+  const [portfolio, setPortfolio] = useState(current?.portfolioUrl ?? "");
+  const [status, setStatus] = useState<StudentStatus>(current?.status ?? "LOOKING");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    const problem =
+      fullName.trim().length < 2 ? "이름을 입력해 주세요."
+      : validateOptionalUrl(github, "GitHub") ?? validateOptionalUrl(portfolio, "포트폴리오");
+    if (problem) { setError(problem); return; }
+
+    setSaving(true);
+    setError(null);
+    try {
+      onSaved(
+        await saveSemesterProfile({
+          fullName,
+          major,
+          role,
+          bio,
+          techStack: splitTags(techStack),
+          githubUrl: emptyToNull(github),
+          portfolioUrl: emptyToNull(portfolio),
+          status,
+        }),
+      );
+    } catch (reason) {
+      setError(toMessage(reason, "프로필을 저장하지 못했습니다."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      title={current ? "수강생 프로필 수정" : "수강생 프로필 등록"}
+      description="팀빌딩 게시판에서 다른 팀이 보는 정보입니다. 학기마다 따로 저장되어 지난 학기 기록은 그대로 남습니다."
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>취소</Button>
+          <Button loading={saving} onClick={() => void submit()}>{current ? "저장" : "등록"}</Button>
+        </>
+      }
+    >
+      <div className="mt-5 space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="이름" required hint="확정 팀 명단에 적는 이름과 같게 써 주세요.">
+            <input value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="김하나" className={inputClass} />
+          </Field>
+          <Field label="전공">
+            <input value={major} onChange={(event) => setMajor(event.target.value)} placeholder="컴퓨터학부" className={inputClass} />
+          </Field>
+        </div>
+
+        <fieldset>
+          <legend className="text-sm font-bold">희망 역할</legend>
+          <div className="mt-1.5 flex flex-wrap gap-2">
+            {ROLE_PRESETS.map((item) => (
+              <ChoiceChip key={item} selected={role === item} onClick={() => setRole(role === item ? "" : item)}>
+                {item}
+              </ChoiceChip>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend className="text-sm font-bold">지금 상태</legend>
+          <div className="mt-1.5 flex flex-wrap gap-2">
+            {(Object.keys(STUDENT_STATUS_LABEL) as StudentStatus[]).map((item) => (
+              <ChoiceChip key={item} selected={status === item} onClick={() => setStatus(item)}>
+                {STUDENT_STATUS_LABEL[item]}
+              </ChoiceChip>
+            ))}
+          </div>
+        </fieldset>
+
+        <Field label="한 줄 소개" hint="관심 분야나 해보고 싶은 아이템을 적으면 연락이 옵니다.">
+          <textarea
+            value={bio}
+            onChange={(event) => setBio(event.target.value)}
+            placeholder="헬스케어 쪽 앱을 만들어 보고 싶습니다. React Native 경험이 있습니다."
+            className={cn(textareaClass, "min-h-28")}
+          />
+        </Field>
+
+        <Field label="기술 스택" hint="쉼표로 구분합니다. 예: React, Python, Figma">
+          <input value={techStack} onChange={(event) => setTechStack(event.target.value)} placeholder="React, Python" className={inputClass} />
+        </Field>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="GitHub">
+            <input type="url" value={github} onChange={(event) => setGithub(event.target.value)} placeholder="https://github.com/id" className={inputClass} />
+          </Field>
+          <Field label="포트폴리오">
+            <input type="url" value={portfolio} onChange={(event) => setPortfolio(event.target.value)} placeholder="https://notion.so/..." className={inputClass} />
+          </Field>
+        </div>
 
         {error && <Notice tone="error" onDismiss={() => setError(null)}>{error}</Notice>}
       </div>

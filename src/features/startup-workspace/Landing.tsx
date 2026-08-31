@@ -326,6 +326,33 @@ export function WorkspaceEntry() {
             <p className="mt-4 text-base leading-8 text-[#475569] md:text-lg">검증 통과 후 검토 요청된 선정 팀만 고밀도 테이블로 관리합니다.</p>
             <span className="mt-6 inline-flex items-center gap-2 font-bold text-[#2563EB]">기관 화면 열기 <ChevronRight size={18} className="transition-transform group-hover:translate-x-1" /></span>
           </Link>
+
+          {/*
+            수강생은 위 두 역할 어느 쪽도 아닙니다. 지원사업이 아니라 한 학기 수업을 하고,
+            보는 데이터도 게시판과 팀뿐입니다. 같은 줄에 세 칸으로 욱여넣는 대신 아래에
+            가로로 놓아 "역할 둘 + 과목 하나"라는 구조가 그대로 보이게 합니다.
+          */}
+          <Link
+            href="/course"
+            className={cn(
+              "group rounded-2xl border border-[#E2E8F0] bg-white p-7 md:col-span-2 md:p-8",
+              focusRing,
+              "transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-1 hover:border-[#CBD5E1] hover:shadow-[0_16px_40px_rgba(15,23,42,0.1)]",
+            )}
+          >
+            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+              <div className="min-w-0">
+                <GraduationCap className="text-[#2563EB]" />
+                <h2 className="mt-5 text-[26px] font-bold leading-tight md:text-[32px]">과목 수강생</h2>
+                <p className="mt-3 text-base leading-8 text-[#475569]">
+                  {COURSE.school} {COURSE.label}. 팀빌딩 모집, 기업 제안 프로젝트, 확정 팀, 중간·기말 결과물 게시판과 내 워크스페이스.
+                </p>
+              </div>
+              <span className="inline-flex shrink-0 items-center gap-2 font-bold text-[#2563EB]">
+                과목 게시판 열기 <ChevronRight size={18} className="transition-transform group-hover:translate-x-1" />
+              </span>
+            </div>
+          </Link>
         </div>
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2 md:grid-cols-4">

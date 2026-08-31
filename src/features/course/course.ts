@@ -107,6 +107,17 @@ export const isBoardId = (value: string): value is BoardId => (BOARD_ORDER as st
 export const courseHref = (board?: BoardId, id?: string) =>
   board ? (id ? `/course/${board}/${id}` : `/course/${board}`) : "/course";
 
+/**
+ * 수강생 워크스페이스.
+ *
+ * `/course/[board]`와 같은 자리에 있지만 정적 세그먼트라 Next가 먼저 잡습니다
+ * (`isBoardId("me")`는 false이므로 게시판으로 새지도 않습니다).
+ */
+export const COURSE_WORKSPACE_HREF = "/course/me";
+
+/** 상단 탭이 가리킬 수 있는 곳 전부. 게시판 넷 + 과목 홈 + 내 워크스페이스. */
+export type CourseTab = BoardId | "home" | "me";
+
 // ---------------------------------------------------------------- 값 목록
 
 export type RecruitStatus = "Recruiting" | "Closed";
@@ -130,6 +141,26 @@ export type DeliverablePhase = "midterm" | "final";
 export const DELIVERABLE_PHASE_LABEL: Record<DeliverablePhase, string> = {
   midterm: "중간 결과물",
   final: "기말 결과물",
+};
+
+/**
+ * 수강생의 이번 학기 상태.
+ *
+ * 팀빌딩 게시판에서 "이 사람 아직 팀 구하나?"가 가장 먼저 궁금한 값이라
+ * 프로필 카드 맨 앞에 둡니다.
+ */
+export type StudentStatus = "LOOKING" | "TEAMED" | "DONE";
+
+export const STUDENT_STATUS_LABEL: Record<StudentStatus, string> = {
+  LOOKING: "팀 찾는 중",
+  TEAMED: "팀 구성 완료",
+  DONE: "수행 완료",
+};
+
+export const STUDENT_STATUS_TONE: Record<StudentStatus, "green" | "blue" | "slate"> = {
+  LOOKING: "green",
+  TEAMED: "blue",
+  DONE: "slate",
 };
 
 export type TeamStatus = "Activities" | "Completed";
@@ -227,6 +258,29 @@ export interface Deliverable {
   createdAt: string;
   updatedAt: string;
   commentCount: number;
+}
+
+/**
+ * 이번 학기 수강생 프로필(`semester_profiles` 한 행).
+ *
+ * 계정 프로필(`profiles`)과 따로 둡니다. 전공·희망 역할·기술 스택은 학기마다
+ * 달라지고, 지난 학기 프로필을 덮어쓰면 그때 팀을 구하던 기록이 사라집니다.
+ *
+ * `role` 컬럼은 스키마 기본값이 'Student'지만 이 화면에서는 **희망 역할**로 씁니다
+ * (백엔드·기획 등). 쓰는 곳이 없던 컬럼이라 의미를 여기서 정합니다.
+ */
+export interface SemesterProfile {
+  id: string;
+  userId: string;
+  fullName: string;
+  major: string;
+  role: string;
+  bio: string;
+  techStack: string[];
+  githubUrl: string | null;
+  portfolioUrl: string | null;
+  status: StudentStatus;
+  createdAt: string;
 }
 
 export interface CourseComment {
@@ -337,6 +391,93 @@ export function matchesQuery(haystack: Array<string | null | undefined>, query: 
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
   return haystack.filter(Boolean).join(" ").toLowerCase().includes(needle);
+}
+
+// ---------------------------------------------------------------- 수강생 진행
+
+export interface StudentProgressInput {
+  hasProfile: boolean;
+  recruitPostCount: number;
+  teamCount: number;
+  deliverablePhases: DeliverablePhase[];
+}
+
+export interface StudentStep {
+  id: string;
+  title: string;
+  description: string;
+  done: boolean;
+  href: string;
+  cta: string;
+}
+
+/**
+ * 수강생 워크스페이스의 뼈대.
+ *
+ * "지금 뭘 해야 하지"를 게시판 네 개를 돌아다니며 유추하게 두지 않습니다.
+ * 학기가 흐르는 순서 그대로 다섯 단계를 세우고, 각 단계가 끝났는지는 이미 있는
+ * 데이터(프로필·모집글·팀·결과물)로 판정합니다. 별도 진행 상태를 저장하지 않으므로
+ * 실제 게시판과 어긋날 일이 없습니다.
+ *
+ * 팀 등록은 모집글 없이도 할 수 있습니다(오프라인에서 팀을 짠 경우). 그래서 팀이
+ * 있으면 '팀 찾기'도 끝난 것으로 봅니다 — 이미 지나온 단계를 미완으로 남겨 두면
+ * 목록이 잔소리가 됩니다.
+ */
+export function getStudentSteps(input: StudentProgressInput): StudentStep[] {
+  const hasTeam = input.teamCount > 0;
+  return [
+    {
+      id: "profile",
+      title: "수강생 프로필 등록",
+      description: "전공과 희망 역할을 적어 두면 다른 팀이 먼저 찾아옵니다.",
+      done: input.hasProfile,
+      href: courseHref(),
+      cta: "프로필 작성",
+    },
+    {
+      id: "recruit",
+      title: "팀원 찾기",
+      description: "모집글을 올리거나 관심 있는 글에 댓글로 지원합니다.",
+      done: hasTeam || input.recruitPostCount > 0,
+      href: courseHref("recruit"),
+      cta: "모집 게시판 열기",
+    },
+    {
+      id: "team",
+      title: "확정 팀 등록",
+      description: "구성이 끝나면 팀장이 등록합니다. 결과물은 등록된 팀만 올립니다.",
+      done: hasTeam,
+      href: courseHref("team"),
+      cta: "팀 등록",
+    },
+    {
+      id: "midterm",
+      title: "중간 결과물 제출",
+      description: "구현 범위와 검증한 것을 정리해 올립니다.",
+      done: input.deliverablePhases.includes("midterm"),
+      href: courseHref("showcase"),
+      cta: "결과물 등록",
+    },
+    {
+      id: "final",
+      title: "기말 결과물 제출",
+      description: "최종 산출물과 데모·저장소 링크를 남깁니다.",
+      done: input.deliverablePhases.includes("final"),
+      href: courseHref("showcase"),
+      cta: "결과물 등록",
+    },
+  ];
+}
+
+/** 진행률과 다음에 할 일. 다음 단계는 "아직 안 끝난 첫 단계"입니다. */
+export function getStudentProgress(steps: StudentStep[]) {
+  const done = steps.filter((step) => step.done).length;
+  return {
+    done,
+    total: steps.length,
+    percent: steps.length ? Math.round((done / steps.length) * 100) : 0,
+    next: steps.find((step) => !step.done) ?? null,
+  };
 }
 
 /**

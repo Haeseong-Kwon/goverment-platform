@@ -4,6 +4,8 @@ import {
   countOpenRoles,
   emptyToNull,
   getProposalDeadline,
+  getStudentProgress,
+  getStudentSteps,
   groupDeliverables,
   isBoardId,
   matchesQuery,
@@ -16,6 +18,7 @@ import {
   validateOptionalUrl,
   validateTitleAndBody,
   type Deliverable,
+  type DeliverablePhase,
   type Proposal,
   type RecruitPost,
 } from "./course";
@@ -214,6 +217,53 @@ describe("검색", () => {
 
   it("빈 값이 섞여 있어도 터지지 않는다", () => {
     expect(matchesQuery([null, undefined, "백엔드"], "백엔드")).toBe(true);
+  });
+});
+
+describe("수강생 진행 단계", () => {
+  const base = { hasProfile: false, recruitPostCount: 0, teamCount: 0, deliverablePhases: [] as DeliverablePhase[] };
+  const idsDone = (input: Parameters<typeof getStudentSteps>[0]) =>
+    getStudentSteps(input).filter((step) => step.done).map((step) => step.id);
+
+  it("아무것도 안 했으면 전부 미완이고 다음 할 일은 프로필이다", () => {
+    const steps = getStudentSteps(base);
+    expect(idsDone(base)).toEqual([]);
+    expect(getStudentProgress(steps)).toMatchObject({ done: 0, total: 5, percent: 0 });
+    expect(getStudentProgress(steps).next?.id).toBe("profile");
+  });
+
+  it("모집글을 올리면 팀 찾기가 끝난 것으로 본다", () => {
+    expect(idsDone({ ...base, recruitPostCount: 1 })).toEqual(["recruit"]);
+  });
+
+  it("모집글 없이 팀만 등록해도 팀 찾기를 미완으로 남기지 않는다", () => {
+    // 오프라인에서 팀을 짠 경우입니다. 지나온 단계를 미완으로 두면 목록이 잔소리가 됩니다.
+    expect(idsDone({ ...base, teamCount: 1 })).toEqual(["recruit", "team"]);
+  });
+
+  it("중간만 냈으면 기말은 미완으로 남는다", () => {
+    const input = { ...base, hasProfile: true, teamCount: 1, deliverablePhases: ["midterm"] as DeliverablePhase[] };
+    expect(idsDone(input)).toEqual(["profile", "recruit", "team", "midterm"]);
+    expect(getStudentProgress(getStudentSteps(input)).next?.id).toBe("final");
+  });
+
+  it("다 끝나면 100%이고 다음 할 일이 없다", () => {
+    const input = {
+      hasProfile: true,
+      recruitPostCount: 2,
+      teamCount: 1,
+      deliverablePhases: ["midterm", "final"] as DeliverablePhase[],
+    };
+    const progress = getStudentProgress(getStudentSteps(input));
+    expect(progress).toMatchObject({ done: 5, total: 5, percent: 100 });
+    expect(progress.next).toBeNull();
+  });
+
+  it("각 단계는 갈 곳을 갖는다 — 안내만 하고 길이 없으면 소용없다", () => {
+    for (const step of getStudentSteps(base)) {
+      expect(step.href.startsWith("/course")).toBe(true);
+      expect(step.cta.length).toBeGreaterThan(0);
+    }
   });
 });
 
