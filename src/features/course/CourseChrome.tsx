@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { GraduationCap, LogIn, ShieldAlert } from "lucide-react";
-import { getViewerId, isCourseMember } from "@/lib/services/CourseService";
+import { usePathname, useRouter } from "next/navigation";
+import { GraduationCap, LogIn, LogOut, ShieldAlert } from "lucide-react";
+import { getViewerAccount, isCourseMember, signOutViewer } from "@/lib/services/CourseService";
 import { onAuthStateChange } from "@/lib/services/AuthService";
 import {
   BOARDS,
@@ -31,25 +31,26 @@ import { cn } from "@/lib/utils";
  */
 export interface Viewer {
   id: string | null;
+  email: string | null;
   member: boolean;
   loading: boolean;
 }
 
 export function useViewer(): Viewer {
-  const [state, setState] = useState<Viewer>({ id: null, member: false, loading: true });
+  const [state, setState] = useState<Viewer>({ id: null, email: null, member: false, loading: true });
 
   useEffect(() => {
     let mounted = true;
 
     const resolve = async () => {
-      const id = await getViewerId().catch(() => null);
+      const account = await getViewerAccount().catch(() => null);
       if (!mounted) return;
-      if (!id) {
-        setState({ id: null, member: false, loading: false });
+      if (!account) {
+        setState({ id: null, email: null, member: false, loading: false });
         return;
       }
       const member = await isCourseMember().catch(() => false);
-      if (mounted) setState({ id, member, loading: false });
+      if (mounted) setState({ id: account.id, email: account.email, member, loading: false });
     };
 
     void resolve();
@@ -125,21 +126,43 @@ export function CourseShell({ active, children }: { active: CourseTab; children:
               </span>
             </Link>
 
-            {!viewer.loading && (
+            {/*
+              세션을 아직 모를 때는 로그아웃 상태로 그립니다. `!viewer.loading &&`로
+              감싸 두면 첫 화면에서 로그인·가입 버튼 자리가 통째로 비어, 처음 온 학생에게는
+              들어갈 길이 없는 페이지로 보입니다.
+            */}
+            {(
               viewer.id ? (
-                <Link
-                  href={COURSE_WORKSPACE_HREF}
-                  className={cn("shrink-0 rounded-lg px-3 py-2 text-sm font-bold text-[#475569] hover:bg-[#F1F5F9]", focusRing)}
-                >
-                  내 워크스페이스
-                </Link>
+                <div className="flex min-w-0 shrink-0 items-center gap-1.5">
+                  {/* 어느 계정으로 보고 있는지. 잘못된 메일로 들어온 학생이 가장 먼저 확인할 값입니다. */}
+                  {viewer.email && (
+                    <span className="hidden max-w-[14rem] truncate text-xs font-semibold text-[#94A3B8] sm:block" title={viewer.email}>
+                      {viewer.email}
+                    </span>
+                  )}
+                  <Link
+                    href={COURSE_WORKSPACE_HREF}
+                    className={cn("rounded-lg px-3 py-2 text-sm font-bold text-[#475569] hover:bg-[#F1F5F9]", focusRing)}
+                  >
+                    내 워크스페이스
+                  </Link>
+                  <SignOutButton />
+                </div>
               ) : (
-                <Link
-                  href={loginHref(pathname ?? courseHref())}
-                  className={cn("inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[#2563EB] px-3.5 py-2 text-sm font-bold text-white hover:bg-[#1D4ED8]", focusRing)}
-                >
-                  <LogIn size={15} />로그인
-                </Link>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Link
+                    href={loginHref(pathname ?? courseHref())}
+                    className={cn("rounded-lg px-3 py-2 text-sm font-bold text-[#475569] hover:bg-[#F1F5F9]", focusRing)}
+                  >
+                    로그인
+                  </Link>
+                  <Link
+                    href={COURSE_SIGNUP_HREF}
+                    className={cn("inline-flex items-center gap-1.5 rounded-lg bg-[#2563EB] px-3.5 py-2 text-sm font-bold text-white hover:bg-[#1D4ED8]", focusRing)}
+                  >
+                    <LogIn size={15} />수강생 가입
+                  </Link>
+                </div>
               )
             )}
           </div>
@@ -163,20 +186,69 @@ export function CourseShell({ active, children }: { active: CourseTab; children:
   );
 }
 
+/**
+ * 로그아웃.
+ *
+ * 없으면 다른 메일로 들어온 학생이 계정을 바꿀 길이 없습니다 — 지금까지
+ * 과목 화면에는 로그아웃이 아예 없었습니다.
+ */
+function SignOutButton() {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+
+  const leave = async () => {
+    setBusy(true);
+    try {
+      await signOutViewer();
+      router.replace(courseHref());
+      // 세션이 바뀐 것을 화면 전체가 다시 읽게 합니다.
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={() => void leave()}
+      disabled={busy}
+      aria-label="로그아웃"
+      title="로그아웃"
+      className={cn(
+        "grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[#94A3B8] transition-colors",
+        focusRing,
+        "hover:bg-[#F1F5F9] hover:text-[#475569] disabled:opacity-40",
+      )}
+    >
+      <LogOut size={16} />
+    </button>
+  );
+}
+
 /** 로그인해야 쓸 수 있는 자리에 버튼 대신 놓는 안내. 눌렀다가 튕기는 것보다 먼저 알려 줍니다. */
 export function SignInPrompt({ action }: { action: string }) {
   const pathname = usePathname();
   return (
-    <Link
-      href={loginHref(pathname ?? courseHref())}
-      className={cn(
-        "inline-flex items-center gap-2 rounded-xl border border-[#CBD5E1] bg-white px-4 py-2.5 text-sm font-bold text-[#475569]",
-        focusRing,
-        "transition-colors hover:border-[#2563EB] hover:text-[#2563EB]",
-      )}
-    >
-      <LogIn size={15} />로그인하고 {action}
-    </Link>
+    <div className="flex flex-wrap items-center gap-2">
+      <Link
+        href={loginHref(pathname ?? courseHref())}
+        className={cn(
+          "inline-flex items-center gap-2 rounded-xl border border-[#CBD5E1] bg-white px-4 py-2.5 text-sm font-bold text-[#475569]",
+          focusRing,
+          "transition-colors hover:border-[#2563EB] hover:text-[#2563EB]",
+        )}
+      >
+        <LogIn size={15} />로그인하고 {action}
+      </Link>
+      {/* 처음 오는 학생에게는 가입이 먼저입니다. 로그인만 보여 주면 들어올 길이 없습니다. */}
+      <Link
+        href={COURSE_SIGNUP_HREF}
+        className={cn("rounded-xl px-3 py-2.5 text-sm font-bold text-[#2563EB] hover:underline", focusRing)}
+      >
+        수강생 가입
+      </Link>
+    </div>
   );
 }
 

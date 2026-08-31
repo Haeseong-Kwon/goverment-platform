@@ -8,6 +8,7 @@
  * 저장 버튼을 누르기 전에 사용자에게 이유를 알려 주기 위한 것이지 보안 경계가 아닙니다.
  */
 
+import { supabase } from "../supabase";
 import { requireClient, getProfileNames } from "./WorkspaceService";
 import { requireAuthUserId, getAuthUserId } from "./sessionCache";
 import {
@@ -698,6 +699,32 @@ export async function getCourseStats(): Promise<CourseStats> {
 
 /** 현재 로그인한 사용자 id. 화면이 "내 글인가"를 판단해 수정·삭제를 보여 줍니다. */
 export const getViewerId = getAuthUserId;
+
+/**
+ * 지금 로그인한 계정(id와 메일 주소).
+ *
+ * `AuthService.getCurrentUser()`를 쓰지 않습니다. 그 함수는 `NEXT_PUBLIC_DEV_BYPASS`가
+ * 켜져 있으면 실제 세션 대신 가짜 사용자를 돌려줍니다 — 창업자 워크스페이스를 로그인
+ * 없이 열어 보기 위한 장치입니다. 과목 영역은 진짜 인증이 목적이라 그 장치를 보면 안
+ * 됩니다. (그대로 뒀을 때 가입 화면이 열리자마자 "이미 로그인됨"으로 판단해 튕겼습니다.)
+ *
+ * 메일 주소가 필요한 이유: 자격이 없는 계정에게 "지금 어느 계정으로 로그인되어 있는지"를
+ * 보여 줘야 무엇을 고쳐야 할지 압니다.
+ */
+export async function signOutViewer() {
+  // `AuthService.signOut()`을 쓰지 않습니다. 그쪽은 DEV_BYPASS일 때 아무 일도 하지
+  // 않고 돌아가서, 개발 중에는 실제 세션이 끊기지 않습니다(getViewerAccount와 짝이 어긋납니다).
+  if (!supabase) return;
+  await supabase.auth.signOut();
+}
+
+export async function getViewerAccount(): Promise<{ id: string; email: string | null } | null> {
+  const client = supabase;
+  if (!client) return null;
+  const { data } = await client.auth.getSession();
+  const user = data.session?.user;
+  return user ? { id: user.id, email: user.email ?? null } : null;
+}
 
 /**
  * 이 계정이 과목 구성원인가 — 한양대 메일로 인증까지 마쳤는가.

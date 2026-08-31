@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Loader2, MailCheck, Presentation, Users } from "lucide-react";
-import { getCurrentUser, requestPasswordReset, signIn, signUp, toAuthMessage } from "@/lib/services/AuthService";
+import { GraduationCap, MailCheck, Presentation, Users } from "lucide-react";
+import { requestPasswordReset, signIn, signUp, toAuthMessage } from "@/lib/services/AuthService";
+import { signOutViewer } from "@/lib/services/CourseService";
 import {
   COURSE,
   COURSE_EMAIL_DOMAIN,
@@ -14,6 +15,7 @@ import {
   courseHref,
   isCourseEmail,
 } from "./course";
+import { useViewer } from "./CourseChrome";
 import { Button, inputClass } from "@/features/startup-workspace/ui";
 import { cn } from "@/lib/utils";
 
@@ -126,31 +128,48 @@ function AuthError({ children }: { children: React.ReactNode }) {
 
 const authInputClass = cn(inputClass, "h-12 px-4");
 
-/** 이미 로그인한 사람은 이 화면을 볼 이유가 없습니다. 세션을 확인하는 동안만 스피너를 둡니다. */
-function useRedirectIfSignedIn() {
+/**
+ * 이 화면을 건너뛸 사람만 돌려보냅니다.
+ *
+ * 조건이 "로그인했는가"가 아니라 "로그인했고 **자격도 있는가**"입니다.
+ * 전자로 두면, 다른 메일로 가입해 자격이 없는 사람이 안내를 보고 가입 화면에
+ * 들어오는 순간 "이미 로그인됨"으로 튕겨 나갑니다 — 정작 가입시켜야 할 사람입니다.
+ *
+ * 세션은 `useViewer`가 읽습니다. 과목 화면 전체가 같은 출처를 봐야
+ * 헤더는 "로그인하세요"라 하고 로그인 화면은 "이미 로그인됨"이라 하는 일이 없습니다.
+ *
+ * **폼을 이 확인 뒤로 미루지 않습니다.** 세션 조회가 끝날 때까지 스피너를 보여 주면,
+ * 조회가 느리거나 어긋나는 순간 사용자에게는 "가입 화면이 안 뜨는" 것과 똑같습니다.
+ * 폼을 먼저 그리고, 자격이 확인된 사람만 나중에 조용히 워크스페이스로 보냅니다.
+ */
+function useSkipIfReady() {
   const router = useRouter();
-  const [checking, setChecking] = useState(true);
+  const viewer = useViewer();
 
   useEffect(() => {
-    let mounted = true;
-    getCurrentUser()
-      .then((user) => {
-        if (!mounted) return;
-        if (user) router.replace(getReturnTo());
-        else setChecking(false);
-      })
-      .catch(() => { if (mounted) setChecking(false); });
-    return () => { mounted = false; };
-  }, [router]);
+    if (!viewer.loading && viewer.id && viewer.member) router.replace(getReturnTo());
+  }, [viewer.loading, viewer.id, viewer.member, router]);
 
-  return checking;
+  return viewer;
 }
 
-function Checking() {
+/**
+ * 자격 없는 계정으로 로그인한 채 가입·로그인 화면에 온 경우.
+ * 무엇이 문제인지(어느 계정인지)를 먼저 말해야 다음 행동을 정할 수 있습니다.
+ */
+function SignedInAsOther({ email, mode }: { email: string | null; mode: "signup" | "login" }) {
   return (
-    <main className="grid min-h-screen place-items-center bg-white">
-      <Loader2 className="animate-spin text-[#2563EB]" size={28} />
-    </main>
+    <div className="mb-6 rounded-xl border border-[#FDE68A] bg-[#FFFBEB] p-4 text-sm leading-6 text-[#B45309]">
+      <p className="font-bold">
+        지금 {email ?? "다른 계정"}으로 로그인되어 있습니다
+      </p>
+      <p className="mt-1 font-medium">
+        이 계정은 @{COURSE_EMAIL_DOMAIN} 주소가 아니거나 메일 인증이 끝나지 않아 글을 쓸 수 없습니다.
+        {mode === "signup"
+          ? " 아래에서 학교 메일로 새로 가입하면 지금 계정은 로그아웃됩니다."
+          : " 학교 메일 계정으로 다시 로그인해 주세요."}
+      </p>
+    </div>
   );
 }
 
@@ -161,7 +180,7 @@ export function CourseSignupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
-  const checking = useRedirectIfSignedIn();
+  const viewer = useSkipIfReady();
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -179,6 +198,9 @@ export function CourseSignupPage() {
     setLoading(true);
     setError(null);
     try {
+      // 다른 계정 세션을 쥔 채 가입하면 새 계정과 옛 세션이 섞여 "로그인은 되어 있는데
+      // 자격은 없는" 상태가 그대로 남습니다. 먼저 끊고 시작합니다.
+      if (viewer.id) await signOutViewer().catch(() => undefined);
       await signUp(form.email.trim(), form.password, form.fullName.trim());
       setSentTo(form.email.trim());
     } catch (reason) {
@@ -187,8 +209,6 @@ export function CourseSignupPage() {
       setLoading(false);
     }
   };
-
-  if (checking) return <Checking />;
 
   if (sentTo) {
     return (
@@ -225,6 +245,8 @@ export function CourseSignupPage() {
         </div>
       }
     >
+      {!viewer.loading && viewer.id && !viewer.member && <SignedInAsOther email={viewer.email} mode="signup" />}
+
       <form onSubmit={submit} className="space-y-5">
         <AuthField label="이름" hint="확정 팀 명단에 적을 이름과 같게 써 주세요.">
           <input
@@ -278,13 +300,14 @@ export function CourseLoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [resetMode, setResetMode] = useState(false);
   const [resetSent, setResetSent] = useState(false);
-  const checking = useRedirectIfSignedIn();
+  const viewer = useSkipIfReady();
 
   const submitLogin = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoading(true);
     setError(null);
     try {
+      if (viewer.id) await signOutViewer().catch(() => undefined);
       await signIn(email.trim(), password);
       router.replace(getReturnTo());
     } catch (reason) {
@@ -306,8 +329,6 @@ export function CourseLoginPage() {
       setLoading(false);
     }
   };
-
-  if (checking) return <Checking />;
 
   if (resetMode) {
     return (
@@ -367,6 +388,8 @@ export function CourseLoginPage() {
         </div>
       }
     >
+      {!viewer.loading && viewer.id && !viewer.member && <SignedInAsOther email={viewer.email} mode="login" />}
+
       <form onSubmit={submitLogin} className="space-y-5">
         <AuthField label="학교 메일">
           <input
