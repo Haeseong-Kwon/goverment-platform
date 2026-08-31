@@ -1,0 +1,242 @@
+import { describe, expect, it } from "vitest";
+import {
+  COURSE,
+  countOpenRoles,
+  emptyToNull,
+  getProposalDeadline,
+  groupDeliverables,
+  isBoardId,
+  matchesQuery,
+  parseRecruitRoles,
+  parseTeamMembers,
+  semesterColumns,
+  sortProposals,
+  sortRecruitPosts,
+  splitTags,
+  validateOptionalUrl,
+  validateTitleAndBody,
+  type Deliverable,
+  type Proposal,
+  type RecruitPost,
+} from "./course";
+
+const recruit = (over: Partial<RecruitPost>): RecruitPost => ({
+  id: "r1",
+  authorId: "u1",
+  authorName: "김하나",
+  title: "제목",
+  content: "내용",
+  tags: [],
+  projectPhase: "IDEA",
+  recruitingRoles: [],
+  status: "Recruiting",
+  createdAt: "2026-08-01T00:00:00Z",
+  commentCount: 0,
+  ...over,
+});
+
+const proposal = (over: Partial<Proposal>): Proposal => ({
+  id: "p1",
+  createdBy: "u1",
+  companyName: "한양테크",
+  title: "제목",
+  content: "내용",
+  categories: [],
+  deadline: null,
+  contact: "",
+  createdAt: "2026-08-01T00:00:00Z",
+  commentCount: 0,
+  ...over,
+});
+
+const deliverable = (over: Partial<Deliverable>): Deliverable => ({
+  id: "d1",
+  teamId: "t1",
+  teamName: "오르카랩스",
+  phase: "midterm",
+  title: "제목",
+  summary: "요약",
+  techStack: [],
+  demoUrl: null,
+  repoUrl: null,
+  deckUrl: null,
+  videoUrl: null,
+  createdBy: "u1",
+  createdAt: "2026-08-01T00:00:00Z",
+  updatedAt: "2026-08-01T00:00:00Z",
+  commentCount: 0,
+  ...over,
+});
+
+describe("학기", () => {
+  it("모든 글이 같은 학기 컬럼을 달고 저장된다", () => {
+    expect(semesterColumns()).toEqual({
+      semester_key: COURSE.key,
+      academic_year: 2026,
+      academic_term: "2",
+      course_track: "SW창업캡스톤디자인",
+    });
+  });
+
+  it("주소의 게시판 값만 통과시킨다", () => {
+    expect(isBoardId("recruit")).toBe(true);
+    expect(isBoardId("showcase")).toBe(true);
+    expect(isBoardId("recruits")).toBe(false);
+    expect(isBoardId("__proto__")).toBe(false);
+  });
+});
+
+describe("JSONB 파싱", () => {
+  it("객체 배열에서 역할과 인원을 읽는다", () => {
+    expect(parseRecruitRoles([{ role: "백엔드", count: 2 }])).toEqual([{ role: "백엔드", count: 2 }]);
+  });
+
+  it("예전에 문자열 배열로 저장된 행도 읽는다", () => {
+    expect(parseRecruitRoles(["기획"])).toEqual([{ role: "기획", count: 1 }]);
+  });
+
+  it("배열이 아니거나 이름이 빈 값은 버린다", () => {
+    expect(parseRecruitRoles(null)).toEqual([]);
+    expect(parseRecruitRoles("백엔드")).toEqual([]);
+    expect(parseRecruitRoles([{ role: "  " }, { count: 3 }, 42])).toEqual([]);
+  });
+
+  it("인원이 숫자가 아니거나 0 이하이면 1명으로 본다", () => {
+    expect(parseRecruitRoles([{ role: "디자인", count: 0 }, { role: "PM", count: "셋" }])).toEqual([
+      { role: "디자인", count: 1 },
+      { role: "PM", count: 1 },
+    ]);
+  });
+
+  it("팀원은 이름이 있어야 명단에 오른다", () => {
+    expect(parseTeamMembers([{ name: "박민준", role: "백엔드" }, { role: "이름없음" }, "정서연"])).toEqual([
+      { name: "박민준", role: "백엔드" },
+      { name: "정서연", role: "" },
+    ]);
+  });
+
+  it("모집 인원 합계를 센다", () => {
+    expect(countOpenRoles([{ role: "a", count: 2 }, { role: "b", count: 3 }])).toBe(5);
+  });
+});
+
+describe("태그 입력", () => {
+  it("쉼표로 나누고 공백·중복·빈 값을 버린다", () => {
+    expect(splitTags(" React , 헬스케어,, React ")).toEqual(["React", "헬스케어"]);
+  });
+});
+
+describe("목록 정렬", () => {
+  it("모집 중인 글이 마감된 글보다 위에 온다", () => {
+    const posts = [
+      recruit({ id: "closed", status: "Closed", createdAt: "2026-08-10T00:00:00Z" }),
+      recruit({ id: "open", status: "Recruiting", createdAt: "2026-08-01T00:00:00Z" }),
+    ];
+    expect(sortRecruitPosts(posts).map((post) => post.id)).toEqual(["open", "closed"]);
+  });
+
+  it("같은 상태면 최신 글이 위에 온다", () => {
+    const posts = [
+      recruit({ id: "old", createdAt: "2026-08-01T00:00:00Z" }),
+      recruit({ id: "new", createdAt: "2026-08-20T00:00:00Z" }),
+    ];
+    expect(sortRecruitPosts(posts).map((post) => post.id)).toEqual(["new", "old"]);
+  });
+
+  it("원본 배열을 건드리지 않는다", () => {
+    const posts = [recruit({ id: "closed", status: "Closed" }), recruit({ id: "open" })];
+    sortRecruitPosts(posts);
+    expect(posts.map((post) => post.id)).toEqual(["closed", "open"]);
+  });
+
+  it("마감이 임박한 제안이 위로, 지난 제안이 맨 아래로 간다", () => {
+    const now = new Date("2026-08-31T00:00:00Z");
+    const proposals = [
+      proposal({ id: "expired", deadline: "2026-08-01" }),
+      proposal({ id: "none", deadline: null }),
+      proposal({ id: "soon", deadline: "2026-09-02" }),
+      proposal({ id: "later", deadline: "2026-10-01" }),
+    ];
+    expect(sortProposals(proposals, now).map((item) => item.id)).toEqual(["soon", "later", "none", "expired"]);
+  });
+});
+
+describe("제안 마감", () => {
+  const now = new Date("2026-08-31T00:00:00Z");
+
+  it("마감일이 없으면 표시하지 않는다", () => {
+    expect(getProposalDeadline(null, now)).toBeNull();
+  });
+
+  it("오늘 마감은 D-0이 아니라 '오늘 마감'으로 읽힌다", () => {
+    expect(getProposalDeadline("2026-08-31", now)).toMatchObject({ dday: 0, label: "오늘 마감", expired: false });
+  });
+
+  it("사흘 안쪽은 빨강, 일주일 안쪽은 주황", () => {
+    expect(getProposalDeadline("2026-09-02", now)?.tone).toBe("red");
+    expect(getProposalDeadline("2026-09-06", now)?.tone).toBe("amber");
+    expect(getProposalDeadline("2026-09-30", now)?.tone).toBe("blue");
+  });
+
+  it("지난 마감은 남은 일수 대신 '마감'으로 끝낸다", () => {
+    expect(getProposalDeadline("2026-08-30", now)).toMatchObject({ label: "마감", expired: true });
+  });
+});
+
+describe("결과물", () => {
+  it("중간과 기말을 갈라 각각 최신 수정순으로 둔다", () => {
+    const grouped = groupDeliverables([
+      deliverable({ id: "m1", phase: "midterm", updatedAt: "2026-09-01T00:00:00Z" }),
+      deliverable({ id: "f1", phase: "final", updatedAt: "2026-12-01T00:00:00Z" }),
+      deliverable({ id: "m2", phase: "midterm", updatedAt: "2026-10-01T00:00:00Z" }),
+    ]);
+    expect(grouped.midterm.map((item) => item.id)).toEqual(["m2", "m1"]);
+    expect(grouped.final.map((item) => item.id)).toEqual(["f1"]);
+  });
+
+  it("한쪽 단계가 비어도 빈 배열로 답한다", () => {
+    expect(groupDeliverables([])).toEqual({ midterm: [], final: [] });
+  });
+});
+
+describe("검색", () => {
+  it("제목에 없어도 역할이나 태그에서 걸린다", () => {
+    expect(matchesQuery(["캠퍼스 앱", "백엔드", "React"], "백엔드")).toBe(true);
+  });
+
+  it("대소문자를 가리지 않는다", () => {
+    expect(matchesQuery(["Next.js"], "next")).toBe(true);
+  });
+
+  it("검색어가 비면 전부 통과한다", () => {
+    expect(matchesQuery(["아무거나"], "   ")).toBe(true);
+  });
+
+  it("빈 값이 섞여 있어도 터지지 않는다", () => {
+    expect(matchesQuery([null, undefined, "백엔드"], "백엔드")).toBe(true);
+  });
+});
+
+describe("입력 검증", () => {
+  it("제목과 내용이 짧으면 저장 전에 막는다", () => {
+    expect(validateTitleAndBody("가", "충분히 긴 내용입니다")).toContain("제목");
+    expect(validateTitleAndBody("괜찮은 제목", "짧음")).toContain("내용");
+    expect(validateTitleAndBody("괜찮은 제목", "열 자가 넘는 본문입니다")).toBeNull();
+  });
+
+  it("공백만 있는 입력은 빈 입력으로 본다", () => {
+    expect(validateTitleAndBody("   ", "열 자가 넘는 본문입니다")).toContain("제목");
+  });
+
+  it("링크는 비워 둘 수 있지만 적었다면 http/https여야 한다", () => {
+    expect(validateOptionalUrl("", "저장소")).toBeNull();
+    expect(validateOptionalUrl("https://github.com/team/repo", "저장소")).toBeNull();
+    expect(validateOptionalUrl("github.com/team/repo", "저장소")).toContain("저장소");
+    expect(validateOptionalUrl("javascript:alert(1)", "저장소")).toContain("http/https");
+  });
+
+  it("빈 링크 칸은 빈 문자열이 아니라 null로 저장된다", () => {
+    expect(emptyToNull("  ")).toBeNull();
+    expect(emptyToNull(" https://a.b ")).toBe("https://a.b");
+  });
+});

@@ -1,13 +1,3 @@
--- Enable RLS
-ALTER TABLE IF EXISTS profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS semester_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS recruitment_posts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS recruitment_post_comments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS notifications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS team_registrations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS corporate_proposals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS videos ENABLE ROW LEVEL SECURITY;
-
 -- 1. Profiles Table (Students/Users)
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY DEFAULT auth.uid(),
@@ -147,6 +137,24 @@ ALTER TABLE IF EXISTS corporate_proposals ADD COLUMN IF NOT EXISTS course_track 
 ALTER TABLE IF EXISTS videos ADD COLUMN IF NOT EXISTS instructor TEXT;
 ALTER TABLE IF EXISTS videos ADD COLUMN IF NOT EXISTS duration TEXT;
 ALTER TABLE IF EXISTS videos ADD COLUMN IF NOT EXISTS view_count INTEGER DEFAULT 0;
+
+-- RLS는 반드시 CREATE TABLE **뒤에** 켭니다.
+--
+-- 원래 이 블록은 파일 맨 위에 `ALTER TABLE IF EXISTS ...` 형태로 있었습니다.
+-- 새 프로젝트에서는 그 시점에 테이블이 없어 `IF EXISTS`가 조용히 넘어갔고,
+-- 뒤이어 만들어진 테이블 8개는 RLS가 꺼진 채 남았습니다 — 아래 정책들이 전부
+-- 무효가 되어, 브라우저 번들에 들어 있는 anon 키만으로 남의 이름으로 글을 쓰고
+-- 지울 수 있는 상태였습니다. 이미 배포된 프로젝트는 015가 고칩니다.
+--
+-- `IF EXISTS`를 쓰지 않습니다. 순서가 어긋나면 조용히 넘어가는 대신 실패해야 합니다.
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE semester_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE recruitment_posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE recruitment_post_comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE team_registrations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE corporate_proposals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE videos ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Public Profiles are viewable by everyone" ON profiles;
 DROP POLICY IF EXISTS "Users can create their own profile" ON profiles;

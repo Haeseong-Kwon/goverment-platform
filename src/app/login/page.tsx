@@ -10,6 +10,22 @@ import { DEV_BYPASS } from "@/lib/dev/devMode";
 import { getCurrentUser, requestPasswordReset, signIn, toAuthMessage } from "@/lib/services/AuthService";
 import { getStartupProfile, resolveWorkspaceDestination } from "@/lib/services/WorkspaceService";
 
+/**
+ * 로그인 전에 보던 화면(`?next=`).
+ *
+ * 과목 게시판처럼 로그인 없이 읽히는 화면에서 글을 쓰려고 로그인하면, 워크스페이스가
+ * 아니라 보던 글로 돌아와야 합니다.
+ *
+ * 같은 사이트의 경로만 받습니다. 값을 그대로 믿으면 `?next=https://악성사이트`로
+ * 우리 로그인 화면을 거쳐 외부로 튕기는 링크를 만들 수 있습니다(열린 리다이렉트).
+ * `//`로 시작하는 값도 브라우저는 외부 주소로 읽으므로 함께 막습니다.
+ */
+function getReturnTo(): string | null {
+  if (typeof window === "undefined") return null;
+  const next = new URLSearchParams(window.location.search).get("next");
+  return next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -35,7 +51,7 @@ export default function LoginPage() {
           return;
         }
         const profile = await getStartupProfile().catch(() => null);
-        router.replace(profile ? resolveWorkspaceDestination(profile) : "/onboarding");
+        router.replace(getReturnTo() ?? (profile ? resolveWorkspaceDestination(profile) : "/onboarding"));
       })
       .catch(() => { if (mounted) setCheckingSession(false); });
     return () => { mounted = false; };
@@ -48,7 +64,7 @@ export default function LoginPage() {
     try {
       await signIn(email, password);
       const profile = await getStartupProfile().catch(() => null);
-      router.replace(profile ? resolveWorkspaceDestination(profile) : "/onboarding");
+      router.replace(getReturnTo() ?? (profile ? resolveWorkspaceDestination(profile) : "/onboarding"));
     } catch (reason) {
       setError(toAuthMessage(reason, "로그인에 실패했습니다."));
       setLoading(false);

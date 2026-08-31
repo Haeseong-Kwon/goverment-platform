@@ -7,6 +7,7 @@
 | 영역 | 경로 | 역할 |
 |------|------|------|
 | 공개 소개 | `/`, `/manager/landing`, `/workspace-entry` | 창업자·주관기관 랜딩과 역할 선택 |
+| 대학 과목 | `/course`, `/course/{recruit\|proposal\|team\|showcase}` | 한양대 ERICA SW창업캡스톤디자인 게시판(팀빌딩·기업제안·확정 팀·중간/기말 결과물) |
 | 인증 | `/login`, `/signup`, `/auth/callback`, `/auth/reset` | 이메일 로그인, 인증 메일 콜백, 비밀번호 재설정 |
 | 창업자 준비 (`pre_founder`) | `/onboarding`, `/founder/*` | 팀 TODO, 마감 캘린더, AI 진단, 계산기, 법인 설립, 보관함 |
 | 협약 수행 (`founder`) | `/workspace/*` | 정산 사전검증, 사전심의 합본, 상태 트래커, 보관함 |
@@ -79,7 +80,30 @@ schema.sql → 002-manager-review.sql → 003-profile-role-lock.sql → 004-seed
            → 006-submission-evidence.sql → 007-onboarding-team-read.sql → 008-completion.sql
            → 010-kstartup-announcements.sql → 011-calendar-announcement-link.sql
            → 012-comment-attachments.sql → 013-real-announcement-deadlines.sql
+           → 014-capstone-course.sql → 015-enable-legacy-rls.sql
 ```
+
+`015`는 **반드시 적용해야 합니다.** `schema.sql`의 RLS 활성화 블록이 `ALTER TABLE IF EXISTS`
+형태로 `CREATE TABLE`보다 **먼저** 있어서, 새 프로젝트에서는 조용히 no-op이 되고 그 뒤 만들어진
+레거시 테이블 8개(`profiles`·`semester_profiles`·`recruitment_posts`·`recruitment_post_comments`·
+`notifications`·`team_registrations`·`corporate_proposals`·`videos`)가 RLS 꺼진 채 남았습니다.
+그 아래 정의된 정책이 전부 무효라, 브라우저 번들에 들어 있는 anon 키만으로 남의 이름으로 글을
+쓰고 지울 수 있었습니다(실측 확인). `015`가 RLS를 실제로 켭니다.
+
+RLS를 켜면 가입 직후(이메일 인증 전, 세션 없음) 브라우저의 `profiles` INSERT가 막히므로,
+`015`는 `auth.users` 트리거로 프로필 생성 경로를 먼저 세우고 기존 계정을 백필합니다.
+
+`schema.sql`도 함께 고쳤습니다 — ENABLE 블록을 `CREATE TABLE` 뒤로 옮기고 `IF EXISTS`를 뗐습니다.
+순서가 어긋나면 조용히 넘어가는 대신 실패합니다.
+
+`014`는 과목 게시판(`/course`)을 엽니다. 팀빌딩 모집·기업 제안·확정 팀은 `schema.sql`에 이미
+있던 테이블(`recruitment_posts`·`corporate_proposals`·`team_registrations`)을 그대로 쓰고,
+결과물(`team_deliverables`)과 네 게시판 공용 댓글(`course_comments`)만 새로 만듭니다.
+같은 파일에서 기존 INSERT 정책도 고칩니다 — 이전에는 로그인만 하면 `author_id`에 남의
+UUID를 넣어 다른 학생 이름으로 글을 올릴 수 있었습니다.
+
+학기는 코드 상수 하나(`src/features/course/course.ts`의 `COURSE`)가 정합니다.
+다음 학기를 열 때 이 값을 바꾸면 새 글은 새 `semester_key`로 쌓이고 지난 학기 글은 그대로 남습니다.
 
 `007`은 반드시 적용해야 합니다. 없으면 가입 후 온보딩 마지막 단계가 항상 실패합니다.
 

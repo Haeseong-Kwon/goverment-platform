@@ -6,11 +6,13 @@ import {
   CalendarDays,
   ChevronRight,
   ClipboardCheck,
+  GraduationCap,
   Lock,
   MessageCircle,
   ShieldCheck,
   Users,
 } from "lucide-react";
+import { COURSE } from "@/features/course/course";
 import { FAQ_ITEMS } from "@/lib/seo";
 import { getLandingNavigation, getStartupMilestones } from "./logic";
 import type { StartupMilestone } from "./types";
@@ -26,6 +28,7 @@ function LandingNav({ role }: { role: "founder" | "manager" }) {
         <nav className="hidden gap-6 text-sm font-semibold text-[#475569] md:flex">
           <Link href="/" className={cn("hover:text-[#0F172A]", role === "founder" && "text-[#2563EB]")}>창업자</Link>
           <Link href="/manager/landing" className={cn("hover:text-[#0F172A]", role === "manager" && "text-[#2563EB]")}>주관기관</Link>
+          <Link href="/course" className="hover:text-[#0F172A]">캡스톤디자인</Link>
           <a href="#features" className="hover:text-[#0F172A]">기능</a>
         </nav>
         <div className="flex items-center gap-2">
@@ -139,8 +142,37 @@ export function FounderLanding() {
         </div>
       </section>
 
+      <CourseBand />
       <FaqSection />
     </main>
+  );
+}
+
+/**
+ * 대학 과목 게시판으로 가는 길.
+ *
+ * 수업 첫 주에 학생들이 찾는 곳은 워크스페이스가 아니라 팀빌딩 게시판입니다.
+ * 랜딩에서 한 번에 건너뛰지 못하면 로그인 화면부터 헤매게 됩니다.
+ */
+function CourseBand() {
+  return (
+    <section className="border-t border-[#E2E8F0] bg-white">
+      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-14 md:flex-row md:items-center md:justify-between md:py-16">
+        <div className="max-w-2xl">
+          <StatusBadge tone="blue">대학 과목</StatusBadge>
+          <h2 className="mt-4 text-[26px] font-bold leading-tight md:text-[32px]">
+            {COURSE.school} {COURSE.label}
+          </h2>
+          <p className="mt-3 text-sm leading-7 text-[#475569] md:text-base">
+            수강생을 위한 팀빌딩 모집, 기업 제안 프로젝트, 확정 팀 등록, 중간·기말 결과물 게시판이 열려 있습니다.
+            로그인 없이 둘러보고, 글과 댓글은 로그인 후 남깁니다.
+          </p>
+        </div>
+        <div className="shrink-0">
+          <LinkButton href="/course" size="lg" icon={<GraduationCap size={17} />}>과목 게시판 열기</LinkButton>
+        </div>
+      </div>
+    </section>
   );
 }
 
