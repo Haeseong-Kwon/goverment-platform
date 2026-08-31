@@ -588,5 +588,23 @@ export function validateOptionalUrl(value: string, label: string): string | null
   }
 }
 
+/** Supabase가 거절하는 하한선과 같은 값입니다. 더 낮게 두면 서버에서만 막혀 이유가 늦게 보입니다. */
+export const MIN_PASSWORD_LENGTH = 6;
+
+/**
+ * 가입 비밀번호 검사.
+ *
+ * 확인란을 따로 받는 이유는 가입이 되돌리기 어려운 입력이기 때문입니다 — 오타로 정한
+ * 비밀번호는 로그인할 때가 되어서야 드러나고, 그때는 메일 재설정 말고 길이 없습니다.
+ * 통과하면 null, 막히면 보여 줄 문구를 돌려줍니다.
+ */
+export function validateSignupPassword(password: string, confirm: string): string | null {
+  if (password.length < MIN_PASSWORD_LENGTH) return `비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`;
+  // 공백만 있는 비밀번호는 Supabase가 받지만 사람은 다시 입력하지 못합니다.
+  if (!password.trim()) return "비밀번호에 공백 외의 문자를 넣어 주세요.";
+  if (password !== confirm) return "비밀번호가 서로 다릅니다. 확인란을 다시 입력해 주세요.";
+  return null;
+}
+
 /** 빈 문자열을 null로. 링크 칸을 비웠을 때 DB에 ""가 쌓이면 "링크 있음"으로 오인됩니다. */
 export const emptyToNull = (value: string) => (value.trim() ? value.trim() : null);

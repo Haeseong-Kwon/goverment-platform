@@ -20,6 +20,7 @@ import {
   sortRecruitPosts,
   splitTags,
   validateOptionalUrl,
+  validateSignupPassword,
   validateTitleAndBody,
   type Deliverable,
   type DeliverablePhase,
@@ -354,6 +355,18 @@ describe("입력 검증", () => {
     expect(validateOptionalUrl("https://github.com/team/repo", "저장소")).toBeNull();
     expect(validateOptionalUrl("github.com/team/repo", "저장소")).toContain("저장소");
     expect(validateOptionalUrl("javascript:alert(1)", "저장소")).toContain("http/https");
+  });
+
+  it("가입 비밀번호는 길이와 일치를 함께 본다", () => {
+    expect(validateSignupPassword("abcdef", "abcdef")).toBeNull();
+    expect(validateSignupPassword("abc", "abc")).toContain("6자 이상");
+    expect(validateSignupPassword("abcdef", "abcdeF")).toContain("서로 다릅니다");
+    expect(validateSignupPassword("abcdef", "")).toContain("서로 다릅니다");
+  });
+
+  it("공백만으로는 비밀번호를 만들 수 없다", () => {
+    // Supabase는 받아 주지만 사람은 다시 입력하지 못합니다.
+    expect(validateSignupPassword("      ", "      ")).toContain("공백 외의 문자");
   });
 
   it("빈 링크 칸은 빈 문자열이 아니라 null로 저장된다", () => {

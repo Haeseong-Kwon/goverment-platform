@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Loader2, MailCheck, Presentation, TriangleAlert, Users } from "lucide-react";
+import { Eye, EyeOff, GraduationCap, Loader2, MailCheck, Presentation, TriangleAlert, Users } from "lucide-react";
 import { completeAuthFromUrl, requestPasswordReset, signIn, toAuthMessage } from "@/lib/services/AuthService";
 import { signOutViewer, signUpViewer } from "@/lib/services/CourseService";
 import {
@@ -13,13 +13,13 @@ import {
   COURSE_SIGNUP_HREF,
   COURSE_WORKSPACE_HREF,
   courseHref,
+  MIN_PASSWORD_LENGTH,
   isCourseEmail,
+  validateSignupPassword,
 } from "./course";
 import { useViewer } from "./CourseChrome";
-import { Button, inputClass } from "@/features/startup-workspace/ui";
+import { Button, focusRing, inputClass } from "@/features/startup-workspace/ui";
 import { cn } from "@/lib/utils";
-
-const MIN_PASSWORD_LENGTH = 6;
 
 /**
  * 로그인 뒤 돌아갈 곳(`?next=`).
@@ -129,6 +129,64 @@ function AuthError({ children }: { children: React.ReactNode }) {
 const authInputClass = cn(inputClass, "h-12 px-4");
 
 /**
+ * 비밀번호 입력.
+ *
+ * 가릴지 보일지를 사용자가 정합니다. 화면에 보이지 않는 글자를 정확히 두 번 치게
+ * 하면 오타가 날 수밖에 없고, 가입 비밀번호의 오타는 로그인할 때가 되어서야 드러납니다.
+ *
+ * 토글은 `type="button"`입니다 — 폼 안의 버튼은 기본이 submit이라, 이걸 빼먹으면
+ * 눈 아이콘을 누를 때마다 가입이 시도됩니다.
+ */
+function PasswordField({
+  label,
+  value,
+  onChange,
+  autoComplete,
+  hint,
+  placeholder = "비밀번호",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete: string;
+  hint?: string;
+  placeholder?: string;
+}) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <label className="block text-sm font-bold">
+      {label}
+      <span className="relative mt-1.5 block">
+        <input
+          required
+          type={visible ? "text" : "password"}
+          autoComplete={autoComplete}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          className={cn(authInputClass, "mt-0 pr-12")}
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((current) => !current)}
+          aria-label={visible ? "비밀번호 가리기" : "비밀번호 보기"}
+          aria-pressed={visible}
+          className={cn(
+            "absolute right-1.5 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-[#94A3B8]",
+            "transition-colors hover:bg-[#F1F5F9] hover:text-[#475569]",
+            focusRing,
+          )}
+        >
+          {visible ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+      </span>
+      {hint && <span className="mt-1.5 block text-xs font-medium text-[#94A3B8]">{hint}</span>}
+    </label>
+  );
+}
+
+/**
  * 이 화면을 건너뛸 사람만 돌려보냅니다.
  *
  * 조건이 "로그인했는가"가 아니라 "로그인했고 **자격도 있는가**"입니다.
@@ -220,7 +278,7 @@ export function CourseAuthCallbackPage() {
 
 export function CourseSignupPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ fullName: "", email: "", password: "" });
+  const [form, setForm] = useState({ fullName: "", email: "", password: "", confirm: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -234,8 +292,9 @@ export function CourseSignupPage() {
       setError(`${COURSE_EMAIL_DOMAIN} 메일로만 가입할 수 있습니다. 학교 메일 주소를 입력해 주세요.`);
       return;
     }
-    if (form.password.length < MIN_PASSWORD_LENGTH) {
-      setError(`비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`);
+    const passwordProblem = validateSignupPassword(form.password, form.confirm);
+    if (passwordProblem) {
+      setError(passwordProblem);
       return;
     }
 
@@ -324,17 +383,30 @@ export function CourseSignupPage() {
           />
         </AuthField>
 
-        <AuthField label="비밀번호" hint={`${MIN_PASSWORD_LENGTH}자 이상`}>
-          <input
-            required
-            type="password"
+        <PasswordField
+          label="비밀번호"
+          hint={`${MIN_PASSWORD_LENGTH}자 이상`}
+          autoComplete="new-password"
+          value={form.password}
+          onChange={(password) => setForm((current) => ({ ...current, password }))}
+        />
+
+        <div>
+          <PasswordField
+            label="비밀번호 확인"
             autoComplete="new-password"
-            value={form.password}
-            onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-            placeholder="비밀번호"
-            className={authInputClass}
+            placeholder="같은 비밀번호를 다시 입력"
+            value={form.confirm}
+            onChange={(confirm) => setForm((current) => ({ ...current, confirm }))}
           />
-        </AuthField>
+          {/* 저장을 누르기 전에 알려 줍니다. 제출 후에 알면 두 칸을 다시 치게 됩니다. */}
+          {form.confirm.length > 0 && form.password !== form.confirm && (
+            <p className="mt-1.5 text-xs font-semibold text-[#DC2626]">비밀번호가 서로 다릅니다.</p>
+          )}
+          {form.confirm.length > 0 && form.password === form.confirm && (
+            <p className="mt-1.5 text-xs font-semibold text-[#16A34A]">비밀번호가 일치합니다.</p>
+          )}
+        </div>
 
         {error && <AuthError>{error}</AuthError>}
 
@@ -458,17 +530,12 @@ export function CourseLoginPage() {
         </AuthField>
 
         <div>
-          <AuthField label="비밀번호">
-            <input
-              required
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="비밀번호"
-              className={authInputClass}
-            />
-          </AuthField>
+          <PasswordField
+            label="비밀번호"
+            autoComplete="current-password"
+            value={password}
+            onChange={setPassword}
+          />
           <button type="button" onClick={() => { setResetMode(true); setError(null); }} className="mt-2 text-xs font-bold text-[#2563EB]">
             비밀번호를 잊으셨나요?
           </button>
