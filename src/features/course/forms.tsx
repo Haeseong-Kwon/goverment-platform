@@ -11,12 +11,15 @@ import {
   saveDeliverable,
   createNotice,
   deleteProposalFile,
+  saveBoardGuide,
+  uploadCourseFile,
   saveSemesterProfile,
   updateNotice,
   updateProposal,
   uploadProposalFile,
 } from "@/lib/services/CourseService";
 import {
+  BOARDS,
   DELIVERABLE_PHASE_LABEL,
   PROJECT_PHASE_LABEL,
   PROPOSAL_CATEGORIES,
@@ -34,6 +37,8 @@ import {
   type CourseTeam,
   type DeliverablePhase,
   type ProjectPhase,
+  type BoardGuide,
+  type BoardId,
   type CourseFile,
   type CourseNotice,
   type Proposal,
@@ -89,6 +94,161 @@ function useSubmit(onCreated: (id: string) => void) {
   };
 
   return { saving, error, setError, run };
+}
+
+// ---------------------------------------------------------------- 게시판 안내
+
+/**
+ * 게시판 맨 위 안내. 등록과 수정이 같은 화면입니다(게시판당 한 장).
+ *
+ * 첨부는 안내가 저장된 뒤에 붙습니다 — 새로 만드는 경우 그 전에는 붙일 id가 없습니다.
+ */
+export function BoardGuideForm({
+  board,
+  current,
+  onClose,
+  onSaved,
+}: {
+  board: BoardId;
+  current: BoardGuide | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [title, setTitle] = useState(current?.title ?? "");
+  const [content, setContent] = useState(current?.content ?? "");
+  const [files, setFiles] = useState<File[]>([]);
+  const [keptFiles, setKeptFiles] = useState<CourseFile[]>(current?.files ?? []);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const pickFiles = (picked: FileList | null) => {
+    if (!picked) return;
+    const chosen = Array.from(picked);
+    const problem = chosen.map(checkAttachment).find(Boolean);
+    if (problem) { setError(problem); return; }
+    setError(null);
+    setFiles((cur) => [...cur, ...chosen]);
+  };
+
+  const submit = async () => {
+    if (content.trim().length < 5) { setError("안내 내용을 5자 이상 입력해 주세요."); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const id = await saveBoardGuide(board, { title, content });
+      for (const file of (current?.files ?? []).filter((item) => !keptFiles.some((k) => k.id === item.id))) {
+        await deleteProposalFile(file).catch(() => undefined);
+      }
+      const failures: string[] = [];
+      for (const file of files) {
+        try {
+          await uploadCourseFile({ kind: "guide", id }, file);
+        } catch (reason) {
+          failures.push(toMessage(reason, `${file.name}을(를) 올리지 못했습니다.`));
+        }
+      }
+      if (failures.length > 0) { setError(failures.join(" ")); setSaving(false); return; }
+      onSaved();
+    } catch (reason) {
+      setError(toMessage(reason, "안내를 저장하지 못했습니다."));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      title={`${BOARDS[board].label} 안내 ${current ? "수정" : "작성"}`}
+      description="이 게시판 맨 위에 항상 표시됩니다. 제출 형식·마감처럼 학기마다 달라지는 안내를 적어 주세요."
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>취소</Button>
+          <Button loading={saving} onClick={() => void submit()}>{current ? "저장" : "등록"}</Button>
+        </>
+      }
+    >
+      <div className="mt-5 space-y-4">
+        <Field label="제목" hint="비워 두면 제목 없이 내용만 표시됩니다.">
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="예: 팀등록 전 확인하세요"
+            className={inputClass}
+          />
+        </Field>
+
+        <Field label="내용" required>
+          <textarea
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+            placeholder={"이 게시판을 어떻게 쓰는지, 무엇을 언제까지 올려야 하는지 적어 주세요."}
+            className={cn(textareaClass, "min-h-40")}
+          />
+        </Field>
+
+        <fieldset>
+          <legend className="text-sm font-bold">첨부파일</legend>
+          <p className="mt-1 text-xs font-medium text-[#94A3B8]">
+            제출 양식·예시 문서를 올릴 수 있습니다. 파일당 {Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB 이하.
+          </p>
+
+          {keptFiles.length > 0 && (
+            <ul className="mt-2 space-y-1.5">
+              {keptFiles.map((file) => (
+                <li key={file.id} className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white py-2 pl-3 pr-1.5 text-xs font-semibold text-[#475569]">
+                  <Paperclip size={13} className="shrink-0 text-[#94A3B8]" />
+                  <span className="min-w-0 flex-1 truncate">{file.fileName}</span>
+                  <span className="shrink-0 tabular-nums text-[#94A3B8]">{formatBytes(file.sizeBytes)}</span>
+                  <IconButton
+                    label={`${file.fileName} 삭제`}
+                    icon={<X size={13} />}
+                    onClick={() => setKeptFiles((cur) => cur.filter((item) => item.id !== file.id))}
+                    className="h-6 w-6"
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {files.length > 0 && (
+            <ul className="mt-2 space-y-1.5">
+              {files.map((file, index) => (
+                <li key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 pl-3 pr-1.5 text-xs font-semibold text-[#475569]">
+                  <Paperclip size={13} className="shrink-0 text-[#94A3B8]" />
+                  <span className="min-w-0 flex-1 truncate">{file.name}</span>
+                  <span className="shrink-0 tabular-nums text-[#94A3B8]">{formatBytes(file.size)}</span>
+                  <IconButton
+                    label={`${file.name} 첨부 취소`}
+                    icon={<X size={13} />}
+                    onClick={() => setFiles((cur) => cur.filter((_, at) => at !== index))}
+                    className="h-6 w-6"
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            accept={ATTACHMENT_ACCEPT}
+            onChange={(event) => pickFiles(event.target.files)}
+            className="hidden"
+            aria-hidden
+            tabIndex={-1}
+          />
+          <Button variant="secondary" size="sm" icon={<Paperclip size={14} />} onClick={() => fileInput.current?.click()} className="mt-2">
+            파일 선택
+          </Button>
+        </fieldset>
+
+        {error && <Notice tone="error" onDismiss={() => setError(null)}>{error}</Notice>}
+      </div>
+    </Modal>
+  );
 }
 
 // ---------------------------------------------------------------- 공지

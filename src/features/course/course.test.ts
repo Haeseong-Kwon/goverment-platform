@@ -6,6 +6,7 @@ import {
   MAX_ATTACHMENT_BYTES,
   checkAttachment,
   countOpenRoles,
+  courseHref,
   emptyToNull,
   formatBytes,
   getProposalDeadline,
@@ -102,10 +103,18 @@ describe("학기", () => {
     expect(isBoardId("me")).toBe(false);
   });
 
+  it("이름표가 바뀌어도 주소는 그대로다", () => {
+    // 라벨은 학기마다 바뀔 수 있지만 주소가 바뀌면 공유된 링크가 전부 깨집니다.
+    expect(courseHref("recruit")).toBe("/course/recruit");
+    expect(courseHref("team")).toBe("/course/team");
+    expect(BOARDS.recruit.label).toBe("팀원모집");
+    expect(BOARDS.team.label).toBe("팀등록");
+  });
+
   it("게시판 순서와 설정이 어긋나지 않는다", () => {
     // 탭·홈 카드·라우트가 전부 BOARD_ORDER를 돌므로, 설정이 빠진 값이 섞이면
     // 화면에서 undefined를 읽습니다.
-    expect(BOARD_ORDER).toEqual(["notice", "intro", "recruit", "proposal", "team", "showcase"]);
+    expect(BOARD_ORDER).toEqual(["notice", "intro", "recruit", "team", "proposal", "showcase"]);
     for (const board of BOARD_ORDER) {
       expect(BOARDS[board]?.id).toBe(board);
       expect(BOARDS[board].createLabel.length).toBeGreaterThan(0);
@@ -400,13 +409,15 @@ describe("첨부파일", () => {
 
   it("스토리지 경로에 한글·공백을 남기지 않는다", () => {
     // 원래 파일명을 그대로 쓰면 URL이 깨집니다. 보여 줄 이름은 DB에 따로 둡니다.
-    const path = toStoragePath("p1", "과업 지시서 (최종).pdf", "abc123");
+    const path = toStoragePath("proposals", "p1", "과업 지시서 (최종).pdf", "abc123");
     expect(path).toBe("proposals/p1/abc123.pdf");
     expect(/^[\x20-\x7e]+$/.test(path)).toBe(true);
   });
 
   it("확장자가 없어도 경로를 만든다", () => {
-    expect(toStoragePath("p1", "README", "abc123")).toBe("proposals/p1/abc123");
+    expect(toStoragePath("proposals", "p1", "README", "abc123")).toBe("proposals/p1/abc123");
+    // 안내 첨부는 다른 폴더로 갑니다 — 같은 버킷에서 주인이 섞이지 않게.
+    expect(toStoragePath("guides", "g1", "양식.hwp", "xyz")).toBe("guides/g1/xyz.hwp");
   });
 
   it("사람이 읽는 크기로 바꾼다", () => {

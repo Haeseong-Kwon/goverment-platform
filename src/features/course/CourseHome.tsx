@@ -22,9 +22,9 @@ const BOARD_ICONS: Record<BoardId, typeof Users> = {
 const STAT_LABELS: Record<BoardId, string> = {
   notice: "공지",
   intro: "자기소개",
-  recruit: "모집 중인 팀",
+  recruit: "모집 중인 글",
   proposal: "기업 제안",
-  team: "확정 팀",
+  team: "등록된 팀",
   showcase: "등록된 결과물",
 };
 
@@ -40,9 +40,9 @@ const statValue = (stats: CourseStats, board: BoardId) =>
 const FLOW = [
   { step: "00", title: "공지 확인", desc: "마감과 발표 순서는 수업게시판에 올라옵니다.", board: "notice" as BoardId },
   { step: "01", title: "나를 알리기", desc: "자기소개를 올려 두면 팀이 먼저 찾아옵니다.", board: "intro" as BoardId },
-  { step: "02", title: "팀 찾기", desc: "모집글을 올리거나 댓글로 지원합니다.", board: "recruit" as BoardId },
-  { step: "03", title: "아이템 정하기", desc: "기업 제안 중에서 고르거나 자체 아이템으로 갑니다.", board: "proposal" as BoardId },
-  { step: "04", title: "팀 확정", desc: "구성이 끝나면 팀장이 팀을 등록합니다.", board: "team" as BoardId },
+  { step: "02", title: "팀원 찾기", desc: "모집글을 올리거나 댓글로 지원합니다.", board: "recruit" as BoardId },
+  { step: "03", title: "팀 등록", desc: "구성이 끝나면 팀장이 팀을 등록합니다.", board: "team" as BoardId },
+  { step: "04", title: "아이템 정하기", desc: "기업 제안에 댓글로 신청하거나 자체 아이템으로 갑니다.", board: "proposal" as BoardId },
   { step: "05", title: "중간 · 기말 발표", desc: "결과물을 올려 다른 팀과 공유합니다.", board: "showcase" as BoardId },
 ];
 

@@ -83,6 +83,7 @@ schema.sql → 002-manager-review.sql → 003-profile-role-lock.sql → 004-seed
            → 014-capstone-course.sql → 015-enable-legacy-rls.sql
            → 016-course-membership.sql → 017-intro-board.sql → 018-proposal-files.sql
            → 019-course-notices.sql → 020-proposals-staff-only.sql
+           → 021-board-guides.sql
 ```
 
 `015`는 **반드시 적용해야 합니다.** `schema.sql`의 RLS 활성화 블록이 `ALTER TABLE IF EXISTS`
@@ -134,6 +135,15 @@ ON CONFLICT (email) DO NOTHING;
 `020`은 기업 제안을 운영진 전용으로 좁힙니다. 수강생은 **댓글로 신청**하며, 댓글 정책은
 그대로라 읽고 쓰는 데 제약이 없습니다. 수정·삭제를 작성자 본인이 아니라 운영진 전체에게
 여는 것은 공지와 같은 이유입니다 — 교수님이 올린 제안의 마감일을 조교가 못 고치면 곤란합니다.
+
+`021`은 게시판마다 맨 위에 붙는 안내(`course_board_guides`)를 엽니다. 게시판당 한 장이고
+운영진만 씁니다. 같은 파일에서 `proposal_files`를 `course_files`로 넓혀 제안과 안내가
+한 표를 씁니다 — 주인이 둘이 되므로 `num_nonnulls(proposal_id, guide_id) = 1` 제약으로
+정확히 하나만 채워지게 묶고, 외래키를 살려 원본이 지워질 때 첨부도 함께 사라지게 합니다.
+
+게시판 이름표(`팀원모집`·`팀등록`)와 순서는 `course.ts`의 `BOARDS`·`BOARD_ORDER`가 정합니다.
+**주소(`/course/recruit`, `/course/team`)는 이름표와 무관하게 고정입니다** — 이름이 바뀌었다고
+주소까지 바꾸면 이미 공유된 링크가 전부 깨집니다.
 
 학기는 코드 상수 하나(`src/features/course/course.ts`의 `COURSE`)가 정합니다.
 다음 학기를 열 때 이 값을 바꾸면 새 글은 새 `semester_key`로 쌓이고 지난 학기 글은 그대로 남습니다.

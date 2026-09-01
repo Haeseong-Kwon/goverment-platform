@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarClock, MessageSquare, Pin, Plus, Search, Users } from "lucide-react";
+import { CalendarClock, Download, Info, MessageSquare, Paperclip, Pencil, Pin, Plus, Search, Users } from "lucide-react";
 import {
+  getBoardGuide,
   getDeliverables,
   getNotices,
   getProposals,
   getRecruitPosts,
+  getProposalFileUrl,
   getSemesterProfiles,
   getTeams,
 } from "@/lib/services/CourseService";
@@ -25,6 +27,7 @@ import {
   countOpenRoles,
   courseHref,
   sortNotices,
+  formatBytes,
   formatDateTime,
   getProposalDeadline,
   groupDeliverables,
@@ -36,13 +39,14 @@ import {
   type Deliverable,
   type DeliverablePhase,
   type Proposal,
+  type BoardGuide,
   type CourseNotice,
   type RecruitPost,
   type SemesterProfile,
   type StudentStatus,
 } from "./course";
 import { CourseShell, WriteGate, useViewer } from "./CourseChrome";
-import { DeliverableForm, NoticeForm, ProposalForm, RecruitForm, SemesterProfileForm, TeamForm } from "./forms";
+import { BoardGuideForm, DeliverableForm, NoticeForm, ProposalForm, RecruitForm, SemesterProfileForm, TeamForm } from "./forms";
 import {
   Button,
   ChoiceChip,
@@ -277,6 +281,77 @@ const filterOptions: Record<BoardId, Array<{ value: string; label: string }>> = 
   })),
 };
 
+/**
+ * 게시판 맨 위 안내.
+ *
+ * 게시판 설명(BOARDS[].description)은 코드 상수라 학기 중에 못 바꿉니다. 그 아래
+ * 운영진이 직접 쓰는 자리를 둡니다 — 제출 형식이나 마감처럼 학기마다 달라지는 이야기.
+ */
+function GuideBlock({
+  board,
+  guide,
+  canEdit,
+  onEdit,
+}: {
+  board: BoardId;
+  guide: BoardGuide | null;
+  canEdit: boolean;
+  onEdit: () => void;
+}) {
+  if (!guide) {
+    // 안내가 없으면 학생에게는 아무것도 보이지 않습니다. 운영진에게만 만들 길을 둡니다.
+    if (!canEdit) return null;
+    return (
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed border-[#CBD5E1] bg-white px-5 py-4">
+        <p className="text-sm text-[#64748B]">
+          {BOARDS[board].label} 게시판 맨 위에 표시할 안내를 작성할 수 있습니다.
+        </p>
+        <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={onEdit}>안내 작성</Button>
+      </div>
+    );
+  }
+
+  return (
+    <section className="animate-in mb-6 rounded-2xl border border-[#BFDBFE] bg-[#EFF6FF] p-5 md:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h2 className="flex items-center gap-2 text-base font-bold text-[#1D4ED8]">
+          <Info size={17} className="shrink-0" />
+          {guide.title || `${BOARDS[board].label} 안내`}
+        </h2>
+        {canEdit && (
+          <Button variant="secondary" size="sm" icon={<Pencil size={13} />} onClick={onEdit}>안내 수정</Button>
+        )}
+      </div>
+
+      {/* 작성자가 넣은 줄바꿈을 살립니다. 안내는 항목을 나열하는 글이라 한 덩어리로 붙으면 안 읽힙니다. */}
+      <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-[#334155]">{guide.content}</p>
+
+      {guide.files.length > 0 && (
+        <ul className="mt-4 space-y-2">
+          {guide.files.map((file) => (
+            <li key={file.id}>
+              <a
+                href={getProposalFileUrl(file.storagePath)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  "flex items-center gap-3 rounded-xl border border-[#BFDBFE] bg-white px-4 py-2.5 transition-colors hover:border-[#2563EB]",
+                  focusRing,
+                )}
+              >
+                <Paperclip size={14} className="shrink-0 text-[#94A3B8]" />
+                <span className="min-w-0 flex-1 truncate text-sm font-bold">{file.fileName}</span>
+                <span className="shrink-0 text-xs font-semibold tabular-nums text-[#94A3B8]">{formatBytes(file.sizeBytes)}</span>
+                <Download size={14} className="shrink-0 text-[#2563EB]" />
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export function BoardListPage({ board }: { board: BoardId }) {
   const config = BOARDS[board];
   const router = useRouter();
@@ -286,12 +361,17 @@ export function BoardListPage({ board }: { board: BoardId }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [writing, setWriting] = useState(false);
+  const [guide, setGuide] = useState<BoardGuide | null>(null);
+  const [editingGuide, setEditingGuide] = useState(false);
 
   useEffect(() => {
     let mounted = true;
     setData(null);
+    setGuide(null);
     setQuery("");
     setFilter("all");
+    // 안내를 못 읽어도 목록은 떠야 합니다. 안내는 덧붙는 정보입니다.
+    getBoardGuide(board).then((row) => { if (mounted) setGuide(row); }).catch(() => undefined);
     loaders[board]()
       .then((loaded) => { if (mounted) setData(loaded); })
       .catch((reason) => {
@@ -351,6 +431,8 @@ export function BoardListPage({ board }: { board: BoardId }) {
         </div>
       </div>
 
+      <GuideBlock board={board} guide={guide} canEdit={viewer.staff} onEdit={() => setEditingGuide(true)} />
+
       {error && <Notice tone="error" className="mb-4" onDismiss={() => setError(null)}>{error}</Notice>}
 
       {data === null ? (
@@ -389,6 +471,17 @@ export function BoardListPage({ board }: { board: BoardId }) {
         </>
       )}
 
+      {editingGuide && (
+        <BoardGuideForm
+          board={board}
+          current={guide}
+          onClose={() => setEditingGuide(false)}
+          onSaved={() => {
+            setEditingGuide(false);
+            getBoardGuide(board).then(setGuide).catch(() => undefined);
+          }}
+        />
+      )}
       {writing && board === "notice" && <NoticeForm onClose={() => setWriting(false)} onCreated={onCreated} />}
       {writing && board === "intro" && (
         <SemesterProfileForm

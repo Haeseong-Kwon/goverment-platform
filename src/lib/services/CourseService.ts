@@ -20,6 +20,7 @@ import {
   parseTeamMembers,
   semesterColumns,
   toStoragePath,
+  type BoardGuide,
   type BoardId,
   type CourseFile,
   type CourseComment,
@@ -55,6 +56,65 @@ async function getCommentCounts(board: BoardId): Promise<Map<string, number>> {
     counts.set(id, (counts.get(id) ?? 0) + 1);
   }
   return counts;
+}
+
+// ---------------------------------------------------------------- 게시판 안내
+
+const GUIDE_COLUMNS = "id, board, title, content, updated_at";
+
+/**
+ * 게시판 안내 한 장.
+ *
+ * 없으면 null이고, 그때 화면은 아무것도 그리지 않습니다(운영진에게만 "안내 작성"이 보입니다).
+ * 첨부까지 함께 읽어 옵니다 — 안내는 목록 맨 위 한 덩어리라 나눠 부를 이유가 없습니다.
+ */
+export async function getBoardGuide(board: BoardId): Promise<BoardGuide | null> {
+  const { data, error } = await requireClient()
+    .from("course_board_guides")
+    .select(GUIDE_COLUMNS)
+    .eq("semester_key", COURSE.key)
+    .eq("board", board)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+
+  const row = data as RecruitRow;
+  const files = await getCourseFiles({ kind: "guide", id: row.id as string }).catch(() => [] as CourseFile[]);
+  return {
+    id: row.id as string,
+    board: row.board as BoardId,
+    title: (row.title as string) ?? "",
+    content: row.content as string,
+    updatedAt: row.updated_at as string,
+    files,
+  };
+}
+
+/** 등록과 수정이 같은 경로입니다. `UNIQUE (semester_key, board)`라 두 번째 저장은 갱신입니다. */
+export async function saveBoardGuide(board: BoardId, input: { title: string; content: string }): Promise<string> {
+  const userId = await requireAuthUserId();
+  const { data, error } = await requireClient()
+    .from("course_board_guides")
+    .upsert(
+      {
+        semester_key: COURSE.key,
+        board,
+        title: input.title.trim(),
+        content: input.content.trim(),
+        updated_by: userId,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "semester_key,board" },
+    )
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id as string;
+}
+
+export async function deleteBoardGuide(id: string) {
+  const { error } = await requireClient().from("course_board_guides").delete().eq("id", id);
+  if (error) throw error;
 }
 
 // ---------------------------------------------------------------- 수업게시판(공지)
@@ -326,13 +386,18 @@ const COURSE_BUCKET = "course";
  * 반대로 하면 목록에는 있는데 파일이 없는 행이 남아 화면에 깨진 링크가 생깁니다.
  * 반대 방향(파일은 올라갔는데 행이 없음)은 눈에 보이지 않으므로 덜 나쁩니다.
  */
-export async function uploadProposalFile(proposalId: string, file: File): Promise<CourseFile> {
+/** 첨부가 붙는 곳. 021에서 표 하나(course_files)가 둘을 함께 담습니다. */
+type FileOwner = { kind: "proposal"; id: string } | { kind: "guide"; id: string };
+
+const ownerColumn = (owner: FileOwner) => (owner.kind === "proposal" ? "proposal_id" : "guide_id");
+
+export async function uploadCourseFile(owner: FileOwner, file: File): Promise<CourseFile> {
   const problem = checkAttachment(file);
   if (problem) throw new Error(problem);
 
   const client = requireClient();
   const userId = await requireAuthUserId();
-  const path = toStoragePath(proposalId, file.name, crypto.randomUUID());
+  const path = toStoragePath(`${owner.kind}s`, owner.id, file.name, crypto.randomUUID());
 
   const { error: uploadError } = await client.storage
     .from(COURSE_BUCKET)
@@ -340,9 +405,9 @@ export async function uploadProposalFile(proposalId: string, file: File): Promis
   if (uploadError) throw uploadError;
 
   const { data, error } = await client
-    .from("proposal_files")
+    .from("course_files")
     .insert({
-      proposal_id: proposalId,
+      [ownerColumn(owner)]: owner.id,
       file_name: file.name,
       storage_path: path,
       mime_type: file.type || null,
@@ -368,15 +433,20 @@ const toCourseFile = (row: RecruitRow): CourseFile => ({
   createdBy: row.created_by as string,
 });
 
-export async function getProposalFiles(proposalId: string): Promise<CourseFile[]> {
+export async function getCourseFiles(owner: FileOwner): Promise<CourseFile[]> {
   const { data, error } = await requireClient()
-    .from("proposal_files")
+    .from("course_files")
     .select("id, file_name, storage_path, mime_type, size_bytes, created_by")
-    .eq("proposal_id", proposalId)
+    .eq(ownerColumn(owner), owner.id)
     .order("created_at", { ascending: true });
   if (error) throw error;
   return ((data ?? []) as RecruitRow[]).map(toCourseFile);
 }
+
+/** 기존 호출부가 쓰던 이름. 제안 첨부는 여전히 가장 흔한 경우라 짧은 길을 남겨 둡니다. */
+export const getProposalFiles = (proposalId: string) => getCourseFiles({ kind: "proposal", id: proposalId });
+export const uploadProposalFile = (proposalId: string, file: File) =>
+  uploadCourseFile({ kind: "proposal", id: proposalId }, file);
 
 /**
  * 내려받을 주소.
@@ -391,7 +461,7 @@ export function getProposalFileUrl(storagePath: string): string {
 
 export async function deleteProposalFile(file: CourseFile) {
   const client = requireClient();
-  const { error } = await client.from("proposal_files").delete().eq("id", file.id);
+  const { error } = await client.from("course_files").delete().eq("id", file.id);
   if (error) throw error;
   // 행이 지워졌으면 파일도 치웁니다. 실패해도 화면에서는 이미 사라진 상태입니다.
   await client.storage.from(COURSE_BUCKET).remove([file.storagePath]).catch(() => undefined);

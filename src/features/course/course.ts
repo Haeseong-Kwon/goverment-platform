@@ -126,7 +126,7 @@ export const BOARDS: Record<BoardId, BoardConfig> = {
   },
   recruit: {
     id: "recruit",
-    label: "팀빌딩 모집",
+    label: "팀원모집",
     description: "함께할 팀원을 찾는 글입니다. 필요한 역할과 아이디어 단계를 적어 두면 지원자가 무엇을 준비할지 알 수 있습니다.",
     createLabel: "팀원 모집글 쓰기",
     emptyTitle: "아직 모집글이 없습니다",
@@ -142,8 +142,8 @@ export const BOARDS: Record<BoardId, BoardConfig> = {
   },
   team: {
     id: "team",
-    label: "확정 팀",
-    description: "팀 구성이 끝난 팀의 명단입니다. 팀장이 등록하며, 중간·기말 결과물이 이 팀에 붙습니다.",
+    label: "팀등록",
+    description: "팀 구성이 끝나면 팀장이 등록합니다. 등록된 팀만 기업 제안에 신청하고 중간·기말 결과물을 올릴 수 있습니다.",
     createLabel: "우리 팀 등록",
     emptyTitle: "등록된 팀이 없습니다",
     emptyDescription: "팀 구성이 끝났다면 팀장이 등록해 주세요. 결과물 게시판은 등록된 팀만 올릴 수 있습니다.",
@@ -160,11 +160,14 @@ export const BOARDS: Record<BoardId, BoardConfig> = {
 
 /**
  * 게시판 순서는 학기가 흘러가는 순서입니다.
- * 공지를 먼저 두고(수업게시판), 나를 알리고(자기소개) → 팀을 찾고(모집) →
- * 아이템을 정하고(기업 제안) → 팀을 확정하고(확정 팀) → 결과를 냅니다(결과물).
+ * 공지를 먼저 두고(수업게시판), 나를 알리고(자기소개) → 팀원을 찾고(팀원모집) →
+ * 팀을 확정하고(팀등록) → 아이템을 고르고(기업 제안) → 결과를 냅니다(결과물).
  * 공지가 맨 앞인 이유는 학기 중에 가장 자주 확인하는 곳이기 때문입니다.
+ *
+ * 주소(`/course/recruit`, `/course/team`)는 그대로 둡니다 — 이름표가 바뀌었다고
+ * 주소까지 바꾸면 이미 공유된 링크가 전부 깨집니다.
  */
-export const BOARD_ORDER: BoardId[] = ["notice", "intro", "recruit", "proposal", "team", "showcase"];
+export const BOARD_ORDER: BoardId[] = ["notice", "intro", "recruit", "team", "proposal", "showcase"];
 
 /**
  * 주소의 `[board]` 자리가 우리가 아는 게시판인지.
@@ -374,6 +377,21 @@ export function sortNotices(notices: CourseNotice[]): CourseNotice[] {
     if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
     return b.createdAt.localeCompare(a.createdAt);
   });
+}
+
+/**
+ * 게시판 맨 위에 붙는 안내. 게시판당 한 장이며 운영진만 씁니다.
+ *
+ * 게시판 설명(`BOARDS[].description`)은 코드 상수라 학기 중에 못 바꿉니다.
+ * 제출 형식이나 마감처럼 학기마다 달라지는 이야기가 여기에 들어갑니다.
+ */
+export interface BoardGuide {
+  id: string;
+  board: BoardId;
+  title: string;
+  content: string;
+  updatedAt: string;
+  files: CourseFile[];
 }
 
 export interface CourseComment {
@@ -691,11 +709,11 @@ export function formatBytes(bytes: number): string {
  * 스토리지에 쓸 안전한 경로.
  *
  * 원래 파일명을 그대로 쓰면 한글·공백·괄호가 섞여 URL이 깨지거나 업로드가 거절됩니다.
- * 보여 줄 이름은 DB(`proposal_files.file_name`)에 따로 두고, 경로는 여기서 만듭니다.
+ * 보여 줄 이름은 DB(`course_files.file_name`)에 따로 두고, 경로는 여기서 만듭니다.
  */
-export function toStoragePath(proposalId: string, fileName: string, unique: string): string {
+export function toStoragePath(folder: string, ownerId: string, fileName: string, unique: string): string {
   const extension = extensionOf(fileName).replace(/[^a-z0-9]/g, "");
-  return `proposals/${proposalId}/${unique}${extension ? `.${extension}` : ""}`;
+  return `${folder}/${ownerId}/${unique}${extension ? `.${extension}` : ""}`;
 }
 
 /** 빈 문자열을 null로. 링크 칸을 비웠을 때 DB에 ""가 쌓이면 "링크 있음"으로 오인됩니다. */
