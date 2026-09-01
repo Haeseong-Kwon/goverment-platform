@@ -14,12 +14,16 @@ import { requireAuthUserId, getAuthUserId } from "./sessionCache";
 import {
   COURSE,
   COURSE_CALLBACK_HREF,
+  checkAttachment,
   parseRecruitRoles,
   parseStringArray,
   parseTeamMembers,
   semesterColumns,
+  toStoragePath,
   type BoardId,
+  type CourseFile,
   type CourseComment,
+  type CourseNotice,
   type CourseTeam,
   type Deliverable,
   type DeliverablePhase,
@@ -51,6 +55,94 @@ async function getCommentCounts(board: BoardId): Promise<Map<string, number>> {
     counts.set(id, (counts.get(id) ?? 0) + 1);
   }
   return counts;
+}
+
+// ---------------------------------------------------------------- 수업게시판(공지)
+
+const NOTICE_COLUMNS = "id, title, content, is_pinned, created_by, created_at, updated_at";
+
+const toNotice = (row: RecruitRow, names: Map<string, string>, counts: Map<string, number>): CourseNotice => ({
+  id: row.id as string,
+  title: row.title as string,
+  content: row.content as string,
+  isPinned: row.is_pinned === true,
+  createdBy: row.created_by as string,
+  authorName: names.get(row.created_by as string) ?? "운영진",
+  createdAt: row.created_at as string,
+  updatedAt: row.updated_at as string,
+  commentCount: counts.get(row.id as string) ?? 0,
+});
+
+export async function getNotices(): Promise<CourseNotice[]> {
+  const { data, error } = await requireClient()
+    .from("course_notices")
+    .select(NOTICE_COLUMNS)
+    .eq("semester_key", COURSE.key)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  const rows = (data ?? []) as RecruitRow[];
+  const [names, counts] = await Promise.all([
+    getProfileNames(rows.map((row) => row.created_by as string)),
+    getCommentCounts("notice"),
+  ]);
+  return rows.map((row) => toNotice(row, names, counts));
+}
+
+export async function getNotice(id: string): Promise<CourseNotice | null> {
+  const { data, error } = await requireClient().from("course_notices").select(NOTICE_COLUMNS).eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const row = data as RecruitRow;
+  const [names, counts] = await Promise.all([
+    getProfileNames([row.created_by as string]),
+    getCommentCounts("notice"),
+  ]);
+  return toNotice(row, names, counts);
+}
+
+export async function createNotice(input: { title: string; content: string; isPinned: boolean }): Promise<string> {
+  const userId = await requireAuthUserId();
+  const { data, error } = await requireClient()
+    .from("course_notices")
+    .insert({
+      ...semesterColumns(),
+      created_by: userId,
+      title: input.title.trim(),
+      content: input.content.trim(),
+      is_pinned: input.isPinned,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  return data.id as string;
+}
+
+export async function setNoticePinned(id: string, isPinned: boolean) {
+  const { error } = await requireClient()
+    .from("course_notices")
+    .update({ is_pinned: isPinned, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteNotice(id: string) {
+  const { error } = await requireClient().from("course_notices").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * 이 계정이 과목 운영진인가(공지 작성 권한).
+ *
+ * `isCourseMember()`와 같은 이유로 DB 함수(019의 `is_course_staff()`)에게 그대로 묻습니다.
+ * 화면에서 메일 주소를 다시 대조하면 명단이 바뀔 때 두 곳이 어긋납니다.
+ */
+export async function isCourseStaff(): Promise<boolean> {
+  const userId = await getAuthUserId();
+  if (!userId) return false;
+  const { data, error } = await requireClient().rpc("is_course_staff");
+  if (error) return false;
+  return data === true;
 }
 
 // ---------------------------------------------------------------- 팀빌딩 모집
@@ -208,6 +300,88 @@ export async function createProposal(input: ProposalInput): Promise<string> {
     .single();
   if (error) throw error;
   return data.id as string;
+}
+
+// ---------------------------------------------------------------- 기업 제안 첨부
+
+const COURSE_BUCKET = "course";
+
+/**
+ * 첨부 올리기.
+ *
+ * 순서가 중요합니다 — 스토리지에 먼저 올리고, 성공한 것만 목록(proposal_files)에 적습니다.
+ * 반대로 하면 목록에는 있는데 파일이 없는 행이 남아 화면에 깨진 링크가 생깁니다.
+ * 반대 방향(파일은 올라갔는데 행이 없음)은 눈에 보이지 않으므로 덜 나쁩니다.
+ */
+export async function uploadProposalFile(proposalId: string, file: File): Promise<CourseFile> {
+  const problem = checkAttachment(file);
+  if (problem) throw new Error(problem);
+
+  const client = requireClient();
+  const userId = await requireAuthUserId();
+  const path = toStoragePath(proposalId, file.name, crypto.randomUUID());
+
+  const { error: uploadError } = await client.storage
+    .from(COURSE_BUCKET)
+    .upload(path, file, { contentType: file.type || undefined, upsert: false });
+  if (uploadError) throw uploadError;
+
+  const { data, error } = await client
+    .from("proposal_files")
+    .insert({
+      proposal_id: proposalId,
+      file_name: file.name,
+      storage_path: path,
+      mime_type: file.type || null,
+      size_bytes: file.size,
+      created_by: userId,
+    })
+    .select("id, file_name, storage_path, mime_type, size_bytes, created_by")
+    .single();
+  if (error) {
+    // 목록에 못 적었으면 올린 파일도 치웁니다. 주인 없는 파일이 버킷에 쌓이지 않도록.
+    await client.storage.from(COURSE_BUCKET).remove([path]).catch(() => undefined);
+    throw error;
+  }
+  return toCourseFile(data as RecruitRow);
+}
+
+const toCourseFile = (row: RecruitRow): CourseFile => ({
+  id: row.id as string,
+  fileName: row.file_name as string,
+  storagePath: row.storage_path as string,
+  mimeType: (row.mime_type as string | null) ?? null,
+  sizeBytes: Number(row.size_bytes ?? 0),
+  createdBy: row.created_by as string,
+});
+
+export async function getProposalFiles(proposalId: string): Promise<CourseFile[]> {
+  const { data, error } = await requireClient()
+    .from("proposal_files")
+    .select("id, file_name, storage_path, mime_type, size_bytes, created_by")
+    .eq("proposal_id", proposalId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return ((data ?? []) as RecruitRow[]).map(toCourseFile);
+}
+
+/**
+ * 내려받을 주소.
+ *
+ * 공개 버킷이라 서명이 필요 없습니다 — 로그인하지 않은 학생도 게시판을 읽을 수 있어야
+ * 하는데, 서명 링크는 세션이 있어야 만들 수 있습니다(게시판이 공개인 이유와 같습니다).
+ */
+export function getProposalFileUrl(storagePath: string): string {
+  const client = requireClient();
+  return client.storage.from(COURSE_BUCKET).getPublicUrl(storagePath).data.publicUrl;
+}
+
+export async function deleteProposalFile(file: CourseFile) {
+  const client = requireClient();
+  const { error } = await client.from("proposal_files").delete().eq("id", file.id);
+  if (error) throw error;
+  // 행이 지워졌으면 파일도 치웁니다. 실패해도 화면에서는 이미 사라진 상태입니다.
+  await client.storage.from(COURSE_BUCKET).remove([file.storagePath]).catch(() => undefined);
 }
 
 export async function deleteProposal(id: string) {
@@ -665,6 +839,7 @@ export async function getMyCourseActivity(): Promise<StudentActivity> {
 // ---------------------------------------------------------------- 과목 홈
 
 export interface CourseStats {
+  noticeCount: number;
   introCount: number;
   recruitOpen: number;
   proposalCount: number;
@@ -688,14 +863,15 @@ export async function getCourseStats(): Promise<CourseStats> {
     return total ?? 0;
   };
 
-  const [introCount, recruitOpen, proposalCount, teamCount, deliverableCount] = await Promise.all([
+  const [noticeCount, introCount, recruitOpen, proposalCount, teamCount, deliverableCount] = await Promise.all([
+    count("course_notices"),
     count("semester_profiles"),
     count("recruitment_posts", { status: "Recruiting" }),
     count("corporate_proposals"),
     count("team_registrations"),
     count("team_deliverables"),
   ]);
-  return { introCount, recruitOpen, proposalCount, teamCount, deliverableCount };
+  return { noticeCount, introCount, recruitOpen, proposalCount, teamCount, deliverableCount };
 }
 
 /** 현재 로그인한 사용자 id. 화면이 "내 글인가"를 판단해 수정·삭제를 보여 줍니다. */

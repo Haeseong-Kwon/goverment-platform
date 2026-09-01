@@ -411,6 +411,16 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-[80] grid place-items-center p-4">
       <div className="animate-fade absolute inset-0 bg-[rgba(15,23,42,0.45)]" onClick={onClose} aria-hidden />
+      {/*
+        높이를 화면 안으로 묶고 본문만 스크롤시킵니다.
+
+        이게 없으면 내용이 길어질수록(모집 역할을 여러 개 고르는 경우처럼) 대화상자가
+        화면 아래로 자라는데, 열려 있는 동안 배경 스크롤은 잠겨 있어 등록 버튼에
+        닿을 방법이 사라집니다. 제목과 버튼은 제자리에 두고 가운데만 움직입니다.
+
+        `dvh`를 쓰는 이유: 모바일 브라우저는 주소창이 접혔다 펴지면서 `vh`가 실제
+        보이는 높이보다 커집니다. 그 차이만큼 푸터가 다시 화면 밖으로 밀립니다.
+      */}
       <div
         ref={panelRef}
         tabIndex={-1}
@@ -418,17 +428,24 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "animate-in relative w-full rounded-2xl bg-white p-6 shadow-[0_24px_64px_rgba(15,23,42,0.24)] outline-none",
+          "animate-in relative flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-2xl bg-white shadow-[0_24px_64px_rgba(15,23,42,0.24)] outline-none",
           wide ? "max-w-2xl" : "max-w-md",
         )}
       >
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="text-lg font-bold text-[#0F172A]">{title}</h2>
-          <IconButton label="닫기" icon={<X size={15} />} onClick={onClose} className="-my-1 -mr-1" />
+        <div className="shrink-0 px-6 pt-6">
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="text-lg font-bold text-[#0F172A]">{title}</h2>
+            <IconButton label="닫기" icon={<X size={15} />} onClick={onClose} className="-my-1 -mr-1" />
+          </div>
+          {description && <p className="mt-2 text-sm leading-6 text-[#475569]">{description}</p>}
         </div>
-        {description && <p className="mt-2 text-sm leading-6 text-[#475569]">{description}</p>}
-        {children}
-        {footer && <div className="mt-5 flex justify-end gap-2">{footer}</div>}
+
+        {/* min-h-0: 이게 없으면 flex 자식이 내용만큼 늘어나 overflow가 걸리지 않습니다. */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">{children}</div>
+
+        {footer && (
+          <div className="flex shrink-0 justify-end gap-2 border-t border-[#F1F5F9] px-6 py-4">{footer}</div>
+        )}
       </div>
     </div>
   );

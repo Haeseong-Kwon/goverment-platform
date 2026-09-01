@@ -1,23 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Plus, X } from "lucide-react";
+import { Paperclip, Plus, X } from "lucide-react";
 import {
   createProposal,
   createRecruitPost,
   createTeam,
   getMyLedTeams,
   saveDeliverable,
+  createNotice,
   saveSemesterProfile,
+  uploadProposalFile,
 } from "@/lib/services/CourseService";
 import {
   DELIVERABLE_PHASE_LABEL,
   PROJECT_PHASE_LABEL,
   PROPOSAL_CATEGORIES,
   ROLE_PRESETS,
+  ATTACHMENT_ACCEPT,
+  MAX_ATTACHMENT_BYTES,
   STUDENT_STATUS_LABEL,
+  checkAttachment,
   courseHref,
+  formatBytes,
   emptyToNull,
   splitTags,
   validateOptionalUrl,
@@ -77,6 +83,68 @@ function useSubmit(onCreated: (id: string) => void) {
   };
 
   return { saving, error, setError, run };
+}
+
+// ---------------------------------------------------------------- 공지
+
+export function NoticeForm({ onClose, onCreated }: FormProps) {
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [isPinned, setIsPinned] = useState(false);
+  const { saving, error, setError, run } = useSubmit(onCreated);
+
+  const submit = () =>
+    run(() => validateTitleAndBody(title, content), () => createNotice({ title, content, isPinned }));
+
+  return (
+    <Modal
+      title="공지 올리기"
+      description="수강생 전체가 보는 공지입니다. 마감일이나 발표 순서처럼 계속 확인해야 하는 내용은 상단 고정을 켜 주세요."
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>취소</Button>
+          <Button loading={saving} onClick={() => void submit()}>공지 등록</Button>
+        </>
+      }
+    >
+      <div className="mt-5 space-y-4">
+        <Field label="제목" required>
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="예: 3주차 — 팀 확정 등록 마감 안내"
+            className={inputClass}
+          />
+        </Field>
+
+        <Field label="내용" required hint="언제까지 무엇을 해야 하는지 분명히 적어 주세요.">
+          <textarea
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+            placeholder={"제출 기한, 대상, 방법을 적어 주세요.\n예) 9월 22일(월) 23:59까지 확정 팀 게시판에 팀장이 등록"}
+            className={cn(textareaClass, "min-h-48")}
+          />
+        </Field>
+
+        <label className="flex cursor-pointer items-start gap-2.5 text-sm leading-6 text-[#475569]">
+          <input
+            type="checkbox"
+            checked={isPinned}
+            onChange={(event) => setIsPinned(event.target.checked)}
+            className="mt-1 accent-[#2563EB]"
+          />
+          <span>
+            <strong className="font-bold text-[#0F172A]">상단 고정</strong>
+            <span className="block text-xs text-[#94A3B8]">목록 맨 위에 계속 표시됩니다. 마감 안내에 씁니다.</span>
+          </span>
+        </label>
+
+        {error && <Notice tone="error" onDismiss={() => setError(null)}>{error}</Notice>}
+      </div>
+    </Modal>
+  );
 }
 
 // ---------------------------------------------------------------- 팀빌딩 모집
@@ -198,6 +266,10 @@ export function RecruitForm({ onClose, onCreated }: FormProps) {
 
 export function ProposalForm({ onClose, onCreated }: FormProps) {
   const [companyName, setCompanyName] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploadNote, setUploadNote] = useState<string | null>(null);
+  // 같은 파일을 뺐다가 다시 고를 수 있어야 합니다. input은 값이 같으면 change를 안 냅니다.
+  const fileInput = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
@@ -208,18 +280,44 @@ export function ProposalForm({ onClose, onCreated }: FormProps) {
   const toggleCategory = (value: string) =>
     setCategories((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
 
+  const pickFiles = (picked: FileList | null) => {
+    if (!picked) return;
+    const chosen = Array.from(picked);
+    // 형식·용량은 고르는 순간 알려 줍니다.
+    const problem = chosen.map(checkAttachment).find(Boolean);
+    if (problem) { setError(problem); return; }
+    setError(null);
+    setFiles((current) => [...current, ...chosen]);
+  };
+
   const submit = () =>
     run(
       () => (companyName.trim().length < 2 ? "기업·기관명을 입력해 주세요." : validateTitleAndBody(title, content)),
-      () =>
-        createProposal({
+      async () => {
+        const id = await createProposal({
           companyName,
           title,
           content,
           categories,
           deadline: emptyToNull(deadline),
           contact: emptyToNull(contact),
-        }),
+        });
+        /*
+         * 첨부는 제안이 생긴 뒤에 붙습니다(파일 행이 제안 id를 참조).
+         * 업로드가 실패해도 제안 자체는 이미 남았으므로, 실패한 파일만 따로 알리고
+         * 등록은 그대로 진행합니다 — 여기서 통째로 실패시키면 쓴 글이 사라집니다.
+         */
+        const failures: string[] = [];
+        for (const file of files) {
+          try {
+            await uploadProposalFile(id, file);
+          } catch (reason) {
+            failures.push(toMessage(reason, `${file.name}을(를) 올리지 못했습니다.`));
+          }
+        }
+        if (failures.length > 0) setUploadNote(failures.join(" "));
+        return id;
+      },
     );
 
   return (
@@ -273,6 +371,53 @@ export function ProposalForm({ onClose, onCreated }: FormProps) {
           <input value={contact} onChange={(event) => setContact(event.target.value)} placeholder="pm@example.com" className={inputClass} />
         </Field>
 
+        <fieldset>
+          <legend className="text-sm font-bold">첨부파일</legend>
+          <p className="mt-1 text-xs font-medium text-[#94A3B8]">
+            과업지시서·데이터 명세 등을 올릴 수 있습니다. 파일당 {Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB 이하.
+            <strong className="text-[#B45309]"> 공개 게시판이라 첨부도 누구나 내려받을 수 있습니다.</strong>
+          </p>
+
+          {files.length > 0 && (
+            <ul className="mt-2 space-y-1.5">
+              {files.map((file, index) => (
+                <li key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 pl-3 pr-1.5 text-xs font-semibold text-[#475569]">
+                  <Paperclip size={13} className="shrink-0 text-[#94A3B8]" />
+                  <span className="min-w-0 flex-1 truncate">{file.name}</span>
+                  <span className="shrink-0 tabular-nums text-[#94A3B8]">{formatBytes(file.size)}</span>
+                  <IconButton
+                    label={`${file.name} 첨부 취소`}
+                    icon={<X size={13} />}
+                    onClick={() => setFiles((current) => current.filter((_, at) => at !== index))}
+                    className="h-6 w-6"
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            accept={ATTACHMENT_ACCEPT}
+            onChange={(event) => pickFiles(event.target.files)}
+            className="hidden"
+            aria-hidden
+            tabIndex={-1}
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Paperclip size={14} />}
+            onClick={() => fileInput.current?.click()}
+            className="mt-2"
+          >
+            파일 선택
+          </Button>
+        </fieldset>
+
+        {uploadNote && <Notice tone="warning" onDismiss={() => setUploadNote(null)}>{uploadNote}</Notice>}
         {error && <Notice tone="error" onDismiss={() => setError(null)}>{error}</Notice>}
       </div>
     </Modal>

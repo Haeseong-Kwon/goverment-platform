@@ -6,9 +6,12 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   CalendarClock,
+  Download,
   ExternalLink,
   Github,
   Mail,
+  Paperclip,
+  Pin,
   Play,
   Presentation,
   Trash2,
@@ -16,16 +19,21 @@ import {
 } from "lucide-react";
 import {
   deleteDeliverable,
+  deleteNotice,
   deleteProposal,
   deleteRecruitPost,
   deleteSemesterProfile,
   deleteTeam,
   getDeliverable,
   getDeliverables,
+  getNotice,
   getProposal,
+  getProposalFiles,
+  getProposalFileUrl,
   getRecruitPost,
   getSemesterProfileById,
   getTeam,
+  setNoticePinned,
   setRecruitStatus,
   setTeamStatus,
 } from "@/lib/services/CourseService";
@@ -39,9 +47,12 @@ import {
   TEAM_STATUS_LABEL,
   countOpenRoles,
   courseHref,
+  formatBytes,
   formatDateTime,
   getProposalDeadline,
   type BoardId,
+  type CourseFile,
+  type CourseNotice,
   type CourseTeam,
   type Deliverable,
   type Proposal,
@@ -55,13 +66,18 @@ import { toMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
 
 type Entry =
+  | { board: "notice"; item: CourseNotice }
   | { board: "intro"; item: SemesterProfile }
   | { board: "recruit"; item: RecruitPost }
-  | { board: "proposal"; item: Proposal }
+  | { board: "proposal"; item: Proposal; files: CourseFile[] }
   | { board: "team"; item: CourseTeam; deliverables: Deliverable[] }
   | { board: "showcase"; item: Deliverable };
 
 async function loadEntry(board: BoardId, id: string): Promise<Entry | null> {
+  if (board === "notice") {
+    const item = await getNotice(id);
+    return item && { board, item };
+  }
   if (board === "intro") {
     const item = await getSemesterProfileById(id);
     return item && { board, item };
@@ -72,7 +88,10 @@ async function loadEntry(board: BoardId, id: string): Promise<Entry | null> {
   }
   if (board === "proposal") {
     const item = await getProposal(id);
-    return item && { board, item };
+    if (!item) return null;
+    // 첨부를 못 읽어도 제안 본문은 보여야 합니다. 첨부는 부속물입니다.
+    const files = await getProposalFiles(id).catch(() => [] as CourseFile[]);
+    return { board, item, files };
   }
   if (board === "team") {
     const item = await getTeam(id);
@@ -200,8 +219,14 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
     );
   }
 
+  /*
+   * 공지만 판정이 다릅니다. 다른 글은 "내가 쓴 글인가"지만, 공지는 "운영진인가"입니다 —
+   * 교수님이 올린 공지의 오타를 조교가 못 고치면 곤란합니다(019의 정책과 같은 규칙).
+   */
   const isOwner =
-    viewer.id !== null &&
+    entry.board === "notice"
+      ? viewer.staff
+      : viewer.id !== null &&
     viewer.id ===
       (entry.board === "intro" ? entry.item.userId
         : entry.board === "recruit" ? entry.item.authorId
@@ -221,14 +246,24 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
       {error && <Notice tone="error" className="mb-4" onDismiss={() => setError(null)}>{error}</Notice>}
 
       <article className="animate-in rounded-2xl border border-[#E2E8F0] bg-white p-6 md:p-8">
+        {entry.board === "notice" && <NoticeDetail notice={entry.item} />}
         {entry.board === "intro" && <IntroDetail profile={entry.item} />}
         {entry.board === "recruit" && <RecruitDetail post={entry.item} />}
-        {entry.board === "proposal" && <ProposalDetail proposal={entry.item} />}
+        {entry.board === "proposal" && <ProposalDetail proposal={entry.item} files={entry.files} />}
         {entry.board === "team" && <TeamDetail team={entry.item} deliverables={entry.deliverables} />}
         {entry.board === "showcase" && <ShowcaseDetail deliverable={entry.item} />}
 
         {isOwner && (
           <div className="mt-8 flex flex-wrap gap-2 border-t border-[#F1F5F9] pt-6">
+            {entry.board === "notice" && (
+              <Button
+                variant="secondary"
+                loading={busy}
+                onClick={() => void act(() => setNoticePinned(entry.item.id, !entry.item.isPinned), "reload")}
+              >
+                {entry.item.isPinned ? "상단 고정 해제" : "상단에 고정"}
+              </Button>
+            )}
             {entry.board === "recruit" && (
               <Button
                 variant="secondary"
@@ -263,7 +298,8 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
               disabled={busy}
               onClick={() =>
                 remove(() =>
-                  entry.board === "intro" ? deleteSemesterProfile(entry.item.id)
+                  entry.board === "notice" ? deleteNotice(entry.item.id)
+                  : entry.board === "intro" ? deleteSemesterProfile(entry.item.id)
                   : entry.board === "recruit" ? deleteRecruitPost(entry.item.id)
                   : entry.board === "proposal" ? deleteProposal(entry.item.id)
                   : entry.board === "team" ? deleteTeam(entry.item.id)
@@ -285,6 +321,30 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
 }
 
 // ---------------------------------------------------------------- 게시판별 본문
+
+function NoticeDetail({ notice }: { notice: CourseNotice }) {
+  return (
+    <>
+      {notice.isPinned && (
+        <StatusBadge tone="blue">
+          <Pin size={11} className="mr-0.5 inline" />상단 고정
+        </StatusBadge>
+      )}
+      <h1 className={cn("text-[26px] font-bold leading-tight tracking-tight md:text-[32px]", notice.isPinned && "mt-4")}>
+        {notice.title}
+      </h1>
+      <p className="mt-3 text-sm text-[#94A3B8]">
+        <span className="font-semibold text-[#475569]">{notice.authorName}</span>
+        <span className="mx-2">·</span>
+        <span className="tabular-nums">{formatDateTime(notice.createdAt, true)}</span>
+      </p>
+
+      <div className="mt-8">
+        <Body text={notice.content} />
+      </div>
+    </>
+  );
+}
 
 /**
  * 자기소개 상세.
@@ -412,7 +472,7 @@ function RecruitDetail({ post }: { post: RecruitPost }) {
   );
 }
 
-function ProposalDetail({ proposal }: { proposal: Proposal }) {
+function ProposalDetail({ proposal, files }: { proposal: Proposal; files: CourseFile[] }) {
   const deadline = getProposalDeadline(proposal.deadline);
   return (
     <>
@@ -437,6 +497,33 @@ function ProposalDetail({ proposal }: { proposal: Proposal }) {
                 <span key={item} className="rounded-lg bg-[#EFF6FF] px-2.5 py-1 text-xs font-semibold text-[#2563EB]">{item}</span>
               ))}
             </div>
+          </Section>
+        )}
+
+        {files.length > 0 && (
+          <Section title={`첨부파일 ${files.length}건`}>
+            <ul className="space-y-2">
+              {files.map((file) => (
+                <li key={file.id}>
+                  <a
+                    href={getProposalFileUrl(file.storagePath)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(
+                      "flex items-center gap-3 rounded-xl border border-[#E2E8F0] bg-white px-4 py-3 transition-colors hover:border-[#2563EB] hover:bg-[#F8FAFC]",
+                      focusRing,
+                    )}
+                  >
+                    <Paperclip size={15} className="shrink-0 text-[#94A3B8]" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-bold">{file.fileName}</span>
+                    <span className="shrink-0 text-xs font-semibold tabular-nums text-[#94A3B8]">
+                      {formatBytes(file.sizeBytes)}
+                    </span>
+                    <Download size={15} className="shrink-0 text-[#2563EB]" />
+                  </a>
+                </li>
+              ))}
+            </ul>
           </Section>
         )}
 

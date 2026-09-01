@@ -81,7 +81,8 @@ schema.sql → 002-manager-review.sql → 003-profile-role-lock.sql → 004-seed
            → 010-kstartup-announcements.sql → 011-calendar-announcement-link.sql
            → 012-comment-attachments.sql → 013-real-announcement-deadlines.sql
            → 014-capstone-course.sql → 015-enable-legacy-rls.sql
-           → 016-course-membership.sql → 017-intro-board.sql
+           → 016-course-membership.sql → 017-intro-board.sql → 018-proposal-files.sql
+           → 019-course-notices.sql
 ```
 
 `015`는 **반드시 적용해야 합니다.** `schema.sql`의 RLS 활성화 블록이 `ALTER TABLE IF EXISTS`
@@ -115,6 +116,20 @@ UUID를 넣어 다른 학생 이름으로 글을 올릴 수 있었습니다.
 `017`은 자기소개 게시판을 엽니다. 새 테이블이 없습니다 — 자기소개는 `semester_profiles`
 그대로이며, 지금까지 본인 워크스페이스에서만 보이던 것을 게시판으로 여는 일입니다.
 이 파일은 댓글 대상(`course_comments.board`)에 `intro`를 더하고 삭제 연동 트리거만 붙입니다.
+
+`018`은 기업 제안에 첨부파일을 붙입니다. `course` 공개 버킷과 `proposal_files` 목록을
+만듭니다. 공개 버킷인 이유는 제안 게시판이 로그인 없이 읽히기 때문입니다 — 첨부만
+비공개로 두면 비로그인 학생에게는 "파일 있음"만 보이고 열리지 않습니다.
+올리기는 제안 작성자만, 지우기는 올린 사람만 가능합니다.
+
+`019`는 수업게시판(공지)을 엽니다. 다른 게시판과 다른 점은 **쓰는 사람이 정해져 있다는 것**
+하나입니다 — `course_staff` 명단에 있고 메일 인증을 마친 계정만 씁니다(`is_course_staff()`).
+읽기는 다른 게시판과 같이 공개입니다. 조교를 추가할 때는 마이그레이션 없이 한 줄이면 됩니다.
+
+```sql
+INSERT INTO course_staff (email, note) VALUES ('조교메일@hanyang.ac.kr', '조교')
+ON CONFLICT (email) DO NOTHING;
+```
 
 학기는 코드 상수 하나(`src/features/course/course.ts`의 `COURSE`)가 정합니다.
 다음 학기를 열 때 이 값을 바꾸면 새 글은 새 `semester_key`로 쌓이고 지난 학기 글은 그대로 남습니다.

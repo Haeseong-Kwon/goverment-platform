@@ -70,6 +70,7 @@ export const PUBLIC_ROUTES = [
   // 과목 게시판. 목록까지만 색인합니다 — 개별 글에는 학생 이름과 연락처가 들어가
   // 각 상세 화면이 스스로 noindex를 답합니다(app/course/[board]/[id]).
   { path: "/course", changeFrequency: "daily" as const, priority: 0.9 },
+  { path: "/course/notice", changeFrequency: "daily" as const, priority: 0.8 },
   { path: "/course/intro", changeFrequency: "daily" as const, priority: 0.7 },
   { path: "/course/recruit", changeFrequency: "daily" as const, priority: 0.7 },
   { path: "/course/proposal", changeFrequency: "daily" as const, priority: 0.7 },

@@ -3,8 +3,11 @@ import {
   BOARDS,
   BOARD_ORDER,
   COURSE,
+  MAX_ATTACHMENT_BYTES,
+  checkAttachment,
   countOpenRoles,
   emptyToNull,
+  formatBytes,
   getProposalDeadline,
   getStudentProgress,
   getStudentSteps,
@@ -18,10 +21,13 @@ import {
   semesterColumns,
   sortProposals,
   sortRecruitPosts,
+  sortNotices,
   splitTags,
+  toStoragePath,
   validateOptionalUrl,
   validateSignupPassword,
   validateTitleAndBody,
+  type CourseNotice,
   type Deliverable,
   type DeliverablePhase,
   type Proposal,
@@ -87,6 +93,7 @@ describe("학기", () => {
   });
 
   it("주소의 게시판 값만 통과시킨다", () => {
+    expect(isBoardId("notice")).toBe(true);
     expect(isBoardId("intro")).toBe(true);
     expect(isBoardId("recruit")).toBe(true);
     expect(isBoardId("showcase")).toBe(true);
@@ -98,7 +105,7 @@ describe("학기", () => {
   it("게시판 순서와 설정이 어긋나지 않는다", () => {
     // 탭·홈 카드·라우트가 전부 BOARD_ORDER를 돌므로, 설정이 빠진 값이 섞이면
     // 화면에서 undefined를 읽습니다.
-    expect(BOARD_ORDER).toEqual(["intro", "recruit", "proposal", "team", "showcase"]);
+    expect(BOARD_ORDER).toEqual(["notice", "intro", "recruit", "proposal", "team", "showcase"]);
     for (const board of BOARD_ORDER) {
       expect(BOARDS[board]?.id).toBe(board);
       expect(BOARDS[board].createLabel.length).toBeGreaterThan(0);
@@ -231,6 +238,36 @@ describe("목록 정렬", () => {
   });
 });
 
+describe("공지 정렬", () => {
+  const notice = (over: Partial<CourseNotice>): CourseNotice => ({
+    id: "n1", title: "제목", content: "내용", isPinned: false,
+    createdBy: "u1", authorName: "교수", createdAt: "2026-09-01T00:00:00Z",
+    updatedAt: "2026-09-01T00:00:00Z", commentCount: 0, ...over,
+  });
+
+  it("고정 공지가 최신 공지보다 위에 온다", () => {
+    const rows = [
+      notice({ id: "new", createdAt: "2026-09-20T00:00:00Z" }),
+      notice({ id: "pinned", isPinned: true, createdAt: "2026-09-01T00:00:00Z" }),
+    ];
+    expect(sortNotices(rows).map((r) => r.id)).toEqual(["pinned", "new"]);
+  });
+
+  it("고정끼리는 최신순", () => {
+    const rows = [
+      notice({ id: "old", isPinned: true, createdAt: "2026-09-01T00:00:00Z" }),
+      notice({ id: "new", isPinned: true, createdAt: "2026-09-20T00:00:00Z" }),
+    ];
+    expect(sortNotices(rows).map((r) => r.id)).toEqual(["new", "old"]);
+  });
+
+  it("원본 배열을 건드리지 않는다", () => {
+    const rows = [notice({ id: "a" }), notice({ id: "b", isPinned: true })];
+    sortNotices(rows);
+    expect(rows.map((r) => r.id)).toEqual(["a", "b"]);
+  });
+});
+
 describe("제안 마감", () => {
   const now = new Date("2026-08-31T00:00:00Z");
 
@@ -336,6 +373,46 @@ describe("수강생 진행 단계", () => {
   it("자기소개 단계는 자기소개 게시판을 가리킨다", () => {
     const profileStep = getStudentSteps(base).find((step) => step.id === "profile");
     expect(profileStep?.href).toBe("/course/intro");
+  });
+});
+
+describe("첨부파일", () => {
+  it("문서·이미지·압축 파일을 받는다", () => {
+    expect(checkAttachment({ name: "과업지시서.pdf", size: 1024 })).toBeNull();
+    expect(checkAttachment({ name: "명세.HWP", size: 2048 })).toBeNull();
+    expect(checkAttachment({ name: "도면.zip", size: 4096 })).toBeNull();
+  });
+
+  it("실행 파일은 막는다", () => {
+    expect(checkAttachment({ name: "setup.exe", size: 1024 })).toContain("형식");
+    expect(checkAttachment({ name: "run.sh", size: 1024 })).toContain("형식");
+    expect(checkAttachment({ name: "확장자없음", size: 1024 })).toContain("형식");
+    // 점이 없으면 이름 전체가 확장자로 읽힐 뻔했습니다 — 이 파일은 PDF가 아닙니다.
+    expect(checkAttachment({ name: "pdf", size: 1024 })).toContain("형식");
+    expect(checkAttachment({ name: ".hwp", size: 1024 })).toContain("형식");
+  });
+
+  it("용량 한도와 빈 파일을 막는다", () => {
+    expect(checkAttachment({ name: "big.pdf", size: MAX_ATTACHMENT_BYTES + 1 })).toContain("너무 큽니다");
+    expect(checkAttachment({ name: "ok.pdf", size: MAX_ATTACHMENT_BYTES })).toBeNull();
+    expect(checkAttachment({ name: "empty.pdf", size: 0 })).toContain("빈 파일");
+  });
+
+  it("스토리지 경로에 한글·공백을 남기지 않는다", () => {
+    // 원래 파일명을 그대로 쓰면 URL이 깨집니다. 보여 줄 이름은 DB에 따로 둡니다.
+    const path = toStoragePath("p1", "과업 지시서 (최종).pdf", "abc123");
+    expect(path).toBe("proposals/p1/abc123.pdf");
+    expect(/^[\x20-\x7e]+$/.test(path)).toBe(true);
+  });
+
+  it("확장자가 없어도 경로를 만든다", () => {
+    expect(toStoragePath("p1", "README", "abc123")).toBe("proposals/p1/abc123");
+  });
+
+  it("사람이 읽는 크기로 바꾼다", () => {
+    expect(formatBytes(512)).toBe("512B");
+    expect(formatBytes(2048)).toBe("2KB");
+    expect(formatBytes(3 * 1024 * 1024)).toBe("3.0MB");
   });
 });
 

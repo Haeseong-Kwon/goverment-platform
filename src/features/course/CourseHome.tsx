@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Building2, ClipboardList, Presentation, UserRound, Users } from "lucide-react";
-import { getCourseStats, type CourseStats } from "@/lib/services/CourseService";
-import { BOARDS, BOARD_ORDER, COURSE, courseHref, type BoardId } from "./course";
+import { ArrowRight, Building2, ClipboardList, Megaphone, Pin, Presentation, UserRound, Users } from "lucide-react";
+import { getCourseStats, getNotices, type CourseStats } from "@/lib/services/CourseService";
+import { BOARDS, BOARD_ORDER, COURSE, courseHref, formatDateTime, sortNotices, type BoardId, type CourseNotice } from "./course";
 import { CourseShell } from "./CourseChrome";
 import { Skeleton, StatusBadge, focusRing, liftCard } from "@/features/startup-workspace/ui";
 import { cn } from "@/lib/utils";
 
 const BOARD_ICONS: Record<BoardId, typeof Users> = {
+  notice: Megaphone,
   intro: UserRound,
   recruit: Users,
   proposal: Building2,
@@ -19,6 +20,7 @@ const BOARD_ICONS: Record<BoardId, typeof Users> = {
 
 /** 홈의 숫자. 어느 게시판을 먼저 열지 정하는 데 쓰는 값이라 게시판 순서와 같게 둡니다. */
 const STAT_LABELS: Record<BoardId, string> = {
+  notice: "공지",
   intro: "자기소개",
   recruit: "모집 중인 팀",
   proposal: "기업 제안",
@@ -27,7 +29,8 @@ const STAT_LABELS: Record<BoardId, string> = {
 };
 
 const statValue = (stats: CourseStats, board: BoardId) =>
-  board === "intro" ? stats.introCount
+  board === "notice" ? stats.noticeCount
+  : board === "intro" ? stats.introCount
   : board === "recruit" ? stats.recruitOpen
   : board === "proposal" ? stats.proposalCount
   : board === "team" ? stats.teamCount
@@ -35,6 +38,7 @@ const statValue = (stats: CourseStats, board: BoardId) =>
 
 /** 수업의 흐름. 학생이 지금 어느 단계에 있는지 알면 어느 게시판을 볼지도 정해집니다. */
 const FLOW = [
+  { step: "00", title: "공지 확인", desc: "마감과 발표 순서는 수업게시판에 올라옵니다.", board: "notice" as BoardId },
   { step: "01", title: "나를 알리기", desc: "자기소개를 올려 두면 팀이 먼저 찾아옵니다.", board: "intro" as BoardId },
   { step: "02", title: "팀 찾기", desc: "모집글을 올리거나 댓글로 지원합니다.", board: "recruit" as BoardId },
   { step: "03", title: "아이템 정하기", desc: "기업 제안 중에서 고르거나 자체 아이템으로 갑니다.", board: "proposal" as BoardId },
@@ -44,13 +48,18 @@ const FLOW = [
 
 export function CourseHome() {
   const [stats, setStats] = useState<CourseStats | null>(null);
+  const [notices, setNotices] = useState<CourseNotice[] | null>(null);
 
   useEffect(() => {
     let mounted = true;
     getCourseStats()
       .then((loaded) => { if (mounted) setStats(loaded); })
       // 숫자는 장식입니다. 못 읽어도 게시판 카드는 그대로 열려야 합니다.
-      .catch(() => { if (mounted) setStats({ introCount: 0, recruitOpen: 0, proposalCount: 0, teamCount: 0, deliverableCount: 0 }); });
+      .catch(() => { if (mounted) setStats({ noticeCount: 0, introCount: 0, recruitOpen: 0, proposalCount: 0, teamCount: 0, deliverableCount: 0 }); });
+    // 공지는 게시판에 들어가야 보이면 아무도 안 봅니다. 첫 화면에 세 건만 끌어옵니다.
+    getNotices()
+      .then((rows) => { if (mounted) setNotices(sortNotices(rows).slice(0, 3)); })
+      .catch(() => { if (mounted) setNotices([]); });
     return () => { mounted = false; };
   }, []);
 
@@ -68,7 +77,7 @@ export function CourseHome() {
           기업이 제안한 프로젝트를 고르고, 확정된 팀과 중간·기말 결과물을 같은 자리에서 공유합니다.
         </p>
 
-        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           {BOARD_ORDER.map((board) => (
             <div key={board} className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-4">
               <p className="text-xs font-bold text-[#64748B]">{STAT_LABELS[board]}</p>
@@ -84,6 +93,35 @@ export function CourseHome() {
           ))}
         </div>
       </section>
+
+      {notices !== null && notices.length > 0 && (
+        <section className="mt-8">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-xl font-bold md:text-2xl">공지</h2>
+            <Link href={courseHref("notice")} className={cn("text-sm font-bold text-[#2563EB] hover:underline", focusRing)}>
+              전체 보기
+            </Link>
+          </div>
+          <ul className="mt-4 space-y-2">
+            {notices.map((notice) => (
+              <li key={notice.id}>
+                <Link
+                  href={courseHref("notice", notice.id)}
+                  className={cn(
+                    "flex items-center gap-3 rounded-xl border bg-white px-4 py-3.5 transition-colors hover:border-[#2563EB]",
+                    notice.isPinned ? "border-[#BFDBFE] bg-[#F8FAFC]" : "border-[#E2E8F0]",
+                    focusRing,
+                  )}
+                >
+                  {notice.isPinned && <Pin size={13} className="shrink-0 text-[#2563EB]" />}
+                  <span className="min-w-0 flex-1 truncate text-sm font-bold">{notice.title}</span>
+                  <span className="shrink-0 text-xs tabular-nums text-[#94A3B8]">{formatDateTime(notice.createdAt)}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="mt-8">
         <h2 className="text-xl font-bold md:text-2xl">게시판</h2>
@@ -114,7 +152,7 @@ export function CourseHome() {
 
       <section className="mt-10">
         <h2 className="text-xl font-bold md:text-2xl">수업이 흘러가는 순서</h2>
-        <ol className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <ol className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           {FLOW.map((item) => (
             <li key={item.step}>
               <Link

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { GraduationCap, LogIn, LogOut, ShieldAlert } from "lucide-react";
-import { getViewerAccount, isCourseMember, signOutViewer } from "@/lib/services/CourseService";
+import { getViewerAccount, isCourseMember, isCourseStaff, signOutViewer } from "@/lib/services/CourseService";
 import { onAuthStateChange } from "@/lib/services/AuthService";
 import {
   BOARDS,
@@ -33,11 +33,13 @@ export interface Viewer {
   id: string | null;
   email: string | null;
   member: boolean;
+  /** 과목 운영진(교수·조교). 공지 작성·수정 권한이 여기에 달립니다. */
+  staff: boolean;
   loading: boolean;
 }
 
 export function useViewer(): Viewer {
-  const [state, setState] = useState<Viewer>({ id: null, email: null, member: false, loading: true });
+  const [state, setState] = useState<Viewer>({ id: null, email: null, member: false, staff: false, loading: true });
 
   useEffect(() => {
     let mounted = true;
@@ -46,11 +48,15 @@ export function useViewer(): Viewer {
       const account = await getViewerAccount().catch(() => null);
       if (!mounted) return;
       if (!account) {
-        setState({ id: null, email: null, member: false, loading: false });
+        setState({ id: null, email: null, member: false, staff: false, loading: false });
         return;
       }
-      const member = await isCourseMember().catch(() => false);
-      if (mounted) setState({ id: account.id, email: account.email, member, loading: false });
+      // 둘 다 DB 함수 한 번씩이라 함께 보냅니다. 순차로 물으면 헤더가 두 번 깜빡입니다.
+      const [member, staff] = await Promise.all([
+        isCourseMember().catch(() => false),
+        isCourseStaff().catch(() => false),
+      ]);
+      if (mounted) setState({ id: account.id, email: account.email, member, staff, loading: false });
     };
 
     void resolve();
@@ -286,13 +292,24 @@ export function MembershipNotice({ action }: { action: string }) {
 export function WriteGate({
   viewer,
   action,
+  staffOnly = false,
   children,
 }: {
   viewer: Viewer;
   action: string;
+  /** 공지처럼 운영진만 쓰는 자리. 수강생에게는 버튼 대신 아무것도 보이지 않습니다. */
+  staffOnly?: boolean;
   children: React.ReactNode;
 }) {
   if (viewer.loading) return <div className="h-11 w-40 animate-pulse rounded-xl bg-[#E2E8F0]" />;
+
+  /*
+   * 운영진 전용 자리는 수강생에게 안내조차 띄우지 않습니다.
+   * "권한이 없습니다"를 보여 줘 봐야 학생이 할 수 있는 일이 없고, 공지 게시판은
+   * 읽으러 오는 곳이라 화면이 조용한 편이 낫습니다.
+   */
+  if (staffOnly) return viewer.staff ? <>{children}</> : null;
+
   if (!viewer.id) return <SignInPrompt action={action} />;
   if (!viewer.member) return <MembershipNotice action={`${action}할`} />;
   return <>{children}</>;

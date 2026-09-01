@@ -93,7 +93,7 @@ export const semesterColumns = (semester: CourseSemester = COURSE) => ({
 
 // ---------------------------------------------------------------- 게시판
 
-export type BoardId = "intro" | "recruit" | "proposal" | "team" | "showcase";
+export type BoardId = "notice" | "intro" | "recruit" | "proposal" | "team" | "showcase";
 
 export interface BoardConfig {
   id: BoardId;
@@ -108,6 +108,14 @@ export interface BoardConfig {
 }
 
 export const BOARDS: Record<BoardId, BoardConfig> = {
+  notice: {
+    id: "notice",
+    label: "수업게시판",
+    description: "담당 교수·조교가 올리는 공지입니다. 마감과 발표 순서가 여기로 모입니다. 궁금한 점은 댓글로 물어보세요.",
+    createLabel: "공지 올리기",
+    emptyTitle: "아직 공지가 없습니다",
+    emptyDescription: "수업 일정과 제출 마감이 올라오면 여기에 모입니다.",
+  },
   intro: {
     id: "intro",
     label: "자기소개",
@@ -152,10 +160,11 @@ export const BOARDS: Record<BoardId, BoardConfig> = {
 
 /**
  * 게시판 순서는 학기가 흘러가는 순서입니다.
- * 나를 알리고(자기소개) → 팀을 찾고(모집) → 아이템을 정하고(기업 제안) →
- * 팀을 확정하고(확정 팀) → 결과를 냅니다(결과물).
+ * 공지를 먼저 두고(수업게시판), 나를 알리고(자기소개) → 팀을 찾고(모집) →
+ * 아이템을 정하고(기업 제안) → 팀을 확정하고(확정 팀) → 결과를 냅니다(결과물).
+ * 공지가 맨 앞인 이유는 학기 중에 가장 자주 확인하는 곳이기 때문입니다.
  */
-export const BOARD_ORDER: BoardId[] = ["intro", "recruit", "proposal", "team", "showcase"];
+export const BOARD_ORDER: BoardId[] = ["notice", "intro", "recruit", "proposal", "team", "showcase"];
 
 /**
  * 주소의 `[board]` 자리가 우리가 아는 게시판인지.
@@ -346,6 +355,27 @@ export interface SemesterProfile {
   commentCount: number;
 }
 
+export interface CourseNotice {
+  id: string;
+  title: string;
+  content: string;
+  /** 마감·발표 순서처럼 학기 내내 위에 있어야 하는 공지. */
+  isPinned: boolean;
+  createdBy: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string;
+  commentCount: number;
+}
+
+/** 고정 공지가 먼저, 그다음 최신순. 목록에서 이 규칙만 지키면 됩니다. */
+export function sortNotices(notices: CourseNotice[]): CourseNotice[] {
+  return [...notices].sort((a, b) => {
+    if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+    return b.createdAt.localeCompare(a.createdAt);
+  });
+}
+
 export interface CourseComment {
   id: string;
   board: BoardId;
@@ -357,7 +387,7 @@ export interface CourseComment {
 }
 
 /** 목록에 실리는 어떤 글이든 갖는 최소 공통분모. 검색·정렬이 이것만 봅니다. */
-export type BoardEntry = SemesterProfile | RecruitPost | Proposal | CourseTeam | Deliverable;
+export type BoardEntry = CourseNotice | SemesterProfile | RecruitPost | Proposal | CourseTeam | Deliverable;
 
 // ---------------------------------------------------------------- JSONB 파싱
 
@@ -604,6 +634,68 @@ export function validateSignupPassword(password: string, confirm: string): strin
   if (!password.trim()) return "비밀번호에 공백 외의 문자를 넣어 주세요.";
   if (password !== confirm) return "비밀번호가 서로 다릅니다. 확인란을 다시 입력해 주세요.";
   return null;
+}
+
+// ---------------------------------------------------------------- 첨부파일
+
+export interface CourseFile {
+  id: string;
+  fileName: string;
+  storagePath: string;
+  mimeType: string | null;
+  sizeBytes: number;
+  createdBy: string;
+}
+
+/** 018의 버킷 용량 제한과 같은 값입니다. 다르면 화면은 통과시키고 업로드가 실패합니다. */
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+/** 파일 고르기 대화상자에 넘길 목록. 과업지시서·명세서·도면이 주로 올라옵니다. */
+export const ATTACHMENT_ACCEPT =
+  ".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.hwp,.hwpx,.txt,.csv,.png,.jpg,.jpeg,.zip";
+
+const ALLOWED_EXTENSIONS = ATTACHMENT_ACCEPT.split(",").map((item) => item.slice(1));
+
+/**
+ * 확장자. 없으면 빈 문자열입니다.
+ *
+ * `name.split(".").pop()`으로 쓰면 안 됩니다 — 점이 없는 이름은 이름 전체를 돌려주어,
+ * `pdf`라는 이름의 확장자 없는 파일이 PDF로 통과합니다.
+ * 앞자리 점(`.gitignore`)도 확장자가 아니라 숨김 파일이므로 `> 0`으로 봅니다.
+ */
+function extensionOf(fileName: string): string {
+  const at = fileName.lastIndexOf(".");
+  return at > 0 ? fileName.slice(at + 1).toLowerCase() : "";
+}
+
+/** 고르는 순간 막습니다. 등록을 누른 뒤에 거절하면 쓰던 글까지 붙잡힙니다. 통과하면 null. */
+export function checkAttachment(file: { name: string; size: number }): string | null {
+  const extension = extensionOf(file.name);
+  if (!ALLOWED_EXTENSIONS.includes(extension)) {
+    return `${file.name}: 올릴 수 없는 형식입니다. 문서·이미지·압축 파일만 첨부할 수 있습니다.`;
+  }
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    return `${file.name}: 파일이 너무 큽니다. ${Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB 이하만 올릴 수 있습니다.`;
+  }
+  if (file.size === 0) return `${file.name}: 빈 파일입니다.`;
+  return null;
+}
+
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
+/**
+ * 스토리지에 쓸 안전한 경로.
+ *
+ * 원래 파일명을 그대로 쓰면 한글·공백·괄호가 섞여 URL이 깨지거나 업로드가 거절됩니다.
+ * 보여 줄 이름은 DB(`proposal_files.file_name`)에 따로 두고, 경로는 여기서 만듭니다.
+ */
+export function toStoragePath(proposalId: string, fileName: string, unique: string): string {
+  const extension = extensionOf(fileName).replace(/[^a-z0-9]/g, "");
+  return `proposals/${proposalId}/${unique}${extension ? `.${extension}` : ""}`;
 }
 
 /** 빈 문자열을 null로. 링크 칸을 비웠을 때 DB에 ""가 쌓이면 "링크 있음"으로 오인됩니다. */

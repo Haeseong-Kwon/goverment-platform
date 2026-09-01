@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarClock, MessageSquare, Plus, Search, Users } from "lucide-react";
+import { CalendarClock, MessageSquare, Pin, Plus, Search, Users } from "lucide-react";
 import {
   getDeliverables,
+  getNotices,
   getProposals,
   getRecruitPosts,
   getSemesterProfiles,
@@ -23,6 +24,7 @@ import {
   TEAM_STATUS_LABEL,
   countOpenRoles,
   courseHref,
+  sortNotices,
   formatDateTime,
   getProposalDeadline,
   groupDeliverables,
@@ -34,12 +36,13 @@ import {
   type Deliverable,
   type DeliverablePhase,
   type Proposal,
+  type CourseNotice,
   type RecruitPost,
   type SemesterProfile,
   type StudentStatus,
 } from "./course";
 import { CourseShell, WriteGate, useViewer } from "./CourseChrome";
-import { DeliverableForm, ProposalForm, RecruitForm, SemesterProfileForm, TeamForm } from "./forms";
+import { DeliverableForm, NoticeForm, ProposalForm, RecruitForm, SemesterProfileForm, TeamForm } from "./forms";
 import {
   Button,
   ChoiceChip,
@@ -90,6 +93,27 @@ function TagRow({ items, tone = "slate" }: { items: string[]; tone?: "slate" | "
 }
 
 // ---------------------------------------------------------------- 카드
+
+function NoticeCard({ notice }: { notice: CourseNotice }) {
+  return (
+    <Link
+      href={courseHref("notice", notice.id)}
+      className={cn(cardClass, notice.isPinned && "border-[#2563EB] bg-[#F8FAFC]")}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        {notice.isPinned && (
+          <StatusBadge tone="blue">
+            <Pin size={11} className="mr-0.5 inline" />상단 고정
+          </StatusBadge>
+        )}
+        <span className="text-sm font-semibold text-[#64748B]">{notice.authorName}</span>
+      </div>
+      <h3 className="mt-3 line-clamp-2 text-lg font-bold leading-6">{notice.title}</h3>
+      <p className="mt-2 line-clamp-2 break-keep text-sm leading-6 text-[#475569]">{notice.content}</p>
+      <CardMeta createdAt={notice.createdAt} commentCount={notice.commentCount} />
+    </Link>
+  );
+}
 
 /**
  * 자기소개 카드.
@@ -210,6 +234,7 @@ function DeliverableCard({ deliverable }: { deliverable: Deliverable }) {
 // ---------------------------------------------------------------- 목록
 
 type BoardData =
+  | { board: "notice"; items: CourseNotice[] }
   | { board: "intro"; items: SemesterProfile[] }
   | { board: "recruit"; items: RecruitPost[] }
   | { board: "proposal"; items: Proposal[] }
@@ -217,6 +242,7 @@ type BoardData =
   | { board: "showcase"; items: Deliverable[] };
 
 const loaders: Record<BoardId, () => Promise<BoardData>> = {
+  notice: async () => ({ board: "notice", items: await getNotices() }),
   intro: async () => ({ board: "intro", items: await getSemesterProfiles() }),
   recruit: async () => ({ board: "recruit", items: await getRecruitPosts() }),
   proposal: async () => ({ board: "proposal", items: await getProposals() }),
@@ -226,6 +252,8 @@ const loaders: Record<BoardId, () => Promise<BoardData>> = {
 
 /** 게시판마다 다른 칩 한 줄. 전부 "전체 + 값들"이라 목록만 다르게 줍니다. */
 const filterOptions: Record<BoardId, Array<{ value: string; label: string }>> = {
+  // 공지는 양이 적고 고정/일반 둘뿐이라 칩을 두지 않습니다. 검색이면 충분합니다.
+  notice: [],
   intro: [
     ...(Object.keys(STUDENT_STATUS_LABEL) as StudentStatus[]).map((status) => ({
       value: status,
@@ -295,7 +323,7 @@ export function BoardListPage({ board }: { board: BoardId }) {
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#475569]">{config.description}</p>
         </div>
         <div className="shrink-0 md:max-w-md">
-          <WriteGate viewer={viewer} action={createLabel}>
+          <WriteGate viewer={viewer} action={createLabel} staffOnly={board === "notice"}>
             <Button size="lg" icon={<Plus size={16} />} onClick={() => setWriting(true)}>{createLabel}</Button>
           </WriteGate>
         </div>
@@ -337,7 +365,7 @@ export function BoardListPage({ board }: { board: BoardId }) {
             query || filter !== "all" ? (
               <Button variant="secondary" onClick={() => { setQuery(""); setFilter("all"); }}>필터 초기화</Button>
             ) : (
-              <WriteGate viewer={viewer} action={createLabel}>
+              <WriteGate viewer={viewer} action={createLabel} staffOnly={board === "notice"}>
                 <Button onClick={() => setWriting(true)} icon={<Plus size={15} />}>{createLabel}</Button>
               </WriteGate>
             )
@@ -349,6 +377,7 @@ export function BoardListPage({ board }: { board: BoardId }) {
             <strong className="font-bold tabular-nums text-[#0F172A]">{visibleCount}</strong>건
           </p>
           <div className="animate-in-stagger grid gap-4 md:grid-cols-2">
+            {visible?.board === "notice" && visible.items.map((item) => <NoticeCard key={item.id} notice={item} />)}
             {visible?.board === "intro" && visible.items.map((item) => (
               <IntroCard key={item.id} profile={item} isMine={item.userId === viewer.id} />
             ))}
@@ -360,6 +389,7 @@ export function BoardListPage({ board }: { board: BoardId }) {
         </>
       )}
 
+      {writing && board === "notice" && <NoticeForm onClose={() => setWriting(false)} onCreated={onCreated} />}
       {writing && board === "intro" && (
         <SemesterProfileForm
           current={myIntro}
@@ -383,6 +413,13 @@ export function BoardListPage({ board }: { board: BoardId }) {
  */
 function filterBoard(data: BoardData | null, query: string, filter: string): BoardData | null {
   if (!data) return null;
+
+  if (data.board === "notice") {
+    return {
+      board: "notice",
+      items: sortNotices(data.items).filter((item) => matchesQuery([item.title, item.content, item.authorName], query)),
+    };
+  }
 
   if (data.board === "intro") {
     return {
