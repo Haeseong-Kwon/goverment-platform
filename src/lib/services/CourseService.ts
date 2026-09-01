@@ -118,6 +118,19 @@ export async function createNotice(input: { title: string; content: string; isPi
   return data.id as string;
 }
 
+export async function updateNotice(id: string, input: { title: string; content: string; isPinned: boolean }) {
+  const { error } = await requireClient()
+    .from("course_notices")
+    .update({
+      title: input.title.trim(),
+      content: input.content.trim(),
+      is_pinned: input.isPinned,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function setNoticePinned(id: string, isPinned: boolean) {
   const { error } = await requireClient()
     .from("course_notices")
@@ -382,6 +395,22 @@ export async function deleteProposalFile(file: CourseFile) {
   if (error) throw error;
   // 행이 지워졌으면 파일도 치웁니다. 실패해도 화면에서는 이미 사라진 상태입니다.
   await client.storage.from(COURSE_BUCKET).remove([file.storagePath]).catch(() => undefined);
+}
+
+export async function updateProposal(id: string, input: ProposalInput) {
+  const { error } = await requireClient()
+    .from("corporate_proposals")
+    .update({
+      company_name: input.companyName.trim(),
+      title: input.title.trim(),
+      content: input.content.trim(),
+      category: input.categories,
+      deadline: input.deadline,
+      contact: input.contact,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw error;
 }
 
 export async function deleteProposal(id: string) {

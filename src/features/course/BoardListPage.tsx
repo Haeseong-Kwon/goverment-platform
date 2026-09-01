@@ -323,7 +323,7 @@ export function BoardListPage({ board }: { board: BoardId }) {
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#475569]">{config.description}</p>
         </div>
         <div className="shrink-0 md:max-w-md">
-          <WriteGate viewer={viewer} action={createLabel} staffOnly={board === "notice"}>
+          <WriteGate viewer={viewer} action={createLabel} staffOnly={board === "notice" || board === "proposal"}>
             <Button size="lg" icon={<Plus size={16} />} onClick={() => setWriting(true)}>{createLabel}</Button>
           </WriteGate>
         </div>
@@ -365,7 +365,7 @@ export function BoardListPage({ board }: { board: BoardId }) {
             query || filter !== "all" ? (
               <Button variant="secondary" onClick={() => { setQuery(""); setFilter("all"); }}>필터 초기화</Button>
             ) : (
-              <WriteGate viewer={viewer} action={createLabel} staffOnly={board === "notice"}>
+              <WriteGate viewer={viewer} action={createLabel} staffOnly={board === "notice" || board === "proposal"}>
                 <Button onClick={() => setWriting(true)} icon={<Plus size={15} />}>{createLabel}</Button>
               </WriteGate>
             )

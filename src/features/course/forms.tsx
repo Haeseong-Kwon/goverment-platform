@@ -10,7 +10,10 @@ import {
   getMyLedTeams,
   saveDeliverable,
   createNotice,
+  deleteProposalFile,
   saveSemesterProfile,
+  updateNotice,
+  updateProposal,
   uploadProposalFile,
 } from "@/lib/services/CourseService";
 import {
@@ -31,6 +34,9 @@ import {
   type CourseTeam,
   type DeliverablePhase,
   type ProjectPhase,
+  type CourseFile,
+  type CourseNotice,
+  type Proposal,
   type RecruitRole,
   type SemesterProfile,
   type StudentStatus,
@@ -87,25 +93,44 @@ function useSubmit(onCreated: (id: string) => void) {
 
 // ---------------------------------------------------------------- 공지
 
-export function NoticeForm({ onClose, onCreated }: FormProps) {
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [isPinned, setIsPinned] = useState(false);
+/**
+ * 공지 등록·수정.
+ *
+ * `current`가 있으면 수정입니다. 폼을 둘로 나누지 않는 이유는 칸도 규칙도 같아서인데,
+ * 나눠 두면 한쪽에만 항목이 추가되는 어긋남이 반드시 생깁니다.
+ */
+export function NoticeForm({
+  current,
+  onClose,
+  onCreated,
+}: FormProps & { current?: CourseNotice | null }) {
+  const [title, setTitle] = useState(current?.title ?? "");
+  const [content, setContent] = useState(current?.content ?? "");
+  const [isPinned, setIsPinned] = useState(current?.isPinned ?? false);
   const { saving, error, setError, run } = useSubmit(onCreated);
 
   const submit = () =>
-    run(() => validateTitleAndBody(title, content), () => createNotice({ title, content, isPinned }));
+    run(
+      () => validateTitleAndBody(title, content),
+      async () => {
+        if (current) {
+          await updateNotice(current.id, { title, content, isPinned });
+          return current.id;
+        }
+        return createNotice({ title, content, isPinned });
+      },
+    );
 
   return (
     <Modal
-      title="공지 올리기"
+      title={current ? "공지 수정" : "공지 올리기"}
       description="수강생 전체가 보는 공지입니다. 마감일이나 발표 순서처럼 계속 확인해야 하는 내용은 상단 고정을 켜 주세요."
       onClose={onClose}
       wide
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>취소</Button>
-          <Button loading={saving} onClick={() => void submit()}>공지 등록</Button>
+          <Button loading={saving} onClick={() => void submit()}>{current ? "저장" : "공지 등록"}</Button>
         </>
       }
     >
@@ -264,17 +289,25 @@ export function RecruitForm({ onClose, onCreated }: FormProps) {
 
 // ---------------------------------------------------------------- 기업 제안
 
-export function ProposalForm({ onClose, onCreated }: FormProps) {
-  const [companyName, setCompanyName] = useState("");
+export function ProposalForm({
+  current,
+  currentFiles = [],
+  onClose,
+  onCreated,
+}: FormProps & { current?: Proposal | null; currentFiles?: CourseFile[] }) {
+  const [companyName, setCompanyName] = useState(current?.companyName ?? "");
   const [files, setFiles] = useState<File[]>([]);
+  // 이미 올라간 첨부 중 남길 것. 지우기는 저장할 때 한 번에 반영합니다 —
+  // 목록에서 누르는 즉시 지우면 취소를 눌러도 파일이 돌아오지 않습니다.
+  const [keptFiles, setKeptFiles] = useState<CourseFile[]>(currentFiles);
   const [uploadNote, setUploadNote] = useState<string | null>(null);
   // 같은 파일을 뺐다가 다시 고를 수 있어야 합니다. input은 값이 같으면 change를 안 냅니다.
   const fileInput = useRef<HTMLInputElement>(null);
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [categories, setCategories] = useState<string[]>([]);
-  const [deadline, setDeadline] = useState("");
-  const [contact, setContact] = useState("");
+  const [title, setTitle] = useState(current?.title ?? "");
+  const [content, setContent] = useState(current?.content ?? "");
+  const [categories, setCategories] = useState<string[]>(current?.categories ?? []);
+  const [deadline, setDeadline] = useState(current?.deadline ?? "");
+  const [contact, setContact] = useState(current?.contact ?? "");
   const { saving, error, setError, run } = useSubmit(onCreated);
 
   const toggleCategory = (value: string) =>
@@ -294,14 +327,26 @@ export function ProposalForm({ onClose, onCreated }: FormProps) {
     run(
       () => (companyName.trim().length < 2 ? "기업·기관명을 입력해 주세요." : validateTitleAndBody(title, content)),
       async () => {
-        const id = await createProposal({
+        const input = {
           companyName,
           title,
           content,
           categories,
           deadline: emptyToNull(deadline),
           contact: emptyToNull(contact),
-        });
+        };
+
+        let id: string;
+        if (current) {
+          await updateProposal(current.id, input);
+          id = current.id;
+          // 빼기로 표시한 첨부를 지웁니다. 실패해도 본문 수정은 이미 저장됐습니다.
+          for (const file of currentFiles.filter((item) => !keptFiles.some((kept) => kept.id === item.id))) {
+            await deleteProposalFile(file).catch(() => undefined);
+          }
+        } else {
+          id = await createProposal(input);
+        }
         /*
          * 첨부는 제안이 생긴 뒤에 붙습니다(파일 행이 제안 id를 참조).
          * 업로드가 실패해도 제안 자체는 이미 남았으므로, 실패한 파일만 따로 알리고
@@ -322,14 +367,14 @@ export function ProposalForm({ onClose, onCreated }: FormProps) {
 
   return (
     <Modal
-      title="기업 제안 올리기"
+      title={current ? "기업 제안 수정" : "기업 제안 올리기"}
       description="기업이 실제로 겪는 문제와 기대하는 결과물을 적어 주세요. 팀이 지원 여부를 판단할 수 있어야 합니다."
       onClose={onClose}
       wide
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>취소</Button>
-          <Button loading={saving} onClick={() => void submit()}>제안 등록</Button>
+          <Button loading={saving} onClick={() => void submit()}>{current ? "저장" : "제안 등록"}</Button>
         </>
       }
     >
@@ -377,6 +422,24 @@ export function ProposalForm({ onClose, onCreated }: FormProps) {
             과업지시서·데이터 명세 등을 올릴 수 있습니다. 파일당 {Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB 이하.
             <strong className="text-[#B45309]"> 공개 게시판이라 첨부도 누구나 내려받을 수 있습니다.</strong>
           </p>
+
+          {keptFiles.length > 0 && (
+            <ul className="mt-2 space-y-1.5">
+              {keptFiles.map((file) => (
+                <li key={file.id} className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-white py-2 pl-3 pr-1.5 text-xs font-semibold text-[#475569]">
+                  <Paperclip size={13} className="shrink-0 text-[#94A3B8]" />
+                  <span className="min-w-0 flex-1 truncate">{file.fileName}</span>
+                  <span className="shrink-0 tabular-nums text-[#94A3B8]">{formatBytes(file.sizeBytes)}</span>
+                  <IconButton
+                    label={`${file.fileName} 삭제`}
+                    icon={<X size={13} />}
+                    onClick={() => setKeptFiles((cur) => cur.filter((item) => item.id !== file.id))}
+                    className="h-6 w-6"
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
 
           {files.length > 0 && (
             <ul className="mt-2 space-y-1.5">

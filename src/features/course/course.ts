@@ -135,10 +135,10 @@ export const BOARDS: Record<BoardId, BoardConfig> = {
   proposal: {
     id: "proposal",
     label: "기업 제안 프로젝트",
-    description: "기업이 실제 문제를 들고 오는 곳입니다. 마감일이 있는 제안은 남은 기간이 함께 표시됩니다.",
+    description: "기업이 들고 온 실제 문제입니다. 담당 교수·조교가 올리며, 참여하고 싶은 팀은 각 제안에 댓글로 신청합니다.",
     createLabel: "기업 제안 올리기",
     emptyTitle: "등록된 기업 제안이 없습니다",
-    emptyDescription: "기업 담당자나 조교가 제안을 올리면 여기에 모입니다.",
+    emptyDescription: "기업에서 받은 제안이 정리되면 여기에 올라옵니다.",
   },
   team: {
     id: "team",

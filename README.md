@@ -82,7 +82,7 @@ schema.sql → 002-manager-review.sql → 003-profile-role-lock.sql → 004-seed
            → 012-comment-attachments.sql → 013-real-announcement-deadlines.sql
            → 014-capstone-course.sql → 015-enable-legacy-rls.sql
            → 016-course-membership.sql → 017-intro-board.sql → 018-proposal-files.sql
-           → 019-course-notices.sql
+           → 019-course-notices.sql → 020-proposals-staff-only.sql
 ```
 
 `015`는 **반드시 적용해야 합니다.** `schema.sql`의 RLS 활성화 블록이 `ALTER TABLE IF EXISTS`
@@ -130,6 +130,10 @@ UUID를 넣어 다른 학생 이름으로 글을 올릴 수 있었습니다.
 INSERT INTO course_staff (email, note) VALUES ('조교메일@hanyang.ac.kr', '조교')
 ON CONFLICT (email) DO NOTHING;
 ```
+
+`020`은 기업 제안을 운영진 전용으로 좁힙니다. 수강생은 **댓글로 신청**하며, 댓글 정책은
+그대로라 읽고 쓰는 데 제약이 없습니다. 수정·삭제를 작성자 본인이 아니라 운영진 전체에게
+여는 것은 공지와 같은 이유입니다 — 교수님이 올린 제안의 마감일을 조교가 못 고치면 곤란합니다.
 
 학기는 코드 상수 하나(`src/features/course/course.ts`의 `COURSE`)가 정합니다.
 다음 학기를 열 때 이 값을 바꾸면 새 글은 새 `semester_key`로 쌓이고 지난 학기 글은 그대로 남습니다.

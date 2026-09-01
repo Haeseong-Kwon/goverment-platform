@@ -11,6 +11,7 @@ import {
   Github,
   Mail,
   Paperclip,
+  Pencil,
   Pin,
   Play,
   Presentation,
@@ -60,6 +61,7 @@ import {
   type SemesterProfile,
 } from "./course";
 import { CourseShell, useViewer } from "./CourseChrome";
+import { NoticeForm, ProposalForm } from "./forms";
 import { CommentThread } from "./CommentThread";
 import { Button, EmptyState, Notice, Skeleton, StatusBadge, focusRing } from "@/features/startup-workspace/ui";
 import { toMessage } from "@/lib/errors";
@@ -161,6 +163,7 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
   const [entry, setEntry] = useState<Entry | null | "missing">(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -223,16 +226,17 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
    * 공지만 판정이 다릅니다. 다른 글은 "내가 쓴 글인가"지만, 공지는 "운영진인가"입니다 —
    * 교수님이 올린 공지의 오타를 조교가 못 고치면 곤란합니다(019의 정책과 같은 규칙).
    */
+  // 공지와 기업 제안은 운영진 게시판입니다(019·020). 나머지는 "내가 쓴 글인가"입니다.
+  const isStaffBoard = entry.board === "notice" || entry.board === "proposal";
   const isOwner =
-    entry.board === "notice"
+    isStaffBoard
       ? viewer.staff
       : viewer.id !== null &&
-    viewer.id ===
-      (entry.board === "intro" ? entry.item.userId
-        : entry.board === "recruit" ? entry.item.authorId
-        : entry.board === "proposal" ? entry.item.createdBy
-        : entry.board === "team" ? entry.item.leaderId
-        : entry.item.createdBy);
+        viewer.id ===
+          (entry.board === "intro" ? entry.item.userId
+            : entry.board === "recruit" ? entry.item.authorId
+            : entry.board === "team" ? entry.item.leaderId
+            : entry.item.createdBy);
 
   return (
     <CourseShell active={board}>
@@ -255,6 +259,11 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
 
         {isOwner && (
           <div className="mt-8 flex flex-wrap gap-2 border-t border-[#F1F5F9] pt-6">
+            {isStaffBoard && (
+              <Button variant="secondary" icon={<Pencil size={14} />} disabled={busy} onClick={() => setEditing(true)}>
+                수정
+              </Button>
+            )}
             {entry.board === "notice" && (
               <Button
                 variant="secondary"
@@ -316,6 +325,22 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
       <div className="mt-6">
         <CommentThread board={board} targetId={id} />
       </div>
+
+      {editing && entry.board === "notice" && (
+        <NoticeForm
+          current={entry.item}
+          onClose={() => setEditing(false)}
+          onCreated={() => { setEditing(false); void act(async () => undefined, "reload"); }}
+        />
+      )}
+      {editing && entry.board === "proposal" && (
+        <ProposalForm
+          current={entry.item}
+          currentFiles={entry.files}
+          onClose={() => setEditing(false)}
+          onCreated={() => { setEditing(false); void act(async () => undefined, "reload"); }}
+        />
+      )}
     </CourseShell>
   );
 }
