@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MessageSquare, Trash2 } from "lucide-react";
-import { addComment, deleteComment, getComments } from "@/lib/services/CourseService";
-import { formatDateTime, type BoardId, type CourseComment } from "./course";
+import { MessageSquare, Pencil, Trash2 } from "lucide-react";
+import { addComment, deleteComment, getComments, updateComment } from "@/lib/services/CourseService";
+import { formatDateTime, isEdited, type BoardId, type CourseComment } from "./course";
 import { AuthorLabel, MembershipNotice, SignInPrompt, useStaffIds, useViewer } from "./CourseChrome";
 import { Button, IconButton, Skeleton, textareaClass } from "@/features/startup-workspace/ui";
 import { toMessage } from "@/lib/errors";
@@ -25,6 +25,8 @@ export function CommentThread({ board, targetId }: { board: BoardId; targetId: s
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -47,6 +49,21 @@ export function CommentThread({ board, targetId }: { board: BoardId; targetId: s
       setDraft("");
     } catch (reason) {
       setError(toMessage(reason, "댓글을 남기지 못했습니다."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!editDraft.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateComment(id, editDraft);
+      setComments((current) => current?.map((item) => (item.id === id ? updated : item)) ?? null);
+      setEditingId(null);
+    } catch (reason) {
+      setError(toMessage(reason, "댓글을 수정하지 못했습니다."));
     } finally {
       setSaving(false);
     }
@@ -103,16 +120,50 @@ export function CommentThread({ board, targetId }: { board: BoardId; targetId: s
                 {formatDateTime(comment.createdAt, true)}
               </span>
               {viewer.id === comment.authorId && (
-                <IconButton
-                  label="내 댓글 삭제"
-                  icon={<Trash2 size={14} />}
-                  onClick={() => void remove(comment.id)}
-                  className="-my-1 -mr-1 h-7 w-7 hover:text-[#DC2626]"
-                />
+                <>
+                  <IconButton
+                    label="내 댓글 수정"
+                    icon={<Pencil size={13} />}
+                    onClick={() => { setEditingId(comment.id); setEditDraft(comment.content); }}
+                    className="-my-1 h-7 w-7 hover:text-[#2563EB]"
+                  />
+                  <IconButton
+                    label="내 댓글 삭제"
+                    icon={<Trash2 size={14} />}
+                    onClick={() => void remove(comment.id)}
+                    className="-my-1 -mr-1 h-7 w-7 hover:text-[#DC2626]"
+                  />
+                </>
               )}
             </div>
-            {/* 줄바꿈을 그대로 살립니다. 여러 줄로 쓴 질문이 한 덩어리로 붙으면 읽히지 않습니다. */}
-            <p className="mt-2.5 whitespace-pre-wrap break-words text-sm leading-6 text-[#334155]">{comment.content}</p>
+
+            {editingId === comment.id ? (
+              <div className="mt-2.5">
+                <textarea
+                  value={editDraft}
+                  onChange={(event) => setEditDraft(event.target.value)}
+                  aria-label="댓글 수정"
+                  className={cn(textareaClass, "mt-0 min-h-20 bg-white")}
+                />
+                <div className="mt-2 flex justify-end gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setEditingId(null)}>취소</Button>
+                  <Button size="sm" loading={saving} disabled={!editDraft.trim()} onClick={() => void saveEdit(comment.id)}>
+                    저장
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* 줄바꿈을 그대로 살립니다. 여러 줄로 쓴 질문이 한 덩어리로 붙으면 읽히지 않습니다. */}
+                <p className="mt-2.5 whitespace-pre-wrap break-words text-sm leading-6 text-[#334155]">{comment.content}</p>
+                {/* 표시 없이 바뀌면, 그 댓글을 근거로 하던 대화가 어긋납니다. */}
+                {isEdited(comment.createdAt, comment.updatedAt) && (
+                  <p className="mt-1 text-[11px] font-medium text-[#94A3B8]">
+                    {formatDateTime(comment.updatedAt, true)} 수정됨
+                  </p>
+                )}
+              </>
+            )}
           </article>
         ))}
       </div>

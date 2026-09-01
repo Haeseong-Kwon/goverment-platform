@@ -12,6 +12,8 @@ import {
   createNotice,
   deleteProposalFile,
   saveBoardGuide,
+  updateRecruitPost,
+  updateTeam,
   uploadCourseFile,
   saveSemesterProfile,
   updateNotice,
@@ -41,6 +43,7 @@ import {
   type BoardId,
   type CourseFile,
   type CourseNotice,
+  type RecruitPost,
   type Proposal,
   type RecruitRole,
   type SemesterProfile,
@@ -334,12 +337,12 @@ export function NoticeForm({
 
 // ---------------------------------------------------------------- 팀빌딩 모집
 
-export function RecruitForm({ onClose, onCreated }: FormProps) {
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [phase, setPhase] = useState<ProjectPhase>("IDEA");
-  const [roles, setRoles] = useState<RecruitRole[]>([]);
-  const [tags, setTags] = useState("");
+export function RecruitForm({ current, onClose, onCreated }: FormProps & { current?: RecruitPost | null }) {
+  const [title, setTitle] = useState(current?.title ?? "");
+  const [content, setContent] = useState(current?.content ?? "");
+  const [phase, setPhase] = useState<ProjectPhase>(current?.projectPhase ?? "IDEA");
+  const [roles, setRoles] = useState<RecruitRole[]>(current?.recruitingRoles ?? []);
+  const [tags, setTags] = useState((current?.tags ?? []).join(", "));
   const { saving, error, setError, run } = useSubmit(onCreated);
 
   const toggleRole = (role: string) =>
@@ -355,19 +358,26 @@ export function RecruitForm({ onClose, onCreated }: FormProps) {
   const submit = () =>
     run(
       () => validateTitleAndBody(title, content) ?? (roles.length === 0 ? "모집할 역할을 하나 이상 골라 주세요." : null),
-      () => createRecruitPost({ title, content, tags: splitTags(tags), projectPhase: phase, recruitingRoles: roles }),
+      async () => {
+        const input = { title, content, tags: splitTags(tags), projectPhase: phase, recruitingRoles: roles };
+        if (current) {
+          await updateRecruitPost(current.id, input);
+          return current.id;
+        }
+        return createRecruitPost(input);
+      },
     );
 
   return (
     <Modal
-      title="팀원 모집글 쓰기"
+      title={current ? "모집글 수정" : "팀원 모집글 쓰기"}
       description="아이디어가 아직 한 줄이어도 괜찮습니다. 어떤 역할이 필요한지가 가장 중요합니다."
       onClose={onClose}
       wide
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>취소</Button>
-          <Button loading={saving} onClick={() => void submit()}>모집글 등록</Button>
+          <Button loading={saving} onClick={() => void submit()}>{current ? "저장" : "모집글 등록"}</Button>
         </>
       }
     >
@@ -651,10 +661,12 @@ export function ProposalForm({
 
 const EMPTY_MEMBER: TeamMember = { name: "", role: "" };
 
-export function TeamForm({ onClose, onCreated }: FormProps) {
-  const [teamName, setTeamName] = useState("");
-  const [projectItem, setProjectItem] = useState("");
-  const [members, setMembers] = useState<TeamMember[]>([EMPTY_MEMBER, EMPTY_MEMBER]);
+export function TeamForm({ current, onClose, onCreated }: FormProps & { current?: CourseTeam | null }) {
+  const [teamName, setTeamName] = useState(current?.teamName ?? "");
+  const [projectItem, setProjectItem] = useState(current?.projectItem ?? "");
+  const [members, setMembers] = useState<TeamMember[]>(
+    current && current.members.length > 0 ? current.members : [EMPTY_MEMBER, EMPTY_MEMBER],
+  );
   const { saving, error, setError, run } = useSubmit(onCreated);
 
   const editMember = (index: number, changes: Partial<TeamMember>) =>
@@ -670,24 +682,30 @@ export function TeamForm({ onClose, onCreated }: FormProps) {
         if (filled.length === 0) return "팀원을 한 명 이상 입력해 주세요.";
         return null;
       },
-      () =>
-        createTeam({
+      async () => {
+        const input = {
           teamName,
           projectItem,
           members: filled.map((item) => ({ name: item.name.trim(), role: item.role.trim() })),
-        }),
+        };
+        if (current) {
+          await updateTeam(current.id, input);
+          return current.id;
+        }
+        return createTeam(input);
+      },
     );
 
   return (
     <Modal
-      title="우리 팀 등록"
+      title={current ? "팀 정보 수정" : "우리 팀 등록"}
       description="팀 구성이 끝났다면 팀장이 등록합니다. 등록한 팀에만 중간·기말 결과물을 올릴 수 있습니다."
       onClose={onClose}
       wide
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>취소</Button>
-          <Button loading={saving} onClick={() => void submit()}>팀 등록</Button>
+          <Button loading={saving} onClick={() => void submit()}>{current ? "저장" : "팀 등록"}</Button>
         </>
       }
     >

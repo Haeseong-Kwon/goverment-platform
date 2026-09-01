@@ -16,6 +16,7 @@ import {
   isBoardId,
   isCourseAccount,
   isCourseEmail,
+  isEdited,
   matchesQuery,
   parseRecruitRoles,
   parseTeamMembers,
@@ -312,6 +313,23 @@ describe("결과물", () => {
 
   it("한쪽 단계가 비어도 빈 배열로 답한다", () => {
     expect(groupDeliverables([])).toEqual({ midterm: [], final: [] });
+  });
+});
+
+describe("댓글 수정 표시", () => {
+  it("저장 지연 정도의 차이는 수정으로 보지 않는다", () => {
+    // 두 시각이 밀리초 단위로 어긋나는 것은 정상입니다. 이걸 수정으로 보면
+    // 방금 쓴 댓글에도 "수정됨"이 붙습니다.
+    expect(isEdited("2026-09-01T00:00:00.000Z", "2026-09-01T00:00:00.400Z")).toBe(false);
+    expect(isEdited("2026-09-01T00:00:00Z", "2026-09-01T00:00:00Z")).toBe(false);
+  });
+
+  it("실제로 고친 댓글은 수정으로 본다", () => {
+    expect(isEdited("2026-09-01T00:00:00Z", "2026-09-01T00:05:00Z")).toBe(true);
+  });
+
+  it("시각을 못 읽으면 표시하지 않는다", () => {
+    expect(isEdited("이상한값", "2026-09-01T00:05:00Z")).toBe(false);
   });
 });
 

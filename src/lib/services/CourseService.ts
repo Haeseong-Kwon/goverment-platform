@@ -312,6 +312,21 @@ export async function createRecruitPost(input: RecruitPostInput): Promise<string
   return data.id as string;
 }
 
+export async function updateRecruitPost(id: string, input: RecruitPostInput) {
+  const { error } = await requireClient()
+    .from("recruitment_posts")
+    .update({
+      title: input.title.trim(),
+      content: input.content.trim(),
+      tags: input.tags,
+      project_phase: input.projectPhase,
+      recruiting_roles: input.recruitingRoles,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 /** 모집 마감·재개. 글을 지우는 대신 상태만 바꿔 지원자가 지난 글도 볼 수 있게 둡니다. */
 export async function setRecruitStatus(id: string, status: RecruitStatus) {
   const { error } = await requireClient()
@@ -592,6 +607,19 @@ export async function createTeam(input: TeamInput): Promise<string> {
   return data.id as string;
 }
 
+export async function updateTeam(id: string, input: TeamInput) {
+  const { error } = await requireClient()
+    .from("team_registrations")
+    .update({
+      team_name: input.teamName.trim(),
+      project_item: input.projectItem.trim(),
+      members: input.members,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function setTeamStatus(id: string, status: TeamStatus) {
   const { error } = await requireClient()
     .from("team_registrations")
@@ -718,7 +746,7 @@ export async function deleteDeliverable(id: string) {
 export async function getComments(board: BoardId, targetId: string): Promise<CourseComment[]> {
   const { data, error } = await requireClient()
     .from("course_comments")
-    .select("id, board, target_id, author_id, content, created_at")
+    .select("id, board, target_id, author_id, content, created_at, updated_at")
     .eq("board", board)
     .eq("target_id", targetId)
     .order("created_at", { ascending: true });
@@ -734,6 +762,7 @@ export async function getComments(board: BoardId, targetId: string): Promise<Cou
     authorName: names.get(row.author_id as string) ?? UNKNOWN_AUTHOR,
     content: row.content as string,
     createdAt: row.created_at as string,
+    updatedAt: (row.updated_at as string) ?? (row.created_at as string),
   }));
 }
 
@@ -744,7 +773,7 @@ export async function addComment(board: BoardId, targetId: string, content: stri
   const { data, error } = await requireClient()
     .from("course_comments")
     .insert({ board, target_id: targetId, author_id: userId, content: trimmed })
-    .select("id, board, target_id, author_id, content, created_at")
+    .select("id, board, target_id, author_id, content, created_at, updated_at")
     .single();
   if (error) throw error;
   // "나"로 두면 새로고침한 순간 실제 이름으로 바뀌어, 방금 쓴 댓글이 남의 것처럼 보입니다.
@@ -757,6 +786,30 @@ export async function addComment(board: BoardId, targetId: string, content: stri
     authorName: names.get(userId) ?? UNKNOWN_AUTHOR,
     content: data.content as string,
     createdAt: data.created_at as string,
+    updatedAt: (data.updated_at as string) ?? (data.created_at as string),
+  };
+}
+
+export async function updateComment(id: string, content: string): Promise<CourseComment> {
+  const trimmed = content.trim();
+  if (!trimmed) throw new Error("댓글 내용을 입력해 주세요.");
+  const { data, error } = await requireClient()
+    .from("course_comments")
+    .update({ content: trimmed, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("id, board, target_id, author_id, content, created_at, updated_at")
+    .single();
+  if (error) throw error;
+  const names = await getProfileNames([data.author_id as string]);
+  return {
+    id: data.id as string,
+    board: data.board as BoardId,
+    targetId: data.target_id as string,
+    authorId: data.author_id as string,
+    authorName: names.get(data.author_id as string) ?? UNKNOWN_AUTHOR,
+    content: data.content as string,
+    createdAt: data.created_at as string,
+    updatedAt: (data.updated_at as string) ?? (data.created_at as string),
   };
 }
 

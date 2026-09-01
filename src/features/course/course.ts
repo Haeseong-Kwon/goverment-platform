@@ -402,6 +402,20 @@ export interface CourseComment {
   authorName: string;
   content: string;
   createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * 고쳐진 댓글인가.
+ *
+ * 두 시각이 같아도 저장 지연으로 밀리초가 어긋날 수 있어, 1초 넘게 차이 날 때만
+ * 수정으로 봅니다. 안 그러면 방금 쓴 댓글에도 "수정됨"이 붙습니다.
+ */
+export function isEdited(createdAt: string, updatedAt: string): boolean {
+  const created = Date.parse(createdAt);
+  const updated = Date.parse(updatedAt);
+  if (!Number.isFinite(created) || !Number.isFinite(updated)) return false;
+  return updated - created > 1000;
 }
 
 /** 목록에 실리는 어떤 글이든 갖는 최소 공통분모. 검색·정렬이 이것만 봅니다. */

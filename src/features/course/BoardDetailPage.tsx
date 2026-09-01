@@ -61,7 +61,7 @@ import {
   type SemesterProfile,
 } from "./course";
 import { AuthorLabel, CourseShell, StaffBadge, useStaffIds, useViewer } from "./CourseChrome";
-import { NoticeForm, ProposalForm } from "./forms";
+import { NoticeForm, ProposalForm, RecruitForm, TeamForm } from "./forms";
 import { CommentThread } from "./CommentThread";
 import { Button, EmptyState, Notice, Skeleton, StatusBadge, focusRing } from "@/features/startup-workspace/ui";
 import { toMessage } from "@/lib/errors";
@@ -260,7 +260,11 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
 
         {isOwner && (
           <div className="mt-8 flex flex-wrap gap-2 border-t border-[#F1F5F9] pt-6">
-            {isStaffBoard && (
+            {/*
+              수정은 글이 있는 게시판 전부에 둡니다. 없으면 오타 하나를 고치려고 지워야 하는데,
+              모집글은 댓글이 곧 지원이고 팀은 결과물이 매달려 있어 지우는 순간 함께 사라집니다.
+            */}
+            {(isStaffBoard || entry.board === "recruit" || entry.board === "team") && (
               <Button variant="secondary" icon={<Pencil size={14} />} disabled={busy} onClick={() => setEditing(true)}>
                 수정
               </Button>
@@ -329,6 +333,20 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
 
       {editing && entry.board === "notice" && (
         <NoticeForm
+          current={entry.item}
+          onClose={() => setEditing(false)}
+          onCreated={() => { setEditing(false); void act(async () => undefined, "reload"); }}
+        />
+      )}
+      {editing && entry.board === "recruit" && (
+        <RecruitForm
+          current={entry.item}
+          onClose={() => setEditing(false)}
+          onCreated={() => { setEditing(false); void act(async () => undefined, "reload"); }}
+        />
+      )}
+      {editing && entry.board === "team" && (
+        <TeamForm
           current={entry.item}
           onClose={() => setEditing(false)}
           onCreated={() => { setEditing(false); void act(async () => undefined, "reload"); }}

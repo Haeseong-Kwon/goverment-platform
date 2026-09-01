@@ -84,6 +84,7 @@ schema.sql → 002-manager-review.sql → 003-profile-role-lock.sql → 004-seed
            → 016-course-membership.sql → 017-intro-board.sql → 018-proposal-files.sql
            → 019-course-notices.sql → 020-proposals-staff-only.sql
            → 021-board-guides.sql → 022-staff-badge.sql
+           → 023-comment-edit.sql
 ```
 
 `015`는 **반드시 적용해야 합니다.** `schema.sql`의 RLS 활성화 블록이 `ALTER TABLE IF EXISTS`
@@ -148,6 +149,10 @@ ON CONFLICT (email) DO NOTHING;
 `022`는 운영진을 화면에서 알아볼 수 있게 합니다. `is_course_staff()`는 "나는 운영진인가"만
 답하므로, 남이 쓴 글에 [교수자] 뱃지를 붙이려면 `course_staff_ids()`가 따로 필요합니다.
 **id만 돌려주고 메일 주소는 주지 않습니다** — 명단을 열면 교수·조교 주소가 그대로 수집됩니다.
+
+`023`은 댓글 수정을 엽니다. `updated_at`을 따로 남기고 화면이 "수정됨"을 붙입니다 —
+표시 없이 조용히 바뀌면 그 댓글을 근거로 하던 대화가 어긋납니다. UPDATE 정책에 `WITH CHECK`를
+걸어 본문만 바꿀 수 있게 합니다(board·target_id를 바꾸면 댓글이 다른 글로 옮겨 갑니다).
 
 학기는 코드 상수 하나(`src/features/course/course.ts`의 `COURSE`)가 정합니다.
 다음 학기를 열 때 이 값을 바꾸면 새 글은 새 `semester_key`로 쌓이고 지난 학기 글은 그대로 남습니다.
