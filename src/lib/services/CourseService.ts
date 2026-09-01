@@ -417,9 +417,9 @@ const COURSE_BUCKET = "course";
  * 반대 방향(파일은 올라갔는데 행이 없음)은 눈에 보이지 않으므로 덜 나쁩니다.
  */
 /** 첨부가 붙는 곳. 021에서 표 하나(course_files)가 둘을 함께 담습니다. */
-type FileOwner = { kind: "proposal"; id: string } | { kind: "guide"; id: string };
+type FileOwner = { kind: "proposal"; id: string } | { kind: "guide"; id: string } | { kind: "deliverable"; id: string };
 
-const ownerColumn = (owner: FileOwner) => (owner.kind === "proposal" ? "proposal_id" : "guide_id");
+const ownerColumn = (owner: FileOwner) => `${owner.kind}_id`;
 
 export async function uploadCourseFile(owner: FileOwner, file: File): Promise<CourseFile> {
   const problem = checkAttachment(file);
@@ -475,6 +475,7 @@ export async function getCourseFiles(owner: FileOwner): Promise<CourseFile[]> {
 
 /** 기존 호출부가 쓰던 이름. 제안 첨부는 여전히 가장 흔한 경우라 짧은 길을 남겨 둡니다. */
 export const getProposalFiles = (proposalId: string) => getCourseFiles({ kind: "proposal", id: proposalId });
+export const getDeliverableFiles = (deliverableId: string) => getCourseFiles({ kind: "deliverable", id: deliverableId });
 export const uploadProposalFile = (proposalId: string, file: File) =>
   uploadCourseFile({ kind: "proposal", id: proposalId }, file);
 

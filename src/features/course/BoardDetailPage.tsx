@@ -26,6 +26,7 @@ import {
   deleteSemesterProfile,
   deleteTeam,
   getDeliverable,
+  getDeliverableFiles,
   getDeliverables,
   getNotice,
   getProposal,
@@ -61,7 +62,7 @@ import {
   type SemesterProfile,
 } from "./course";
 import { AuthorLabel, CourseShell, StaffBadge, useStaffIds, useViewer } from "./CourseChrome";
-import { NoticeForm, ProposalForm, RecruitForm, TeamForm } from "./forms";
+import { DeliverableForm, NoticeForm, ProposalForm, RecruitForm, TeamForm } from "./forms";
 import { CommentThread } from "./CommentThread";
 import { Button, EmptyState, Notice, Skeleton, StatusBadge, focusRing } from "@/features/startup-workspace/ui";
 import { toMessage } from "@/lib/errors";
@@ -73,7 +74,7 @@ type Entry =
   | { board: "recruit"; item: RecruitPost }
   | { board: "proposal"; item: Proposal; files: CourseFile[] }
   | { board: "team"; item: CourseTeam; deliverables: Deliverable[] }
-  | { board: "showcase"; item: Deliverable };
+  | { board: "showcase"; item: Deliverable; files: CourseFile[] };
 
 async function loadEntry(board: BoardId, id: string): Promise<Entry | null> {
   if (board === "notice") {
@@ -103,7 +104,9 @@ async function loadEntry(board: BoardId, id: string): Promise<Entry | null> {
     return { board, item, deliverables };
   }
   const item = await getDeliverable(id);
-  return item && { board, item };
+  if (!item) return null;
+  const files = await getDeliverableFiles(id).catch(() => [] as CourseFile[]);
+  return { board: "showcase", item, files };
 }
 
 /** 상세 화면의 본문 블록. 제목 아래 회색 라벨 + 내용 순서를 네 게시판이 같이 씁니다. */
@@ -123,6 +126,32 @@ function Body({ text }: { text: string }) {
 
 const LINK_ICONS = { demoUrl: ExternalLink, repoUrl: Github, deckUrl: Presentation, videoUrl: Play } as const;
 const LINK_LABELS = { demoUrl: "데모 열기", repoUrl: "저장소", deckUrl: "발표자료", videoUrl: "시연 영상" } as const;
+
+/** 첨부 목록. 기업 제안과 결과물이 같은 모양을 씁니다. */
+function FileList({ files }: { files: CourseFile[] }) {
+  return (
+    <ul className="space-y-2">
+      {files.map((file) => (
+        <li key={file.id}>
+          <a
+            href={getProposalFileUrl(file.storagePath)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              "flex items-center gap-3 rounded-xl border border-[#E2E8F0] bg-white px-4 py-3 transition-colors hover:border-[#2563EB] hover:bg-[#F8FAFC]",
+              focusRing,
+            )}
+          >
+            <Paperclip size={15} className="shrink-0 text-[#94A3B8]" />
+            <span className="min-w-0 flex-1 truncate text-sm font-bold">{file.fileName}</span>
+            <span className="shrink-0 text-xs font-semibold tabular-nums text-[#94A3B8]">{formatBytes(file.sizeBytes)}</span>
+            <Download size={15} className="shrink-0 text-[#2563EB]" />
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function DeliverableLinks({ deliverable }: { deliverable: Deliverable }) {
   const links = (Object.keys(LINK_LABELS) as Array<keyof typeof LINK_LABELS>)
@@ -256,7 +285,7 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
         {entry.board === "recruit" && <RecruitDetail post={entry.item} staffIds={staffIds} />}
         {entry.board === "proposal" && <ProposalDetail proposal={entry.item} files={entry.files} />}
         {entry.board === "team" && <TeamDetail team={entry.item} deliverables={entry.deliverables} staffIds={staffIds} />}
-        {entry.board === "showcase" && <ShowcaseDetail deliverable={entry.item} />}
+        {entry.board === "showcase" && <ShowcaseDetail deliverable={entry.item} files={entry.files} />}
 
         {isOwner && (
           <div className="mt-8 flex flex-wrap gap-2 border-t border-[#F1F5F9] pt-6">
@@ -264,7 +293,7 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
               수정은 글이 있는 게시판 전부에 둡니다. 없으면 오타 하나를 고치려고 지워야 하는데,
               모집글은 댓글이 곧 지원이고 팀은 결과물이 매달려 있어 지우는 순간 함께 사라집니다.
             */}
-            {(isStaffBoard || entry.board === "recruit" || entry.board === "team") && (
+            {(isStaffBoard || entry.board === "recruit" || entry.board === "team" || entry.board === "showcase") && (
               <Button variant="secondary" icon={<Pencil size={14} />} disabled={busy} onClick={() => setEditing(true)}>
                 수정
               </Button>
@@ -334,6 +363,14 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
       {editing && entry.board === "notice" && (
         <NoticeForm
           current={entry.item}
+          onClose={() => setEditing(false)}
+          onCreated={() => { setEditing(false); void act(async () => undefined, "reload"); }}
+        />
+      )}
+      {editing && entry.board === "showcase" && (
+        <DeliverableForm
+          current={entry.item}
+          currentFiles={entry.files}
           onClose={() => setEditing(false)}
           onCreated={() => { setEditing(false); void act(async () => undefined, "reload"); }}
         />
@@ -550,28 +587,7 @@ function ProposalDetail({ proposal, files }: { proposal: Proposal; files: Course
 
         {files.length > 0 && (
           <Section title={`첨부파일 ${files.length}건`}>
-            <ul className="space-y-2">
-              {files.map((file) => (
-                <li key={file.id}>
-                  <a
-                    href={getProposalFileUrl(file.storagePath)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={cn(
-                      "flex items-center gap-3 rounded-xl border border-[#E2E8F0] bg-white px-4 py-3 transition-colors hover:border-[#2563EB] hover:bg-[#F8FAFC]",
-                      focusRing,
-                    )}
-                  >
-                    <Paperclip size={15} className="shrink-0 text-[#94A3B8]" />
-                    <span className="min-w-0 flex-1 truncate text-sm font-bold">{file.fileName}</span>
-                    <span className="shrink-0 text-xs font-semibold tabular-nums text-[#94A3B8]">
-                      {formatBytes(file.sizeBytes)}
-                    </span>
-                    <Download size={15} className="shrink-0 text-[#2563EB]" />
-                  </a>
-                </li>
-              ))}
-            </ul>
+            <FileList files={files} />
           </Section>
         )}
 
@@ -663,7 +679,7 @@ function TeamDetail({ team, deliverables, staffIds }: { team: CourseTeam; delive
   );
 }
 
-function ShowcaseDetail({ deliverable }: { deliverable: Deliverable }) {
+function ShowcaseDetail({ deliverable, files }: { deliverable: Deliverable; files: CourseFile[] }) {
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
@@ -687,6 +703,12 @@ function ShowcaseDetail({ deliverable }: { deliverable: Deliverable }) {
                 <span key={item} className="rounded-lg bg-[#EFF6FF] px-2.5 py-1 text-xs font-semibold text-[#2563EB]">{item}</span>
               ))}
             </div>
+          </Section>
+        )}
+
+        {files.length > 0 && (
+          <Section title={`첨부파일 ${files.length}건`}>
+            <FileList files={files} />
           </Section>
         )}
 

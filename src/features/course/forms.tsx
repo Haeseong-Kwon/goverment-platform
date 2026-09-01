@@ -43,6 +43,7 @@ import {
   type BoardId,
   type CourseFile,
   type CourseNotice,
+  type Deliverable,
   type RecruitPost,
   type Proposal,
   type RecruitRole,
@@ -907,15 +908,37 @@ const LINK_FIELDS = [
 
 type LinkKey = (typeof LINK_FIELDS)[number]["key"];
 
-export function DeliverableForm({ onClose, onCreated }: FormProps) {
+export function DeliverableForm({
+  current,
+  currentFiles = [],
+  onClose,
+  onCreated,
+}: FormProps & { current?: Deliverable | null; currentFiles?: CourseFile[] }) {
   const [teams, setTeams] = useState<CourseTeam[] | null>(null);
-  const [teamId, setTeamId] = useState("");
-  const [phase, setPhase] = useState<DeliverablePhase>("midterm");
-  const [title, setTitle] = useState("");
-  const [summary, setSummary] = useState("");
-  const [techStack, setTechStack] = useState("");
-  const [links, setLinks] = useState<Record<LinkKey, string>>({ demoUrl: "", repoUrl: "", deckUrl: "", videoUrl: "" });
+  const [teamId, setTeamId] = useState(current?.teamId ?? "");
+  const [phase, setPhase] = useState<DeliverablePhase>(current?.phase ?? "midterm");
+  const [title, setTitle] = useState(current?.title ?? "");
+  const [summary, setSummary] = useState(current?.summary ?? "");
+  const [techStack, setTechStack] = useState((current?.techStack ?? []).join(", "));
+  const [links, setLinks] = useState<Record<LinkKey, string>>({
+    demoUrl: current?.demoUrl ?? "",
+    repoUrl: current?.repoUrl ?? "",
+    deckUrl: current?.deckUrl ?? "",
+    videoUrl: current?.videoUrl ?? "",
+  });
+  const [files, setFiles] = useState<File[]>([]);
+  const [keptFiles, setKeptFiles] = useState<CourseFile[]>(currentFiles);
+  const deliverableFileInput = useRef<HTMLInputElement>(null);
   const { saving, error, setError, run } = useSubmit(onCreated);
+
+  const pickDeliverableFiles = (picked: FileList | null) => {
+    if (!picked) return;
+    const chosen = Array.from(picked);
+    const problem = chosen.map(checkAttachment).find(Boolean);
+    if (problem) { setError(problem); return; }
+    setError(null);
+    setFiles((cur) => [...cur, ...chosen]);
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -923,7 +946,9 @@ export function DeliverableForm({ onClose, onCreated }: FormProps) {
       .then((rows) => {
         if (!mounted) return;
         setTeams(rows);
-        if (rows[0]) setTeamId(rows[0].id);
+        // 수정 모드에서는 이미 그 결과물의 팀이 채워져 있습니다. 덮어쓰면 여러 팀의
+        // 팀장인 경우 남의 팀 결과물로 옮겨 저장됩니다.
+        setTeamId((cur) => cur || rows[0]?.id || "");
       })
       .catch(() => { if (mounted) setTeams([]); });
     return () => { mounted = false; };
@@ -937,8 +962,8 @@ export function DeliverableForm({ onClose, onCreated }: FormProps) {
         if (summary.trim().length < 10) return "요약은 10자 이상 입력해 주세요.";
         return LINK_FIELDS.map((field) => validateOptionalUrl(links[field.key], field.label)).find(Boolean) ?? null;
       },
-      () =>
-        saveDeliverable({
+      async () => {
+        const id = await saveDeliverable({
           teamId,
           phase,
           title,
@@ -948,7 +973,23 @@ export function DeliverableForm({ onClose, onCreated }: FormProps) {
           repoUrl: emptyToNull(links.repoUrl),
           deckUrl: emptyToNull(links.deckUrl),
           videoUrl: emptyToNull(links.videoUrl),
-        }),
+        });
+
+        for (const file of currentFiles.filter((item) => !keptFiles.some((k) => k.id === item.id))) {
+          await deleteProposalFile(file).catch(() => undefined);
+        }
+        // 첨부는 결과물이 저장된 뒤에 붙습니다. 실패해도 결과물은 이미 남았으므로 따로 알립니다.
+        const failures: string[] = [];
+        for (const file of files) {
+          try {
+            await uploadCourseFile({ kind: "deliverable", id }, file);
+          } catch (reason) {
+            failures.push(toMessage(reason, `${file.name}을(를) 올리지 못했습니다.`));
+          }
+        }
+        if (failures.length > 0) setError(failures.join(" "));
+        return id;
+      },
     );
 
   // 팀이 없으면 폼을 보여 줄 이유가 없습니다. 팀 등록으로 보내는 편이 빠릅니다.
@@ -1022,6 +1063,41 @@ export function DeliverableForm({ onClose, onCreated }: FormProps) {
         <Field label="기술 스택" hint="쉼표로 구분합니다. 예: Next.js, Supabase, YOLOv8">
           <input value={techStack} onChange={(event) => setTechStack(event.target.value)} placeholder="Next.js, Supabase" className={inputClass} />
         </Field>
+
+        <fieldset>
+          <legend className="text-sm font-bold">첨부파일</legend>
+          <p className="mt-1 text-xs font-medium text-[#94A3B8]">
+            발표자료·보고서를 올릴 수 있습니다. 파일당 {Math.floor(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB 이하.
+            링크는 학기가 끝나면 죽는 일이 많아, 남겨야 할 문서는 파일로 올리는 편이 안전합니다.
+          </p>
+
+          {[...keptFiles.map((f) => ({ key: f.id, name: f.fileName, size: f.sizeBytes, remove: () => setKeptFiles((cur) => cur.filter((i) => i.id !== f.id)) })),
+            ...files.map((f, index) => ({ key: `new-${index}`, name: f.name, size: f.size, remove: () => setFiles((cur) => cur.filter((_, at) => at !== index)) }))]
+            .map((item) => (
+              <ul key={item.key} className="mt-2">
+                <li className="flex items-center gap-2 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] py-2 pl-3 pr-1.5 text-xs font-semibold text-[#475569]">
+                  <Paperclip size={13} className="shrink-0 text-[#94A3B8]" />
+                  <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                  <span className="shrink-0 tabular-nums text-[#94A3B8]">{formatBytes(item.size)}</span>
+                  <IconButton label={`${item.name} 빼기`} icon={<X size={13} />} onClick={item.remove} className="h-6 w-6" />
+                </li>
+              </ul>
+            ))}
+
+          <input
+            ref={deliverableFileInput}
+            type="file"
+            multiple
+            accept={ATTACHMENT_ACCEPT}
+            onChange={(event) => pickDeliverableFiles(event.target.files)}
+            className="hidden"
+            aria-hidden
+            tabIndex={-1}
+          />
+          <Button variant="secondary" size="sm" icon={<Paperclip size={14} />} onClick={() => deliverableFileInput.current?.click()} className="mt-2">
+            파일 선택
+          </Button>
+        </fieldset>
 
         <div className="grid gap-4 sm:grid-cols-2">
           {LINK_FIELDS.map((field) => (
