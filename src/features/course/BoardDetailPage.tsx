@@ -22,6 +22,7 @@ import {
   deleteDeliverable,
   deleteNotice,
   deleteProposal,
+  deleteQuestion,
   deleteRecruitPost,
   deleteSemesterProfile,
   deleteTeam,
@@ -30,13 +31,17 @@ import {
   getDeliverables,
   getNotice,
   getProposal,
+  getQuestion,
   getProposalFiles,
   getProposalFileUrl,
   getRecruitPost,
   getSemesterProfileById,
   getTeam,
+  confirmTeam,
   setNoticePinned,
+  setQuestionAnswered,
   setRecruitStatus,
+  unconfirmTeam,
   setTeamStatus,
 } from "@/lib/services/CourseService";
 import {
@@ -55,6 +60,7 @@ import {
   type BoardId,
   type CourseFile,
   type CourseNotice,
+  type CourseQuestion,
   type CourseTeam,
   type Deliverable,
   type Proposal,
@@ -62,7 +68,7 @@ import {
   type SemesterProfile,
 } from "./course";
 import { AuthorLabel, CourseShell, StaffBadge, useStaffIds, useViewer } from "./CourseChrome";
-import { DeliverableForm, NoticeForm, ProposalForm, RecruitForm, TeamForm } from "./forms";
+import { DeliverableForm, NoticeForm, ProposalForm, QuestionForm, RecruitForm, TeamForm } from "./forms";
 import { CommentThread } from "./CommentThread";
 import { Button, EmptyState, Notice, Skeleton, StatusBadge, focusRing } from "@/features/startup-workspace/ui";
 import { toMessage } from "@/lib/errors";
@@ -70,6 +76,7 @@ import { cn } from "@/lib/utils";
 
 type Entry =
   | { board: "notice"; item: CourseNotice }
+  | { board: "qna"; item: CourseQuestion }
   | { board: "intro"; item: SemesterProfile }
   | { board: "recruit"; item: RecruitPost }
   | { board: "proposal"; item: Proposal; files: CourseFile[] }
@@ -79,6 +86,10 @@ type Entry =
 async function loadEntry(board: BoardId, id: string): Promise<Entry | null> {
   if (board === "notice") {
     const item = await getNotice(id);
+    return item && { board, item };
+  }
+  if (board === "qna") {
+    const item = await getQuestion(id);
     return item && { board, item };
   }
   if (board === "intro") {
@@ -261,6 +272,8 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
   const isOwner =
     isStaffBoard
       ? viewer.staff
+      : entry.board === "qna"
+        ? viewer.staff || viewer.id === entry.item.authorId
       : viewer.id !== null &&
         viewer.id ===
           (entry.board === "intro" ? entry.item.userId
@@ -281,6 +294,7 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
 
       <article className="animate-in rounded-2xl border border-[#E2E8F0] bg-white p-6 md:p-8">
         {entry.board === "notice" && <NoticeDetail notice={entry.item} />}
+        {entry.board === "qna" && <QuestionDetail question={entry.item} staffIds={staffIds} />}
         {entry.board === "intro" && <IntroDetail profile={entry.item} />}
         {entry.board === "recruit" && <RecruitDetail post={entry.item} staffIds={staffIds} />}
         {entry.board === "proposal" && <ProposalDetail proposal={entry.item} files={entry.files} />}
@@ -293,9 +307,35 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
               수정은 글이 있는 게시판 전부에 둡니다. 없으면 오타 하나를 고치려고 지워야 하는데,
               모집글은 댓글이 곧 지원이고 팀은 결과물이 매달려 있어 지우는 순간 함께 사라집니다.
             */}
-            {(isStaffBoard || entry.board === "recruit" || entry.board === "team" || entry.board === "showcase") && (
+            {(isStaffBoard || entry.board === "recruit" || entry.board === "team" || entry.board === "showcase" || entry.board === "qna") && (
               <Button variant="secondary" icon={<Pencil size={14} />} disabled={busy} onClick={() => setEditing(true)}>
                 수정
+              </Button>
+            )}
+            {entry.board === "qna" && viewer.staff && (
+              <Button
+                variant="secondary"
+                loading={busy}
+                onClick={() => void act(() => setQuestionAnswered(entry.item.id, entry.item.answeredAt === null), "reload")}
+              >
+                {entry.item.answeredAt === null ? "답변 완료로 표시" : "답변 대기로 되돌리기"}
+              </Button>
+            )}
+            {entry.board === "team" && viewer.staff && (
+              <Button
+                variant="secondary"
+                loading={busy}
+                onClick={() =>
+                  void act(
+                    async () => {
+                      if (entry.item.confirmedAt === null) await confirmTeam(entry.item.id);
+                      else await unconfirmTeam(entry.item.id);
+                    },
+                    "reload",
+                  )
+                }
+              >
+                {entry.item.confirmedAt === null ? "팀 확정" : "확정 해제"}
               </Button>
             )}
             {entry.board === "notice" && (
@@ -342,6 +382,7 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
               onClick={() =>
                 remove(() =>
                   entry.board === "notice" ? deleteNotice(entry.item.id)
+                  : entry.board === "qna" ? deleteQuestion(entry.item.id)
                   : entry.board === "intro" ? deleteSemesterProfile(entry.item.id)
                   : entry.board === "recruit" ? deleteRecruitPost(entry.item.id)
                   : entry.board === "proposal" ? deleteProposal(entry.item.id)
@@ -362,6 +403,13 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
 
       {editing && entry.board === "notice" && (
         <NoticeForm
+          current={entry.item}
+          onClose={() => setEditing(false)}
+          onCreated={() => { setEditing(false); void act(async () => undefined, "reload"); }}
+        />
+      )}
+      {editing && entry.board === "qna" && (
+        <QuestionForm
           current={entry.item}
           onClose={() => setEditing(false)}
           onCreated={() => { setEditing(false); void act(async () => undefined, "reload"); }}
@@ -402,6 +450,32 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
 }
 
 // ---------------------------------------------------------------- 게시판별 본문
+
+function QuestionDetail({ question, staffIds }: { question: CourseQuestion; staffIds: Set<string> }) {
+  return (
+    <>
+      <StatusBadge tone={question.answeredAt ? "green" : "amber"} dot>
+        {question.answeredAt ? "답변 완료" : "답변 대기"}
+      </StatusBadge>
+      <h1 className="mt-4 text-[26px] font-bold leading-tight tracking-tight md:text-[32px]">{question.title}</h1>
+      <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[#94A3B8]">
+        <AuthorLabel name={question.authorName} authorId={question.authorId} staffIds={staffIds} className="text-[#475569]" />
+        <span>·</span>
+        <span className="tabular-nums">{formatDateTime(question.createdAt, true)}</span>
+      </p>
+
+      <div className="mt-8">
+        <Body text={question.content} />
+      </div>
+
+      {question.answeredAt === null && (
+        <p className="mt-8 rounded-xl bg-[#FFFBEB] px-4 py-3.5 text-sm leading-6 text-[#B45309]">
+          아직 답변이 달리지 않았습니다. 담당 교수·조교가 확인하면 아래에 댓글로 답합니다.
+        </p>
+      )}
+    </>
+  );
+}
 
 function NoticeDetail({ notice }: { notice: CourseNotice }) {
   return (
@@ -616,7 +690,11 @@ function TeamDetail({ team, deliverables, staffIds }: { team: CourseTeam; delive
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge tone={team.status === "Activities" ? "blue" : "green"} dot>
+        {team.teamNo !== null && <StatusBadge tone="blue">{team.teamNo}팀</StatusBadge>}
+        <StatusBadge tone={team.confirmedAt ? "green" : "slate"} dot>
+          {team.confirmedAt ? "확정" : "확정 대기"}
+        </StatusBadge>
+        <StatusBadge tone={team.status === "Activities" ? "blue" : "green"}>
           {TEAM_STATUS_LABEL[team.status]}
         </StatusBadge>
         <span className="inline-flex items-center gap-1 text-sm font-semibold text-[#64748B]">
@@ -642,8 +720,13 @@ function TeamDetail({ team, deliverables, staffIds }: { team: CourseTeam; delive
                   {member.name.slice(0, 1)}
                 </span>
                 <span className="min-w-0">
-                  <strong className="block truncate text-sm font-bold">{member.name}</strong>
-                  {member.role && <span className="block truncate text-xs font-semibold text-[#94A3B8]">{member.role}</span>}
+                  <strong className="block truncate text-sm font-bold">
+                    {member.name}
+                    {member.isLeader && <span className="ml-1.5 text-xs font-bold text-[#2563EB]">팀장</span>}
+                  </strong>
+                  <span className="block truncate text-xs font-semibold text-[#94A3B8]">
+                    {[member.role, member.major, member.studentId].filter(Boolean).join(" · ") || "정보 없음"}
+                  </span>
                 </span>
               </li>
             ))}

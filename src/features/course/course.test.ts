@@ -20,17 +20,23 @@ import {
   matchesQuery,
   parseRecruitRoles,
   parseTeamMembers,
+  rosterFileName,
   semesterColumns,
   sortProposals,
   sortRecruitPosts,
   sortNotices,
+  sortQuestions,
   splitTags,
+  toRosterCsv,
   toStoragePath,
   validateOptionalUrl,
   validateSignupPassword,
   validateTitleAndBody,
   type CourseNotice,
+  type CourseQuestion,
+  type CourseTeam,
   type Deliverable,
+  type TeamMember,
   type DeliverablePhase,
   type Proposal,
   type RecruitPost,
@@ -94,7 +100,13 @@ describe("학기", () => {
     });
   });
 
+  it("명단 파일 이름에 학기가 들어간다", () => {
+    expect(rosterFileName()).toContain("2026-2학기");
+    expect(rosterFileName().endsWith(".csv")).toBe(true);
+  });
+
   it("주소의 게시판 값만 통과시킨다", () => {
+    expect(isBoardId("qna")).toBe(true);
     expect(isBoardId("notice")).toBe(true);
     expect(isBoardId("intro")).toBe(true);
     expect(isBoardId("recruit")).toBe(true);
@@ -115,7 +127,7 @@ describe("학기", () => {
   it("게시판 순서와 설정이 어긋나지 않는다", () => {
     // 탭·홈 카드·라우트가 전부 BOARD_ORDER를 돌므로, 설정이 빠진 값이 섞이면
     // 화면에서 undefined를 읽습니다.
-    expect(BOARD_ORDER).toEqual(["notice", "intro", "recruit", "team", "proposal", "showcase"]);
+    expect(BOARD_ORDER).toEqual(["notice", "qna", "intro", "recruit", "team", "proposal", "showcase"]);
     for (const board of BOARD_ORDER) {
       expect(BOARDS[board]?.id).toBe(board);
       expect(BOARDS[board].createLabel.length).toBeGreaterThan(0);
@@ -197,8 +209,9 @@ describe("JSONB 파싱", () => {
 
   it("팀원은 이름이 있어야 명단에 오른다", () => {
     expect(parseTeamMembers([{ name: "박민준", role: "백엔드" }, { role: "이름없음" }, "정서연"])).toEqual([
-      { name: "박민준", role: "백엔드" },
-      { name: "정서연", role: "" },
+      { name: "박민준", role: "백엔드", major: "", studentId: "", isLeader: false },
+      // 학과·학번이 없던 시절 행도 빈 값으로 채워 화면이 깨지지 않아야 합니다.
+      { name: "정서연", role: "", major: "", studentId: "", isLeader: false },
     ]);
   });
 
@@ -245,6 +258,67 @@ describe("목록 정렬", () => {
       proposal({ id: "later", deadline: "2026-10-01" }),
     ];
     expect(sortProposals(proposals, now).map((item) => item.id)).toEqual(["soon", "later", "none", "expired"]);
+  });
+});
+
+describe("팀 명단 파일", () => {
+  const member = (over: Partial<TeamMember> = {}): TeamMember => ({
+    name: "김하나", role: "백엔드", major: "컴퓨터학부", studentId: "2021001", isLeader: false, ...over,
+  });
+  const team = (over: Partial<CourseTeam>): CourseTeam => ({
+    id: "t1", teamNo: 1, confirmedAt: "2026-09-01T00:00:00Z", leaderId: "u1", leaderName: "김하나",
+    teamName: "오르카랩스", projectItem: "중고거래 앱", members: [member({ isLeader: true })],
+    status: "Activities", createdAt: "2026-09-01T00:00:00Z", commentCount: 0, ...over,
+  });
+
+  it("요청받은 열 순서를 지킨다", () => {
+    const [header] = toRosterCsv([team({})]).split("\r\n");
+    expect(header).toBe('"팀번호","팀명","팀원이름","역할","학과","학번","비고"');
+  });
+
+  it("팀원 한 명이 한 줄이고 팀장이 비고에 표시된다", () => {
+    const rows = toRosterCsv([team({ members: [member({ isLeader: true }), member({ name: "박민준" })] })]).split("\r\n");
+    expect(rows).toHaveLength(3);
+    expect(rows[1]).toBe('"1","오르카랩스","김하나","백엔드","컴퓨터학부","2021001","팀장"');
+    expect(rows[2]).toContain('"박민준"');
+    expect(rows[2].endsWith('"팀원"')).toBe(true);
+  });
+
+  it("팀번호 순으로 정렬한다", () => {
+    const csv = toRosterCsv([team({ id: "b", teamNo: 2, teamName: "나중" }), team({ id: "a", teamNo: 1, teamName: "먼저" })]);
+    expect(csv.indexOf("먼저")).toBeLessThan(csv.indexOf("나중"));
+  });
+
+  it("쉼표·따옴표가 든 값이 열을 밀지 않는다", () => {
+    const csv = toRosterCsv([team({ teamName: '오르카, "랩스"' })]);
+    expect(csv).toContain('"오르카, ""랩스"""');
+  });
+
+  it("팀원이 없어도 팀 줄은 남는다", () => {
+    // 빈 팀이 통째로 사라지면 누락을 알아챌 방법이 없습니다.
+    const rows = toRosterCsv([team({ members: [] })]).split("\r\n");
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toContain('"오르카랩스"');
+  });
+});
+
+describe("Q&A 정렬", () => {
+  const q = (over: Partial<CourseQuestion>): CourseQuestion => ({
+    id: "q1", title: "제목", content: "내용", answeredAt: null, authorId: "u1",
+    authorName: "김하나", createdAt: "2026-09-01T00:00:00Z", commentCount: 0, ...over,
+  });
+
+  it("답변 없는 질문이 먼저 — 물어본 사람이 기다리고 있다", () => {
+    const rows = [
+      q({ id: "answered", answeredAt: "2026-09-20T00:00:00Z", createdAt: "2026-09-20T00:00:00Z" }),
+      q({ id: "open", createdAt: "2026-09-01T00:00:00Z" }),
+    ];
+    expect(sortQuestions(rows).map((r) => r.id)).toEqual(["open", "answered"]);
+  });
+
+  it("같은 상태면 최신순", () => {
+    const rows = [q({ id: "old", createdAt: "2026-09-01T00:00:00Z" }), q({ id: "new", createdAt: "2026-09-20T00:00:00Z" })];
+    expect(sortQuestions(rows).map((r) => r.id)).toEqual(["new", "old"]);
   });
 });
 

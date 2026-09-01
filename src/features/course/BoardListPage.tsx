@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarClock, Download, Info, MessageSquare, Paperclip, Pencil, Pin, Plus, Search, Users } from "lucide-react";
+import { BadgeCheck, CalendarClock, Download, Info, MessageSquare, Paperclip, Pencil, Pin, Plus, Search, Users } from "lucide-react";
 import {
+  confirmTeam,
   getBoardGuide,
   getDeliverables,
+  getQuestions,
   getNotices,
   getProposals,
   getRecruitPosts,
@@ -26,7 +28,10 @@ import {
   TEAM_STATUS_LABEL,
   countOpenRoles,
   courseHref,
+  rosterFileName,
   sortNotices,
+  sortQuestions,
+  toRosterCsv,
   formatBytes,
   formatDateTime,
   getProposalDeadline,
@@ -41,12 +46,13 @@ import {
   type Proposal,
   type BoardGuide,
   type CourseNotice,
+  type CourseQuestion,
   type RecruitPost,
   type SemesterProfile,
   type StudentStatus,
 } from "./course";
 import { AuthorLabel, CourseShell, StaffBadge, WriteGate, useStaffIds, useViewer } from "./CourseChrome";
-import { BoardGuideForm, DeliverableForm, NoticeForm, ProposalForm, RecruitForm, SemesterProfileForm, TeamForm } from "./forms";
+import { BoardGuideForm, DeliverableForm, NoticeForm, ProposalForm, QuestionForm, RecruitForm, SemesterProfileForm, TeamForm } from "./forms";
 import {
   Button,
   ChoiceChip,
@@ -97,6 +103,23 @@ function TagRow({ items, tone = "slate" }: { items: string[]; tone?: "slate" | "
 }
 
 // ---------------------------------------------------------------- 카드
+
+function QuestionCard({ question, staffIds }: { question: CourseQuestion; staffIds: Set<string> }) {
+  return (
+    <Link href={courseHref("qna", question.id)} className={cardClass}>
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge tone={question.answeredAt ? "green" : "amber"} dot>
+          {question.answeredAt ? "답변 완료" : "답변 대기"}
+        </StatusBadge>
+      </div>
+      <h3 className="mt-3 line-clamp-2 text-lg font-bold leading-6">{question.title}</h3>
+      <p className="mt-2 line-clamp-2 break-keep text-sm leading-6 text-[#475569]">{question.content}</p>
+      <CardMeta createdAt={question.createdAt} commentCount={question.commentCount}>
+        <AuthorLabel name={question.authorName} authorId={question.authorId} staffIds={staffIds} className="text-[#475569]" />
+      </CardMeta>
+    </Link>
+  );
+}
 
 function NoticeCard({ notice }: { notice: CourseNotice }) {
   return (
@@ -202,7 +225,9 @@ function TeamCard({ team, staffIds }: { team: CourseTeam; staffIds: Set<string> 
   return (
     <Link href={courseHref("team", team.id)} className={cardClass}>
       <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge tone={team.status === "Activities" ? "blue" : "green"} dot>
+        {team.teamNo !== null && <StatusBadge tone="blue">{team.teamNo}팀</StatusBadge>}
+        {team.confirmedAt && <StatusBadge tone="green" dot>확정</StatusBadge>}
+        <StatusBadge tone={team.status === "Activities" ? "blue" : "green"}>
           {TEAM_STATUS_LABEL[team.status]}
         </StatusBadge>
         <span className="inline-flex items-center gap-1 text-sm font-semibold text-[#64748B]">
@@ -241,6 +266,7 @@ function DeliverableCard({ deliverable }: { deliverable: Deliverable }) {
 
 type BoardData =
   | { board: "notice"; items: CourseNotice[] }
+  | { board: "qna"; items: CourseQuestion[] }
   | { board: "intro"; items: SemesterProfile[] }
   | { board: "recruit"; items: RecruitPost[] }
   | { board: "proposal"; items: Proposal[] }
@@ -249,6 +275,7 @@ type BoardData =
 
 const loaders: Record<BoardId, () => Promise<BoardData>> = {
   notice: async () => ({ board: "notice", items: await getNotices() }),
+  qna: async () => ({ board: "qna", items: await getQuestions() }),
   intro: async () => ({ board: "intro", items: await getSemesterProfiles() }),
   recruit: async () => ({ board: "recruit", items: await getRecruitPosts() }),
   proposal: async () => ({ board: "proposal", items: await getProposals() }),
@@ -260,6 +287,10 @@ const loaders: Record<BoardId, () => Promise<BoardData>> = {
 const filterOptions: Record<BoardId, Array<{ value: string; label: string }>> = {
   // 공지는 양이 적고 고정/일반 둘뿐이라 칩을 두지 않습니다. 검색이면 충분합니다.
   notice: [],
+  qna: [
+    { value: "open", label: "답변 대기" },
+    { value: "answered", label: "답변 완료" },
+  ],
   intro: [
     ...(Object.keys(STUDENT_STATUS_LABEL) as StudentStatus[]).map((status) => ({
       value: status,
@@ -354,6 +385,79 @@ function GuideBlock({
   );
 }
 
+/**
+ * 팀등록 게시판의 운영진 도구.
+ *
+ * 확정은 "이 명단으로 간다"는 선언입니다 — 확정하면 번호가 붙고, 그 팀은 학생이
+ * 더 고칠 수 없습니다(026 정책). 그래서 내보내기도 확정된 팀만 담습니다.
+ */
+function RosterTools({ teams, onChanged }: { teams: CourseTeam[]; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const pending = teams.filter((team) => team.confirmedAt === null);
+  const confirmed = teams.filter((team) => team.confirmedAt !== null);
+
+  const confirmAll = async () => {
+    if (!window.confirm(`미확정 ${pending.length}개 팀을 확정할까요? 확정 후에는 학생이 팀 정보를 고칠 수 없습니다.`)) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      // 번호를 순서대로 받으려면 하나씩 보내야 합니다. 동시에 보내면 DB가 번호를
+      // 겹치지 않게는 주지만, 등록 순서와 다른 번호가 붙습니다.
+      for (const team of pending) await confirmTeam(team.id);
+      onChanged();
+    } catch (reason) {
+      setNote(toMessage(reason, "확정하지 못했습니다."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const download = () => {
+    // BOM(\uFEFF)이 없으면 엑셀이 UTF-8로 못 읽어 한글이 전부 깨집니다.
+    const blob = new Blob([`\uFEFF${toRosterCsv(confirmed)}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = rosterFileName();
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <section className="mb-6 rounded-2xl border border-[#E2E8F0] bg-white p-5">
+      <h2 className="text-base font-bold">팀 명단 관리</h2>
+      <p className="mt-1.5 text-sm leading-6 text-[#475569]">
+        확정 <strong className="tabular-nums text-[#16A34A]">{confirmed.length}</strong>개 ·
+        미확정 <strong className="tabular-nums text-[#B45309]">{pending.length}</strong>개.
+        확정하면 팀번호가 붙고 학생은 그 팀을 더 고칠 수 없습니다.
+      </p>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button
+          icon={<BadgeCheck size={15} />}
+          loading={busy}
+          disabled={pending.length === 0}
+          onClick={() => void confirmAll()}
+        >
+          미확정 {pending.length}개 모두 확정
+        </Button>
+        <Button variant="secondary" icon={<Download size={15} />} disabled={confirmed.length === 0} onClick={download}>
+          확정 팀 명단 내려받기
+        </Button>
+      </div>
+
+      <p className="mt-3 text-xs leading-5 text-[#94A3B8]">
+        파일에는 팀번호·팀명·팀원이름·역할·학과·학번·비고(팀장/팀원)가 들어갑니다.
+        CSV 형식이라 엑셀에서 그대로 열립니다.
+      </p>
+
+      {note && <Notice tone="error" className="mt-3" onDismiss={() => setNote(null)}>{note}</Notice>}
+    </section>
+  );
+}
+
 export function BoardListPage({ board }: { board: BoardId }) {
   const config = BOARDS[board];
   const router = useRouter();
@@ -436,6 +540,10 @@ export function BoardListPage({ board }: { board: BoardId }) {
 
       <GuideBlock board={board} guide={guide} canEdit={viewer.staff} onEdit={() => setEditingGuide(true)} />
 
+      {board === "team" && viewer.staff && data?.board === "team" && (
+        <RosterTools teams={data.items} onChanged={() => loaders.team().then(setData).catch(() => undefined)} />
+      )}
+
       {error && <Notice tone="error" className="mb-4" onDismiss={() => setError(null)}>{error}</Notice>}
 
       {data === null ? (
@@ -463,6 +571,9 @@ export function BoardListPage({ board }: { board: BoardId }) {
           </p>
           <div className="animate-in-stagger grid gap-4 md:grid-cols-2">
             {visible?.board === "notice" && visible.items.map((item) => <NoticeCard key={item.id} notice={item} />)}
+            {visible?.board === "qna" && visible.items.map((item) => (
+              <QuestionCard key={item.id} question={item} staffIds={staffIds} />
+            ))}
             {visible?.board === "intro" && visible.items.map((item) => (
               <IntroCard key={item.id} profile={item} isMine={item.userId === viewer.id} />
             ))}
@@ -486,6 +597,7 @@ export function BoardListPage({ board }: { board: BoardId }) {
         />
       )}
       {writing && board === "notice" && <NoticeForm onClose={() => setWriting(false)} onCreated={onCreated} />}
+      {writing && board === "qna" && <QuestionForm onClose={() => setWriting(false)} onCreated={onCreated} />}
       {writing && board === "intro" && (
         <SemesterProfileForm
           current={myIntro}
@@ -514,6 +626,17 @@ function filterBoard(data: BoardData | null, query: string, filter: string): Boa
     return {
       board: "notice",
       items: sortNotices(data.items).filter((item) => matchesQuery([item.title, item.content, item.authorName], query)),
+    };
+  }
+
+  if (data.board === "qna") {
+    return {
+      board: "qna",
+      items: sortQuestions(data.items).filter((item) => {
+        if (filter === "open" && item.answeredAt !== null) return false;
+        if (filter === "answered" && item.answeredAt === null) return false;
+        return matchesQuery([item.title, item.content, item.authorName], query);
+      }),
     };
   }
 

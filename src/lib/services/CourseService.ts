@@ -9,7 +9,7 @@
  */
 
 import { supabase } from "../supabase";
-import { requireClient, getProfileNames } from "./WorkspaceService";
+import { requireClient, getAuthHeaders, getProfileNames } from "./WorkspaceService";
 import { requireAuthUserId, getAuthUserId } from "./sessionCache";
 import {
   COURSE,
@@ -25,6 +25,7 @@ import {
   type CourseFile,
   type CourseComment,
   type CourseNotice,
+  type CourseQuestion,
   type CourseTeam,
   type Deliverable,
   type DeliverablePhase,
@@ -231,6 +232,80 @@ export async function isCourseStaff(): Promise<boolean> {
   const { data, error } = await requireClient().rpc("is_course_staff");
   if (error) return false;
   return data === true;
+}
+
+export interface ViewerStatus {
+  member: boolean;
+  staff: boolean;
+  banned: boolean;
+}
+
+/**
+ * 자격·권한·차단을 한 번에 읽습니다(025).
+ *
+ * 셋을 따로 물으면 왕복이 셋이고, 그 사이 화면이 세 번 바뀝니다. 차단이 생기면서
+ * "인증은 했지만 쓸 수 없음"이라는 경우가 늘어 화면이 셋을 구분해야 합니다.
+ *
+ * 실패하면 전부 false입니다 — 못 물었을 때 열어 주면, 025를 적용하지 않은 환경에서
+ * 버튼이 열렸다가 저장에서 떨어집니다.
+ */
+export async function getViewerStatus(): Promise<ViewerStatus> {
+  const userId = await getAuthUserId();
+  if (!userId) return { member: false, staff: false, banned: false };
+  const { data, error } = await requireClient().rpc("course_viewer_status");
+  const row = Array.isArray(data) ? data[0] : data;
+  if (error || !row) return { member: false, staff: false, banned: false };
+  return { member: row.member === true, staff: row.staff === true, banned: row.banned === true };
+}
+
+// ---------------------------------------------------------------- 수강생 명단(운영진)
+
+export interface CourseMember {
+  userId: string;
+  email: string;
+  fullName: string;
+  major: string;
+  status: string;
+  joinedAt: string;
+  hasProfile: boolean;
+  isStaff: boolean;
+  isBanned: boolean;
+  banReason: string;
+}
+
+/**
+ * 전체 수강생. 운영진만 부를 수 있고, 아니면 DB 함수가 FORBIDDEN으로 끊습니다.
+ * 자기소개를 안 쓴 학생도 나옵니다 — 그래야 명단이 실제 수강 인원과 맞는지 보입니다.
+ */
+export async function getCourseMembers(): Promise<CourseMember[]> {
+  const { data, error } = await requireClient().rpc("course_members", { target_semester: COURSE.key });
+  if (error) throw error;
+  return ((data ?? []) as RecruitRow[]).map((row) => ({
+    userId: row.user_id as string,
+    email: (row.email as string) ?? "",
+    fullName: (row.full_name as string) ?? "",
+    major: (row.major as string) ?? "",
+    status: (row.status as string) ?? "",
+    joinedAt: row.joined_at as string,
+    hasProfile: row.has_profile === true,
+    isStaff: row.is_staff === true,
+    isBanned: row.is_banned === true,
+    banReason: (row.ban_reason as string) ?? "",
+  }));
+}
+
+/** 쓰기를 막습니다. 남긴 글은 그대로 두고, 해제는 행 하나를 지우면 됩니다. */
+export async function banMember(userId: string, reason: string) {
+  const staffId = await requireAuthUserId();
+  const { error } = await requireClient()
+    .from("course_bans")
+    .insert({ user_id: userId, semester_key: COURSE.key, reason: reason.trim(), banned_by: staffId });
+  if (error) throw error;
+}
+
+export async function unbanMember(userId: string) {
+  const { error } = await requireClient().from("course_bans").delete().eq("user_id", userId);
+  if (error) throw error;
 }
 
 // ---------------------------------------------------------------- 팀빌딩 모집
@@ -521,12 +596,14 @@ export async function deleteProposal(id: string) {
 
 // ---------------------------------------------------------------- 확정 팀
 
-const TEAM_COLUMNS = "id, leader_id, team_name, project_item, members, status, created_at";
+const TEAM_COLUMNS = "id, leader_id, team_name, project_item, members, status, team_no, confirmed_at, created_at";
 
 const toTeam = (row: RecruitRow, names: Map<string, string>, counts: Map<string, number>): CourseTeam => {
   const leaderId = (row.leader_id as string | null) ?? null;
   return {
     id: row.id as string,
+    teamNo: (row.team_no as number | null) ?? null,
+    confirmedAt: (row.confirmed_at as string | null) ?? null,
     leaderId,
     leaderName: (leaderId && names.get(leaderId)) || UNKNOWN_AUTHOR,
     teamName: row.team_name as string,
@@ -621,6 +698,18 @@ export async function updateTeam(id: string, input: TeamInput) {
   if (error) throw error;
 }
 
+/** 확정. 번호는 DB가 붙입니다 — 동시에 두 사람이 확정해도 번호가 겹치지 않도록. */
+export async function confirmTeam(id: string): Promise<number> {
+  const { data, error } = await requireClient().rpc("confirm_team", { target: id });
+  if (error) throw error;
+  return data as number;
+}
+
+export async function unconfirmTeam(id: string) {
+  const { error } = await requireClient().rpc("unconfirm_team", { target: id });
+  if (error) throw error;
+}
+
 export async function setTeamStatus(id: string, status: TeamStatus) {
   const { error } = await requireClient()
     .from("team_registrations")
@@ -632,6 +721,101 @@ export async function setTeamStatus(id: string, status: TeamStatus) {
 export async function deleteTeam(id: string) {
   const { error } = await requireClient().from("team_registrations").delete().eq("id", id);
   if (error) throw error;
+}
+
+// ---------------------------------------------------------------- Q&A
+
+const QUESTION_COLUMNS = "id, title, content, answered_at, author_id, created_at";
+
+const toQuestion = (row: RecruitRow, names: Map<string, string>, counts: Map<string, number>): CourseQuestion => ({
+  id: row.id as string,
+  title: row.title as string,
+  content: row.content as string,
+  answeredAt: (row.answered_at as string | null) ?? null,
+  authorId: row.author_id as string,
+  authorName: names.get(row.author_id as string) ?? UNKNOWN_AUTHOR,
+  createdAt: row.created_at as string,
+  commentCount: counts.get(row.id as string) ?? 0,
+});
+
+export async function getQuestions(): Promise<CourseQuestion[]> {
+  const { data, error } = await requireClient()
+    .from("course_questions")
+    .select(QUESTION_COLUMNS)
+    .eq("semester_key", COURSE.key)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  const rows = (data ?? []) as RecruitRow[];
+  const [names, counts] = await Promise.all([
+    getProfileNames(rows.map((row) => row.author_id as string)),
+    getCommentCounts("qna"),
+  ]);
+  return rows.map((row) => toQuestion(row, names, counts));
+}
+
+export async function getQuestion(id: string): Promise<CourseQuestion | null> {
+  const { data, error } = await requireClient().from("course_questions").select(QUESTION_COLUMNS).eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const row = data as RecruitRow;
+  const [names, counts] = await Promise.all([
+    getProfileNames([row.author_id as string]),
+    getCommentCounts("qna"),
+  ]);
+  return toQuestion(row, names, counts);
+}
+
+export async function createQuestion(input: { title: string; content: string }): Promise<string> {
+  const userId = await requireAuthUserId();
+  const { data, error } = await requireClient()
+    .from("course_questions")
+    .insert({ ...semesterColumns(), author_id: userId, title: input.title.trim(), content: input.content.trim() })
+    .select("id")
+    .single();
+  if (error) throw error;
+
+  // 질문이 올라간 것을 운영진에게 알립니다. 실패해도 질문 등록은 이미 끝났습니다 —
+  // 알림 때문에 질문이 안 올라가면 본말이 뒤집힙니다.
+  void notifyStaffOfQuestion(data.id as string).catch(() => undefined);
+  return data.id as string;
+}
+
+export async function updateQuestion(id: string, input: { title: string; content: string }) {
+  const { error } = await requireClient()
+    .from("course_questions")
+    .update({ title: input.title.trim(), content: input.content.trim(), updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/** 운영진이 답변 완료로 표시합니다. 목록에서 미답변 질문만 골라 보기 위한 값입니다. */
+export async function setQuestionAnswered(id: string, answered: boolean) {
+  const { error } = await requireClient()
+    .from("course_questions")
+    .update({ answered_at: answered ? new Date().toISOString() : null, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteQuestion(id: string) {
+  const { error } = await requireClient().from("course_questions").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * 새 질문을 운영진 메일로 알립니다.
+ *
+ * 서버 라우트를 거칩니다 — 메일 발송 키는 브라우저에 둘 수 없고, 운영진 메일 주소도
+ * 화면에 내려보내지 않습니다(025에서 명단을 운영진에게만 연 것과 같은 이유).
+ * 발송 수단이 설정되지 않은 환경에서는 서버가 조용히 넘어갑니다.
+ */
+async function notifyStaffOfQuestion(questionId: string) {
+  const headers = await getAuthHeaders();
+  await fetch("/api/course/notify-question", {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({ questionId }),
+  });
 }
 
 // ---------------------------------------------------------------- 결과물
@@ -1008,6 +1192,7 @@ export async function getMyCourseActivity(): Promise<StudentActivity> {
 
 export interface CourseStats {
   noticeCount: number;
+  questionCount: number;
   introCount: number;
   recruitOpen: number;
   proposalCount: number;
@@ -1031,15 +1216,16 @@ export async function getCourseStats(): Promise<CourseStats> {
     return total ?? 0;
   };
 
-  const [noticeCount, introCount, recruitOpen, proposalCount, teamCount, deliverableCount] = await Promise.all([
+  const [noticeCount, questionCount, introCount, recruitOpen, proposalCount, teamCount, deliverableCount] = await Promise.all([
     count("course_notices"),
+    count("course_questions"),
     count("semester_profiles"),
     count("recruitment_posts", { status: "Recruiting" }),
     count("corporate_proposals"),
     count("team_registrations"),
     count("team_deliverables"),
   ]);
-  return { noticeCount, introCount, recruitOpen, proposalCount, teamCount, deliverableCount };
+  return { noticeCount, questionCount, introCount, recruitOpen, proposalCount, teamCount, deliverableCount };
 }
 
 /** 현재 로그인한 사용자 id. 화면이 "내 글인가"를 판단해 수정·삭제를 보여 줍니다. */

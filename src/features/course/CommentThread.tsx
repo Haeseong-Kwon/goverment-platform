@@ -176,7 +176,7 @@ export function CommentThread({ board, targetId }: { board: BoardId; targetId: s
         ) : !viewer.id ? (
           <SignInPrompt action="댓글 남기기" />
         ) : !viewer.member ? (
-          <MembershipNotice action="댓글을 남길" />
+          <MembershipNotice action="댓글을 남길" banned={viewer.banned} />
         ) : (
           <>
             <textarea

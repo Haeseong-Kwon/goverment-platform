@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { GraduationCap, LogIn, LogOut, ShieldAlert } from "lucide-react";
-import { getStaffIds, getViewerAccount, isCourseMember, isCourseStaff, signOutViewer } from "@/lib/services/CourseService";
+import { getStaffIds, getViewerAccount, getViewerStatus, signOutViewer } from "@/lib/services/CourseService";
 import { onAuthStateChange } from "@/lib/services/AuthService";
 import {
   BOARDS,
@@ -12,6 +12,7 @@ import {
   COURSE,
   COURSE_EMAIL_DOMAIN,
   COURSE_LOGIN_HREF,
+  COURSE_MEMBERS_HREF,
   COURSE_SIGNUP_HREF,
   COURSE_WORKSPACE_HREF,
   courseHref,
@@ -35,11 +36,13 @@ export interface Viewer {
   member: boolean;
   /** 과목 운영진(교수·조교). 공지 작성·수정 권한이 여기에 달립니다. */
   staff: boolean;
+  /** 운영진이 쓰기를 막은 계정. member는 false지만 이유가 "미인증"과 다릅니다. */
+  banned: boolean;
   loading: boolean;
 }
 
 export function useViewer(): Viewer {
-  const [state, setState] = useState<Viewer>({ id: null, email: null, member: false, staff: false, loading: true });
+  const [state, setState] = useState<Viewer>({ id: null, email: null, member: false, staff: false, banned: false, loading: true });
 
   useEffect(() => {
     let mounted = true;
@@ -48,15 +51,11 @@ export function useViewer(): Viewer {
       const account = await getViewerAccount().catch(() => null);
       if (!mounted) return;
       if (!account) {
-        setState({ id: null, email: null, member: false, staff: false, loading: false });
+        setState({ id: null, email: null, member: false, staff: false, banned: false, loading: false });
         return;
       }
-      // 둘 다 DB 함수 한 번씩이라 함께 보냅니다. 순차로 물으면 헤더가 두 번 깜빡입니다.
-      const [member, staff] = await Promise.all([
-        isCourseMember().catch(() => false),
-        isCourseStaff().catch(() => false),
-      ]);
-      if (mounted) setState({ id: account.id, email: account.email, member, staff, loading: false });
+      const status = await getViewerStatus().catch(() => ({ member: false, staff: false, banned: false }));
+      if (mounted) setState({ id: account.id, email: account.email, ...status, loading: false });
     };
 
     void resolve();
@@ -117,13 +116,15 @@ export function AuthorLabel({
 /** 로그인 후 보던 화면으로 되돌아오게 합니다. 게시판에서 로그인했는데 워크스페이스로 떨어지면 길을 잃습니다. */
 export const loginHref = (returnTo: string) => `${COURSE_LOGIN_HREF}?next=${encodeURIComponent(returnTo)}`;
 
-function BoardTabs({ active, signedIn }: { active: CourseTab; signedIn: boolean }) {
+function BoardTabs({ active, signedIn, staff }: { active: CourseTab; signedIn: boolean; staff: boolean }) {
   const tabs: Array<{ key: CourseTab; label: string; href: string }> = [
     { key: "home", label: "과목 홈", href: courseHref() },
     ...BOARD_ORDER.map((id) => ({ key: id, label: BOARDS[id].label, href: courseHref(id) })),
     // 내 활동만 모이는 곳이라 로그인해야 의미가 있습니다. 비로그인 방문자에게는
     // 누르면 로그인 화면으로 튕기는 탭을 보여 주지 않습니다.
     ...(signedIn ? [{ key: "me" as const, label: "내 워크스페이스", href: COURSE_WORKSPACE_HREF }] : []),
+    // 명단은 운영진만 씁니다. 학생에게 보여 주면 눌러도 권한 없음만 나옵니다.
+    ...(staff ? [{ key: "members" as const, label: "수강생 명단", href: COURSE_MEMBERS_HREF }] : []),
   ];
 
   return (
@@ -219,7 +220,7 @@ export function CourseShell({ active, children }: { active: CourseTab; children:
               )
             )}
           </div>
-          <BoardTabs active={active} signedIn={Boolean(viewer.id)} />
+          <BoardTabs active={active} signedIn={Boolean(viewer.id)} staff={viewer.staff} />
         </div>
       </header>
 
@@ -312,7 +313,21 @@ export function SignInPrompt({ action }: { action: string }) {
  * 다른 메일로 가입한 것인지, 인증 링크를 아직 안 누른 것인지 두 경우를 함께 짚어
  * 다음 행동을 정할 수 있게 합니다.
  */
-export function MembershipNotice({ action }: { action: string }) {
+export function MembershipNotice({ action, banned = false }: { action: string; banned?: boolean }) {
+  if (banned) {
+    return (
+      <div className="flex items-start gap-3 rounded-xl border border-[#FECACA] bg-[#FEF2F2] p-4">
+        <ShieldAlert size={17} className="mt-0.5 shrink-0 text-[#DC2626]" />
+        <div className="min-w-0 text-sm leading-6 text-[#DC2626]">
+          <p className="font-bold">이 계정은 글쓰기가 제한되어 있습니다</p>
+          <p className="mt-1 font-medium">
+            담당 교수·조교가 제한을 걸었습니다. 이미 올린 글은 그대로 남아 있으며, 문의는 담당자에게 해 주세요.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-start gap-3 rounded-xl border border-[#FDE68A] bg-[#FFFBEB] p-4">
       <ShieldAlert size={17} className="mt-0.5 shrink-0 text-[#B45309]" />
@@ -358,6 +373,6 @@ export function WriteGate({
   if (staffOnly) return viewer.staff ? <>{children}</> : null;
 
   if (!viewer.id) return <SignInPrompt action={action} />;
-  if (!viewer.member) return <MembershipNotice action={`${action}할`} />;
+  if (!viewer.member) return <MembershipNotice action={`${action}할`} banned={viewer.banned} />;
   return <>{children}</>;
 }

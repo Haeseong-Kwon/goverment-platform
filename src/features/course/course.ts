@@ -93,7 +93,7 @@ export const semesterColumns = (semester: CourseSemester = COURSE) => ({
 
 // ---------------------------------------------------------------- 게시판
 
-export type BoardId = "notice" | "intro" | "recruit" | "proposal" | "team" | "showcase";
+export type BoardId = "notice" | "qna" | "intro" | "recruit" | "proposal" | "team" | "showcase";
 
 export interface BoardConfig {
   id: BoardId;
@@ -115,6 +115,14 @@ export const BOARDS: Record<BoardId, BoardConfig> = {
     createLabel: "공지 올리기",
     emptyTitle: "아직 공지가 없습니다",
     emptyDescription: "수업 일정과 제출 마감이 올라오면 여기에 모입니다.",
+  },
+  qna: {
+    id: "qna",
+    label: "Q&A",
+    description: "수업·과제·팀빌딩에 대해 묻는 곳입니다. 담당 교수·조교가 댓글로 답합니다. 같은 질문이 이미 있는지 먼저 검색해 보세요.",
+    createLabel: "질문하기",
+    emptyTitle: "아직 질문이 없습니다",
+    emptyDescription: "궁금한 점을 남겨 주세요. 다른 수강생에게도 도움이 됩니다.",
   },
   intro: {
     id: "intro",
@@ -167,7 +175,7 @@ export const BOARDS: Record<BoardId, BoardConfig> = {
  * 주소(`/course/recruit`, `/course/team`)는 그대로 둡니다 — 이름표가 바뀌었다고
  * 주소까지 바꾸면 이미 공유된 링크가 전부 깨집니다.
  */
-export const BOARD_ORDER: BoardId[] = ["notice", "intro", "recruit", "team", "proposal", "showcase"];
+export const BOARD_ORDER: BoardId[] = ["notice", "qna", "intro", "recruit", "team", "proposal", "showcase"];
 
 /**
  * 주소의 `[board]` 자리가 우리가 아는 게시판인지.
@@ -189,8 +197,11 @@ export const courseHref = (board?: BoardId, id?: string) =>
  */
 export const COURSE_WORKSPACE_HREF = "/course/me";
 
-/** 상단 탭이 가리킬 수 있는 곳 전부. 게시판 다섯 + 과목 홈 + 내 워크스페이스. */
-export type CourseTab = BoardId | "home" | "me";
+/** 수강생 명단(운영진 전용). */
+export const COURSE_MEMBERS_HREF = "/course/members";
+
+/** 상단 탭이 가리킬 수 있는 곳 전부. 게시판 + 과목 홈 + 내 워크스페이스 + 명단(운영진). */
+export type CourseTab = BoardId | "home" | "me" | "members";
 
 // ---------------------------------------------------------------- 값 목록
 
@@ -275,6 +286,11 @@ export interface RecruitRole {
 export interface TeamMember {
   name: string;
   role: string;
+  /** 명단 파일에 들어갑니다. 자기소개의 전공과 별개로, 팀 명단은 팀장이 직접 적습니다. */
+  major: string;
+  studentId: string;
+  /** 비고란의 팀장/팀원. 계정(leader_id)과 달리 명단에 적힌 사람 기준입니다. */
+  isLeader: boolean;
 }
 
 export interface RecruitPost {
@@ -306,6 +322,9 @@ export interface Proposal {
 
 export interface CourseTeam {
   id: string;
+  /** 확정할 때 붙는 번호. 미확정이면 null입니다. */
+  teamNo: number | null;
+  confirmedAt: string | null;
   leaderId: string | null;
   leaderName: string;
   teamName: string;
@@ -394,6 +413,28 @@ export interface BoardGuide {
   files: CourseFile[];
 }
 
+export interface CourseQuestion {
+  id: string;
+  title: string;
+  content: string;
+  /** 운영진이 답을 달면 채워집니다. "아직 답 없는 질문"을 골라내는 값입니다. */
+  answeredAt: string | null;
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+  commentCount: number;
+}
+
+/** 답변 없는 질문이 먼저. 그다음 최신순 — 물어본 사람이 기다리고 있습니다. */
+export function sortQuestions(questions: CourseQuestion[]): CourseQuestion[] {
+  return [...questions].sort((a, b) => {
+    const aOpen = a.answeredAt === null;
+    const bOpen = b.answeredAt === null;
+    if (aOpen !== bOpen) return aOpen ? -1 : 1;
+    return b.createdAt.localeCompare(a.createdAt);
+  });
+}
+
 export interface CourseComment {
   id: string;
   board: BoardId;
@@ -442,12 +483,22 @@ export function parseRecruitRoles(value: unknown): RecruitRole[] {
 
 export function parseTeamMembers(value: unknown): TeamMember[] {
   if (!Array.isArray(value)) return [];
+  const read = (item: object, key: string) => String((item as Record<string, unknown>)[key] ?? "").trim();
   return value.flatMap((item) => {
-    if (typeof item === "string") return item.trim() ? [{ name: item.trim(), role: "" }] : [];
+    // 학과·학번이 없던 시절에 저장된 행이 남아 있습니다. 빈 값으로 채워 화면이 깨지지 않게 합니다.
+    if (typeof item === "string") {
+      return item.trim() ? [{ name: item.trim(), role: "", major: "", studentId: "", isLeader: false }] : [];
+    }
     if (!item || typeof item !== "object") return [];
-    const name = String((item as { name?: unknown }).name ?? "").trim();
+    const name = read(item, "name");
     if (!name) return [];
-    return [{ name, role: String((item as { role?: unknown }).role ?? "").trim() }];
+    return [{
+      name,
+      role: read(item, "role"),
+      major: read(item, "major"),
+      studentId: read(item, "studentId"),
+      isLeader: (item as { isLeader?: unknown }).isLeader === true,
+    }];
   });
 }
 
@@ -620,6 +671,51 @@ export function formatDateTime(iso: string, withTime = false): string {
     ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}),
   });
 }
+
+// ---------------------------------------------------------------- 명단 내보내기
+
+/** 명단 파일의 열. 교수님이 요청한 순서 그대로입니다. */
+const ROSTER_HEADERS = ["팀번호", "팀명", "팀원이름", "역할", "학과", "학번", "비고"] as const;
+
+/**
+ * 한 칸을 CSV로 감쌉니다.
+ *
+ * 쉼표·따옴표·줄바꿈이 들어간 값(팀명에 쉼표, 역할에 줄바꿈)을 그대로 두면 열이 밀립니다.
+ * 따옴표로 감싸고 안쪽 따옴표는 두 번 겹칩니다(RFC 4180).
+ */
+const csvCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
+
+/**
+ * 확정된 팀을 명단 표로 폅니다. 팀원 한 명이 한 줄입니다.
+ *
+ * 엑셀 전용 형식(.xlsx) 대신 CSV로 냅니다 — 라이브러리를 하나 더 들이지 않고도
+ * 엑셀이 그대로 엽니다. 다만 **BOM이 없으면 한글이 깨지므로** 파일을 만들 때 붙입니다.
+ */
+export function toRosterCsv(teams: CourseTeam[]): string {
+  const rows: string[][] = [[...ROSTER_HEADERS]];
+
+  for (const team of [...teams].sort((a, b) => (a.teamNo ?? 0) - (b.teamNo ?? 0))) {
+    // 팀원이 없으면 팀 줄이라도 남깁니다. 빈 팀이 명단에서 통째로 사라지면
+    // 교수님이 누락을 알아챌 방법이 없습니다.
+    const members = team.members.length > 0 ? team.members : [{ name: "", role: "", major: "", studentId: "", isLeader: false }];
+    for (const member of members) {
+      rows.push([
+        team.teamNo === null ? "" : String(team.teamNo),
+        team.teamName,
+        member.name,
+        member.role,
+        member.major,
+        member.studentId,
+        member.isLeader ? "팀장" : member.name ? "팀원" : "",
+      ]);
+    }
+  }
+
+  return rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+}
+
+export const rosterFileName = (semester = COURSE) =>
+  `${semester.year}-${semester.term}학기_${semester.track}_팀명단.csv`;
 
 // ---------------------------------------------------------------- 입력 검증
 

@@ -10,7 +10,9 @@ import {
   getMyLedTeams,
   saveDeliverable,
   createNotice,
+  createQuestion,
   deleteProposalFile,
+  updateQuestion,
   saveBoardGuide,
   updateRecruitPost,
   updateTeam,
@@ -43,6 +45,7 @@ import {
   type BoardId,
   type CourseFile,
   type CourseNotice,
+  type CourseQuestion,
   type Deliverable,
   type RecruitPost,
   type Proposal,
@@ -98,6 +101,63 @@ function useSubmit(onCreated: (id: string) => void) {
   };
 
   return { saving, error, setError, run };
+}
+
+// ---------------------------------------------------------------- Q&A
+
+export function QuestionForm({ current, onClose, onCreated }: FormProps & { current?: CourseQuestion | null }) {
+  const [title, setTitle] = useState(current?.title ?? "");
+  const [content, setContent] = useState(current?.content ?? "");
+  const { saving, error, setError, run } = useSubmit(onCreated);
+
+  const submit = () =>
+    run(
+      () => validateTitleAndBody(title, content),
+      async () => {
+        if (current) {
+          await updateQuestion(current.id, { title, content });
+          return current.id;
+        }
+        return createQuestion({ title, content });
+      },
+    );
+
+  return (
+    <Modal
+      title={current ? "질문 수정" : "질문하기"}
+      description="담당 교수·조교가 댓글로 답합니다. 같은 질문이 이미 있는지 먼저 검색해 보세요."
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>취소</Button>
+          <Button loading={saving} onClick={() => void submit()}>{current ? "저장" : "질문 등록"}</Button>
+        </>
+      }
+    >
+      <div className="mt-5 space-y-4">
+        <Field label="제목" required hint="무엇이 궁금한지 한 줄로.">
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="예: 팀 확정 후에도 팀원을 바꿀 수 있나요?"
+            className={inputClass}
+          />
+        </Field>
+
+        <Field label="내용" required hint="상황을 함께 적어 주시면 한 번에 답할 수 있습니다.">
+          <textarea
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+            placeholder="어떤 상황인지, 무엇을 시도했는지 적어 주세요."
+            className={cn(textareaClass, "min-h-40")}
+          />
+        </Field>
+
+        {error && <Notice tone="error" onDismiss={() => setError(null)}>{error}</Notice>}
+      </div>
+    </Modal>
+  );
 }
 
 // ---------------------------------------------------------------- 게시판 안내
@@ -660,13 +720,15 @@ export function ProposalForm({
 
 // ---------------------------------------------------------------- 확정 팀
 
-const EMPTY_MEMBER: TeamMember = { name: "", role: "" };
+const EMPTY_MEMBER: TeamMember = { name: "", role: "", major: "", studentId: "", isLeader: false };
 
 export function TeamForm({ current, onClose, onCreated }: FormProps & { current?: CourseTeam | null }) {
   const [teamName, setTeamName] = useState(current?.teamName ?? "");
   const [projectItem, setProjectItem] = useState(current?.projectItem ?? "");
   const [members, setMembers] = useState<TeamMember[]>(
-    current && current.members.length > 0 ? current.members : [EMPTY_MEMBER, EMPTY_MEMBER],
+    current && current.members.length > 0
+      ? current.members
+      : [{ ...EMPTY_MEMBER, isLeader: true }, EMPTY_MEMBER],
   );
   const { saving, error, setError, run } = useSubmit(onCreated);
 
@@ -681,13 +743,21 @@ export function TeamForm({ current, onClose, onCreated }: FormProps & { current?
         if (teamName.trim().length < 2) return "팀 이름을 입력해 주세요.";
         if (projectItem.trim().length < 2) return "프로젝트 아이템을 입력해 주세요.";
         if (filled.length === 0) return "팀원을 한 명 이상 입력해 주세요.";
+        // 명단 파일의 비고란이 비면 교수님이 누가 팀장인지 알 수 없습니다.
+        if (!filled.some((item) => item.isLeader)) return "팀장을 한 명 지정해 주세요.";
         return null;
       },
       async () => {
         const input = {
           teamName,
           projectItem,
-          members: filled.map((item) => ({ name: item.name.trim(), role: item.role.trim() })),
+          members: filled.map((item) => ({
+            name: item.name.trim(),
+            role: item.role.trim(),
+            major: item.major.trim(),
+            studentId: item.studentId.trim(),
+            isLeader: item.isLeader,
+          })),
         };
         if (current) {
           await updateTeam(current.id, input);
@@ -723,31 +793,68 @@ export function TeamForm({ current, onClose, onCreated }: FormProps & { current?
           <legend className="text-sm font-bold">
             팀원 <span className="text-[#DC2626]">*</span>
           </legend>
-          <p className="mt-1 text-xs font-medium text-[#94A3B8]">등록하는 사람이 팀장입니다. 본인도 명단에 포함해 주세요.</p>
-          <ul className="mt-2 space-y-2">
+          <p className="mt-1 text-xs font-medium text-[#94A3B8]">
+            본인도 명단에 포함해 주세요. 이 명단이 그대로 교수님께 전달되는 팀 명단입니다.
+          </p>
+          <ul className="mt-2 space-y-3">
             {members.map((member, index) => (
-              <li key={index} className="flex gap-2">
-                <input
-                  value={member.name}
-                  onChange={(event) => editMember(index, { name: event.target.value })}
-                  placeholder="이름"
-                  aria-label={`팀원 ${index + 1} 이름`}
-                  className={cn(inputClass, "mt-0 flex-1")}
-                />
-                <input
-                  value={member.role}
-                  onChange={(event) => editMember(index, { role: event.target.value })}
-                  placeholder="역할 (예: 백엔드)"
-                  aria-label={`팀원 ${index + 1} 역할`}
-                  className={cn(inputClass, "mt-0 flex-1")}
-                />
-                <IconButton
-                  label={`팀원 ${index + 1} 삭제`}
-                  icon={<X size={15} />}
-                  disabled={members.length <= 1}
-                  onClick={() => setMembers((current) => current.filter((_, at) => at !== index))}
-                  className="h-11 w-11 shrink-0"
-                />
+              <li key={index} className="rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-[#64748B]">팀원 {index + 1}</span>
+                  <div className="flex items-center gap-2">
+                    {/* 팀장은 한 명입니다. 라디오로 두어 여러 명이 체크되는 일이 없게 합니다. */}
+                    <label className="flex cursor-pointer items-center gap-1.5 text-xs font-semibold text-[#475569]">
+                      <input
+                        type="radio"
+                        name="team-leader"
+                        checked={member.isLeader}
+                        onChange={() =>
+                          setMembers((current) => current.map((item, at) => ({ ...item, isLeader: at === index })))
+                        }
+                        className="accent-[#2563EB]"
+                      />
+                      팀장
+                    </label>
+                    <IconButton
+                      label={`팀원 ${index + 1} 삭제`}
+                      icon={<X size={14} />}
+                      disabled={members.length <= 1}
+                      onClick={() => setMembers((current) => current.filter((_, at) => at !== index))}
+                      className="h-7 w-7"
+                    />
+                  </div>
+                </div>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <input
+                    value={member.name}
+                    onChange={(event) => editMember(index, { name: event.target.value })}
+                    placeholder="이름"
+                    aria-label={`팀원 ${index + 1} 이름`}
+                    className={cn(inputClass, "mt-0")}
+                  />
+                  <input
+                    value={member.studentId}
+                    onChange={(event) => editMember(index, { studentId: event.target.value })}
+                    placeholder="학번"
+                    inputMode="numeric"
+                    aria-label={`팀원 ${index + 1} 학번`}
+                    className={cn(inputClass, "mt-0 tabular-nums")}
+                  />
+                  <input
+                    value={member.major}
+                    onChange={(event) => editMember(index, { major: event.target.value })}
+                    placeholder="학과"
+                    aria-label={`팀원 ${index + 1} 학과`}
+                    className={cn(inputClass, "mt-0")}
+                  />
+                  <input
+                    value={member.role}
+                    onChange={(event) => editMember(index, { role: event.target.value })}
+                    placeholder="역할 (예: 백엔드)"
+                    aria-label={`팀원 ${index + 1} 역할`}
+                    className={cn(inputClass, "mt-0")}
+                  />
+                </div>
               </li>
             ))}
           </ul>

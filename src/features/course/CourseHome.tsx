@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Building2, ClipboardList, Megaphone, Pin, Presentation, UserRound, Users } from "lucide-react";
+import { ArrowRight, Building2, ClipboardList, HelpCircle, Megaphone, Pin, Presentation, UserRound, Users } from "lucide-react";
 import { getCourseStats, getNotices, type CourseStats } from "@/lib/services/CourseService";
 import { BOARDS, BOARD_ORDER, COURSE, courseHref, formatDateTime, sortNotices, type BoardId, type CourseNotice } from "./course";
 import { CourseShell } from "./CourseChrome";
@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 
 const BOARD_ICONS: Record<BoardId, typeof Users> = {
   notice: Megaphone,
+  qna: HelpCircle,
   intro: UserRound,
   recruit: Users,
   proposal: Building2,
@@ -21,6 +22,7 @@ const BOARD_ICONS: Record<BoardId, typeof Users> = {
 /** 홈의 숫자. 어느 게시판을 먼저 열지 정하는 데 쓰는 값이라 게시판 순서와 같게 둡니다. */
 const STAT_LABELS: Record<BoardId, string> = {
   notice: "공지",
+  qna: "질문",
   intro: "자기소개",
   recruit: "모집 중인 글",
   proposal: "기업 제안",
@@ -30,6 +32,7 @@ const STAT_LABELS: Record<BoardId, string> = {
 
 const statValue = (stats: CourseStats, board: BoardId) =>
   board === "notice" ? stats.noticeCount
+  : board === "qna" ? stats.questionCount
   : board === "intro" ? stats.introCount
   : board === "recruit" ? stats.recruitOpen
   : board === "proposal" ? stats.proposalCount
@@ -55,7 +58,7 @@ export function CourseHome() {
     getCourseStats()
       .then((loaded) => { if (mounted) setStats(loaded); })
       // 숫자는 장식입니다. 못 읽어도 게시판 카드는 그대로 열려야 합니다.
-      .catch(() => { if (mounted) setStats({ noticeCount: 0, introCount: 0, recruitOpen: 0, proposalCount: 0, teamCount: 0, deliverableCount: 0 }); });
+      .catch(() => { if (mounted) setStats({ noticeCount: 0, questionCount: 0, introCount: 0, recruitOpen: 0, proposalCount: 0, teamCount: 0, deliverableCount: 0 }); });
     // 공지는 게시판에 들어가야 보이면 아무도 안 봅니다. 첫 화면에 세 건만 끌어옵니다.
     getNotices()
       .then((rows) => { if (mounted) setNotices(sortNotices(rows).slice(0, 3)); })
@@ -77,7 +80,7 @@ export function CourseHome() {
           기업이 제안한 프로젝트를 고르고, 확정된 팀과 중간·기말 결과물을 같은 자리에서 공유합니다.
         </p>
 
-        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
           {BOARD_ORDER.map((board) => (
             <div key={board} className="rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-4">
               <p className="text-xs font-bold text-[#64748B]">{STAT_LABELS[board]}</p>
@@ -152,7 +155,7 @@ export function CourseHome() {
 
       <section className="mt-10">
         <h2 className="text-xl font-bold md:text-2xl">수업이 흘러가는 순서</h2>
-        <ol className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <ol className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
           {FLOW.map((item) => (
             <li key={item.step}>
               <Link

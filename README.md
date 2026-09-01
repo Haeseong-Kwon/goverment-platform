@@ -85,6 +85,7 @@ schema.sql → 002-manager-review.sql → 003-profile-role-lock.sql → 004-seed
            → 019-course-notices.sql → 020-proposals-staff-only.sql
            → 021-board-guides.sql → 022-staff-badge.sql
            → 023-comment-edit.sql → 024-deliverable-files.sql
+           → 025-course-members.sql → 026-team-confirm-and-qna.sql
 ```
 
 `015`는 **반드시 적용해야 합니다.** `schema.sql`의 RLS 활성화 블록이 `ALTER TABLE IF EXISTS`
@@ -158,6 +159,31 @@ ON CONFLICT (email) DO NOTHING;
 하나이고, exclusive arc에 컬럼만 더합니다. **권한은 주인별로 갈립니다** — 제안·안내는
 운영진이 쓰고 결과물은 팀장이 씁니다. 021의 정책을 그대로 두면 팀장이 자기 팀 결과물에
 파일을 못 붙입니다.
+
+`025`는 수강생 명단(`/course/members`, 운영진 전용)과 차단을 엽니다.
+
+**강퇴를 계정 삭제로 만들지 않았습니다.** 계정을 지우면 그 사람이 올린 모집글·팀 명단·
+결과물·댓글이 함께 사라지고 되돌릴 수 없습니다. 대신 `course_bans`에 넣어 **쓰기만** 막고
+남긴 글은 그대로 둡니다. 판정은 `is_course_member()` 한 곳만 고쳐서, 모든 쓰기 정책이
+함께 막힙니다 — 정책마다 조건을 복사했다면 하나를 빠뜨렸을 것입니다.
+
+`course_members()`는 `auth.users`를 읽어야 해서 SECURITY DEFINER인데, 그러면 누가 부르든
+통과하므로 **함수 안에서 직접 운영진인지 확인합니다.** 이 검사가 없으면 anon 키만으로
+전교생 메일 주소가 털립니다.
+
+`026`은 팀등록 확정과 Q&A 게시판을 엽니다.
+
+**팀번호는 확정할 때 DB가 붙입니다**(`confirm_team()`). 등록 순서로 미리 매기면 취소하는 팀
+때문에 번호가 비고, 두 사람이 동시에 확정하면 같은 번호가 나옵니다. 확정된 팀은 학생이 더
+고칠 수 없습니다 — 확정의 의미가 "이 명단으로 간다"인데 그 뒤에도 바뀌면 뽑아 둔 파일과
+어긋납니다. 운영진은 계속 고칠 수 있습니다(오탈자 정정).
+
+명단은 **CSV로 내려받습니다**(팀번호·팀명·팀원이름·역할·학과·학번·비고). `.xlsx` 라이브러리를
+들이지 않고도 엑셀이 그대로 엽니다. 다만 **BOM이 없으면 한글이 깨지므로** 파일을 만들 때 붙입니다.
+
+Q&A 답변은 기존 댓글이 맡습니다 — 질문마다 답변 표를 따로 두면 댓글과 두 벌이 됩니다.
+새 질문 알림 메일은 `/api/course/notify-question`이 보내며, `RESEND_API_KEY`가 없으면
+조용히 건너뜁니다(알림 때문에 질문 등록이 실패하면 본말이 뒤집힙니다).
 
 학기는 코드 상수 하나(`src/features/course/course.ts`의 `COURSE`)가 정합니다.
 다음 학기를 열 때 이 값을 바꾸면 새 글은 새 `semester_key`로 쌓이고 지난 학기 글은 그대로 남습니다.

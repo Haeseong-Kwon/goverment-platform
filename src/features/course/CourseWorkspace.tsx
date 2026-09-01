@@ -127,7 +127,7 @@ export function CourseWorkspace() {
 
       {!canWrite && (
         <div className="mb-6">
-          <MembershipNotice action="글을 남길" />
+          <MembershipNotice action="글을 남길" banned={viewer.banned} />
         </div>
       )}
 
