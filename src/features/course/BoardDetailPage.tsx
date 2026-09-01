@@ -60,7 +60,7 @@ import {
   type RecruitPost,
   type SemesterProfile,
 } from "./course";
-import { CourseShell, useViewer } from "./CourseChrome";
+import { AuthorLabel, CourseShell, StaffBadge, useStaffIds, useViewer } from "./CourseChrome";
 import { NoticeForm, ProposalForm } from "./forms";
 import { CommentThread } from "./CommentThread";
 import { Button, EmptyState, Notice, Skeleton, StatusBadge, focusRing } from "@/features/startup-workspace/ui";
@@ -160,6 +160,7 @@ function DeliverableLinks({ deliverable }: { deliverable: Deliverable }) {
 export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
   const router = useRouter();
   const viewer = useViewer();
+  const staffIds = useStaffIds();
   const [entry, setEntry] = useState<Entry | null | "missing">(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -252,9 +253,9 @@ export function BoardDetailPage({ board, id }: { board: BoardId; id: string }) {
       <article className="animate-in rounded-2xl border border-[#E2E8F0] bg-white p-6 md:p-8">
         {entry.board === "notice" && <NoticeDetail notice={entry.item} />}
         {entry.board === "intro" && <IntroDetail profile={entry.item} />}
-        {entry.board === "recruit" && <RecruitDetail post={entry.item} />}
+        {entry.board === "recruit" && <RecruitDetail post={entry.item} staffIds={staffIds} />}
         {entry.board === "proposal" && <ProposalDetail proposal={entry.item} files={entry.files} />}
-        {entry.board === "team" && <TeamDetail team={entry.item} deliverables={entry.deliverables} />}
+        {entry.board === "team" && <TeamDetail team={entry.item} deliverables={entry.deliverables} staffIds={staffIds} />}
         {entry.board === "showcase" && <ShowcaseDetail deliverable={entry.item} />}
 
         {isOwner && (
@@ -358,9 +359,10 @@ function NoticeDetail({ notice }: { notice: CourseNotice }) {
       <h1 className={cn("text-[26px] font-bold leading-tight tracking-tight md:text-[32px]", notice.isPinned && "mt-4")}>
         {notice.title}
       </h1>
-      <p className="mt-3 text-sm text-[#94A3B8]">
+      <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[#94A3B8]">
         <span className="font-semibold text-[#475569]">{notice.authorName}</span>
-        <span className="mx-2">·</span>
+        <StaffBadge />
+        <span>·</span>
         <span className="tabular-nums">{formatDateTime(notice.createdAt, true)}</span>
       </p>
 
@@ -443,7 +445,7 @@ function ExternalLinkButton({ href, icon, label }: { href: string; icon: React.R
   );
 }
 
-function RecruitDetail({ post }: { post: RecruitPost }) {
+function RecruitDetail({ post, staffIds }: { post: RecruitPost; staffIds: Set<string> }) {
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
@@ -453,9 +455,9 @@ function RecruitDetail({ post }: { post: RecruitPost }) {
         <StatusBadge tone="blue">{PROJECT_PHASE_LABEL[post.projectPhase]}</StatusBadge>
       </div>
       <h1 className="mt-4 text-[26px] font-bold leading-tight tracking-tight md:text-[32px]">{post.title}</h1>
-      <p className="mt-3 text-sm text-[#94A3B8]">
-        <span className="font-semibold text-[#475569]">{post.authorName}</span>
-        <span className="mx-2">·</span>
+      <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[#94A3B8]">
+        <AuthorLabel name={post.authorName} authorId={post.authorId} staffIds={staffIds} className="text-[#475569]" />
+        <span>·</span>
         <span className="tabular-nums">{formatDateTime(post.createdAt, true)}</span>
       </p>
 
@@ -510,7 +512,10 @@ function ProposalDetail({ proposal, files }: { proposal: Proposal; files: Course
         )}
       </div>
       <h1 className="mt-4 text-[26px] font-bold leading-tight tracking-tight md:text-[32px]">{proposal.title}</h1>
-      <p className="mt-3 text-sm tabular-nums text-[#94A3B8]">등록 {formatDateTime(proposal.createdAt, true)}</p>
+      <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[#94A3B8]">
+        <StaffBadge />
+        <span className="tabular-nums">등록 {formatDateTime(proposal.createdAt, true)}</span>
+      </p>
 
       <div className="mt-8 space-y-8">
         <Section title="제안 내용"><Body text={proposal.content} /></Section>
@@ -573,7 +578,7 @@ function ProposalDetail({ proposal, files }: { proposal: Proposal; files: Course
   );
 }
 
-function TeamDetail({ team, deliverables }: { team: CourseTeam; deliverables: Deliverable[] }) {
+function TeamDetail({ team, deliverables, staffIds }: { team: CourseTeam; deliverables: Deliverable[]; staffIds: Set<string> }) {
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
@@ -586,9 +591,9 @@ function TeamDetail({ team, deliverables }: { team: CourseTeam; deliverables: De
         </span>
       </div>
       <h1 className="mt-4 text-[26px] font-bold leading-tight tracking-tight md:text-[32px]">{team.teamName}</h1>
-      <p className="mt-3 text-sm text-[#94A3B8]">
-        <span className="font-semibold text-[#475569]">팀장 {team.leaderName}</span>
-        <span className="mx-2">·</span>
+      <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[#94A3B8]">
+        <AuthorLabel name={`팀장 ${team.leaderName}`} authorId={team.leaderId} staffIds={staffIds} className="text-[#475569]" />
+        <span>·</span>
         <span className="tabular-nums">등록 {formatDateTime(team.createdAt)}</span>
       </p>
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { MessageSquare, Trash2 } from "lucide-react";
 import { addComment, deleteComment, getComments } from "@/lib/services/CourseService";
 import { formatDateTime, type BoardId, type CourseComment } from "./course";
-import { MembershipNotice, SignInPrompt, useViewer } from "./CourseChrome";
+import { AuthorLabel, MembershipNotice, SignInPrompt, useStaffIds, useViewer } from "./CourseChrome";
 import { Button, IconButton, Skeleton, textareaClass } from "@/features/startup-workspace/ui";
 import { toMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
  */
 export function CommentThread({ board, targetId }: { board: BoardId; targetId: string }) {
   const viewer = useViewer();
+  const staffIds = useStaffIds();
   const [comments, setComments] = useState<CourseComment[] | null>(null);
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
@@ -92,7 +93,12 @@ export function CommentThread({ board, targetId }: { board: BoardId; targetId: s
               <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#EFF6FF] text-xs font-bold text-[#2563EB]">
                 {comment.authorName.slice(0, 1)}
               </span>
-              <strong className="min-w-0 truncate text-sm font-bold">{comment.authorName}</strong>
+              <AuthorLabel
+                name={comment.authorName}
+                authorId={comment.authorId}
+                staffIds={staffIds}
+                className="min-w-0 text-sm font-bold"
+              />
               <span className="ml-auto shrink-0 text-xs tabular-nums text-[#94A3B8]">
                 {formatDateTime(comment.createdAt, true)}
               </span>

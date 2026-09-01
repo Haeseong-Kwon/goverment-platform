@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { GraduationCap, LogIn, LogOut, ShieldAlert } from "lucide-react";
-import { getViewerAccount, isCourseMember, isCourseStaff, signOutViewer } from "@/lib/services/CourseService";
+import { getStaffIds, getViewerAccount, isCourseMember, isCourseStaff, signOutViewer } from "@/lib/services/CourseService";
 import { onAuthStateChange } from "@/lib/services/AuthService";
 import {
   BOARDS,
@@ -65,6 +65,53 @@ export function useViewer(): Viewer {
   }, []);
 
   return state;
+}
+
+/**
+ * 운영진 id 집합. 글·댓글 작성자가 교수자인지 판단하는 데 씁니다.
+ *
+ * 한 학기 운영진은 많아야 몇 명이라 통째로 받아 화면에서 대조합니다.
+ * 작성자마다 물어보면 댓글 스레드 하나에 왕복이 그만큼 늘어납니다.
+ */
+export function useStaffIds(): Set<string> {
+  const [ids, setIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let mounted = true;
+    getStaffIds().then((rows) => { if (mounted) setIds(rows); }).catch(() => undefined);
+    return () => { mounted = false; };
+  }, []);
+
+  return ids;
+}
+
+/** 교수·조교가 쓴 글임을 알립니다. 학생 글 사이에서 공지성 발언이 묻히지 않도록. */
+export function StaffBadge() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-[#EFF6FF] px-1.5 py-0.5 text-[11px] font-bold text-[#2563EB]">
+      <GraduationCap size={11} />교수자
+    </span>
+  );
+}
+
+/** 작성자 이름 + (운영진이면) 뱃지. 여러 화면이 같은 모양을 쓰도록 모읍니다. */
+export function AuthorLabel({
+  name,
+  authorId,
+  staffIds,
+  className,
+}: {
+  name: string;
+  authorId: string | null;
+  staffIds: Set<string>;
+  className?: string;
+}) {
+  return (
+    <span className={cn("inline-flex min-w-0 items-center gap-1.5", className)}>
+      <span className="truncate font-semibold">{name}</span>
+      {authorId && staffIds.has(authorId) && <StaffBadge />}
+    </span>
+  );
 }
 
 /** 로그인 후 보던 화면으로 되돌아오게 합니다. 게시판에서 로그인했는데 워크스페이스로 떨어지면 길을 잃습니다. */

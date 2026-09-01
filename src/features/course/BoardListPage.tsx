@@ -45,7 +45,7 @@ import {
   type SemesterProfile,
   type StudentStatus,
 } from "./course";
-import { CourseShell, WriteGate, useViewer } from "./CourseChrome";
+import { AuthorLabel, CourseShell, StaffBadge, WriteGate, useStaffIds, useViewer } from "./CourseChrome";
 import { BoardGuideForm, DeliverableForm, NoticeForm, ProposalForm, RecruitForm, SemesterProfileForm, TeamForm } from "./forms";
 import {
   Button,
@@ -111,6 +111,7 @@ function NoticeCard({ notice }: { notice: CourseNotice }) {
           </StatusBadge>
         )}
         <span className="text-sm font-semibold text-[#64748B]">{notice.authorName}</span>
+        <StaffBadge />
       </div>
       <h3 className="mt-3 line-clamp-2 text-lg font-bold leading-6">{notice.title}</h3>
       <p className="mt-2 line-clamp-2 break-keep text-sm leading-6 text-[#475569]">{notice.content}</p>
@@ -147,7 +148,7 @@ function IntroCard({ profile, isMine }: { profile: SemesterProfile; isMine: bool
   );
 }
 
-function RecruitCard({ post }: { post: RecruitPost }) {
+function RecruitCard({ post, staffIds }: { post: RecruitPost; staffIds: Set<string> }) {
   return (
     <Link href={courseHref("recruit", post.id)} className={cardClass}>
       <div className="flex flex-wrap items-center gap-2">
@@ -164,7 +165,7 @@ function RecruitCard({ post }: { post: RecruitPost }) {
       <TagRow items={post.recruitingRoles.map((role) => `${role.role} ${role.count}`)} tone="blue" />
       <TagRow items={post.tags} />
       <CardMeta createdAt={post.createdAt} commentCount={post.commentCount}>
-        <span className="font-semibold text-[#475569]">{post.authorName}</span>
+        <AuthorLabel name={post.authorName} authorId={post.authorId} staffIds={staffIds} className="text-[#475569]" />
       </CardMeta>
     </Link>
   );
@@ -176,6 +177,7 @@ function ProposalCard({ proposal }: { proposal: Proposal }) {
     <Link href={courseHref("proposal", proposal.id)} className={cardClass}>
       <div className="flex flex-wrap items-center gap-2">
         <StatusBadge tone="slate">{proposal.companyName}</StatusBadge>
+        <StaffBadge />
         {deadline ? (
           <StatusBadge tone={deadline.tone} dot={!deadline.expired}>{deadline.label}</StatusBadge>
         ) : (
@@ -196,7 +198,7 @@ function ProposalCard({ proposal }: { proposal: Proposal }) {
   );
 }
 
-function TeamCard({ team }: { team: CourseTeam }) {
+function TeamCard({ team, staffIds }: { team: CourseTeam; staffIds: Set<string> }) {
   return (
     <Link href={courseHref("team", team.id)} className={cardClass}>
       <div className="flex flex-wrap items-center gap-2">
@@ -212,7 +214,7 @@ function TeamCard({ team }: { team: CourseTeam }) {
       <p className="mt-2 line-clamp-2 break-keep text-sm leading-6 text-[#475569]">{team.projectItem}</p>
       <TagRow items={team.members.map((member) => (member.role ? `${member.name} · ${member.role}` : member.name))} />
       <CardMeta createdAt={team.createdAt} commentCount={team.commentCount}>
-        <span className="font-semibold text-[#475569]">팀장 {team.leaderName}</span>
+        <AuthorLabel name={`팀장 ${team.leaderName}`} authorId={team.leaderId} staffIds={staffIds} className="text-[#475569]" />
       </CardMeta>
     </Link>
   );
@@ -356,6 +358,7 @@ export function BoardListPage({ board }: { board: BoardId }) {
   const config = BOARDS[board];
   const router = useRouter();
   const viewer = useViewer();
+  const staffIds = useStaffIds();
   const [data, setData] = useState<BoardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -463,9 +466,9 @@ export function BoardListPage({ board }: { board: BoardId }) {
             {visible?.board === "intro" && visible.items.map((item) => (
               <IntroCard key={item.id} profile={item} isMine={item.userId === viewer.id} />
             ))}
-            {visible?.board === "recruit" && visible.items.map((item) => <RecruitCard key={item.id} post={item} />)}
+            {visible?.board === "recruit" && visible.items.map((item) => <RecruitCard key={item.id} post={item} staffIds={staffIds} />)}
             {visible?.board === "proposal" && visible.items.map((item) => <ProposalCard key={item.id} proposal={item} />)}
-            {visible?.board === "team" && visible.items.map((item) => <TeamCard key={item.id} team={item} />)}
+            {visible?.board === "team" && visible.items.map((item) => <TeamCard key={item.id} team={item} staffIds={staffIds} />)}
             {visible?.board === "showcase" && visible.items.map((item) => <DeliverableCard key={item.id} deliverable={item} />)}
           </div>
         </>

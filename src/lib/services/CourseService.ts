@@ -210,6 +210,21 @@ export async function deleteNotice(id: string) {
  * `isCourseMember()`와 같은 이유로 DB 함수(019의 `is_course_staff()`)에게 그대로 묻습니다.
  * 화면에서 메일 주소를 다시 대조하면 명단이 바뀔 때 두 곳이 어긋납니다.
  */
+/**
+ * 운영진의 사용자 id 집합.
+ *
+ * `isCourseStaff()`는 "나는 운영진인가"만 답합니다. 글·댓글에 [교수자] 뱃지를 붙이려면
+ * 남에 대한 판정이 필요해 목록을 따로 받습니다(022의 `course_staff_ids()` — id만 돌려주고
+ * 메일 주소는 주지 않습니다).
+ *
+ * 실패하면 빈 집합입니다. 뱃지는 장식이라, 못 읽었다고 목록이 비면 손해가 더 큽니다.
+ */
+export async function getStaffIds(): Promise<Set<string>> {
+  const { data, error } = await requireClient().rpc("course_staff_ids");
+  if (error || !Array.isArray(data)) return new Set();
+  return new Set(data.map((row: { user_id: string }) => row.user_id));
+}
+
 export async function isCourseStaff(): Promise<boolean> {
   const userId = await getAuthUserId();
   if (!userId) return false;

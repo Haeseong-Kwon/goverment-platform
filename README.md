@@ -83,7 +83,7 @@ schema.sql → 002-manager-review.sql → 003-profile-role-lock.sql → 004-seed
            → 014-capstone-course.sql → 015-enable-legacy-rls.sql
            → 016-course-membership.sql → 017-intro-board.sql → 018-proposal-files.sql
            → 019-course-notices.sql → 020-proposals-staff-only.sql
-           → 021-board-guides.sql
+           → 021-board-guides.sql → 022-staff-badge.sql
 ```
 
 `015`는 **반드시 적용해야 합니다.** `schema.sql`의 RLS 활성화 블록이 `ALTER TABLE IF EXISTS`
@@ -144,6 +144,10 @@ ON CONFLICT (email) DO NOTHING;
 게시판 이름표(`팀원모집`·`팀등록`)와 순서는 `course.ts`의 `BOARDS`·`BOARD_ORDER`가 정합니다.
 **주소(`/course/recruit`, `/course/team`)는 이름표와 무관하게 고정입니다** — 이름이 바뀌었다고
 주소까지 바꾸면 이미 공유된 링크가 전부 깨집니다.
+
+`022`는 운영진을 화면에서 알아볼 수 있게 합니다. `is_course_staff()`는 "나는 운영진인가"만
+답하므로, 남이 쓴 글에 [교수자] 뱃지를 붙이려면 `course_staff_ids()`가 따로 필요합니다.
+**id만 돌려주고 메일 주소는 주지 않습니다** — 명단을 열면 교수·조교 주소가 그대로 수집됩니다.
 
 학기는 코드 상수 하나(`src/features/course/course.ts`의 `COURSE`)가 정합니다.
 다음 학기를 열 때 이 값을 바꾸면 새 글은 새 `semester_key`로 쌓이고 지난 학기 글은 그대로 남습니다.
