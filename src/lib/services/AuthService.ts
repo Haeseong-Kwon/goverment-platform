@@ -19,6 +19,12 @@ const AUTH_ERROR_MESSAGES: Array<[RegExp, string]> = [
   [/email not confirmed/i, "이메일 인증이 아직 끝나지 않았습니다. 받은 편지함의 인증 링크를 눌러 주세요."],
   [/user already registered|already been registered/i, "이미 가입된 이메일입니다. 로그인해 주세요."],
   [/password should be at least/i, "비밀번호는 6자 이상이어야 합니다."],
+  /*
+   * 메일 발송 한도는 계정이 아니라 **프로젝트 전체**에 걸립니다(기본 SMTP는 시간당 2통).
+   * 아래 일반 문구("잠시 후 다시")로 뭉뜽그리면, 본인은 처음 눌렀는데 잦다는 말을 듣고
+   * 기다려도 다음 슬롯은 다른 사람이 가져갑니다. 원인과 다음 행동을 따로 말합니다.
+   */
+  [/email rate limit|over_email_send_rate_limit/i, "지금은 인증 메일을 보낼 수 없습니다. 메일 발송 한도에 걸렸습니다 — 잠시 뒤 다시 시도하시고, 계속 같으면 담당 교수·조교에게 알려 주세요(직접 승인해 드릴 수 있습니다)."],
   [/for security purposes|rate limit|too many requests/i, "요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요."],
   [/invalid email/i, "이메일 형식을 확인해 주세요."],
   [/new password should be different/i, "이전과 다른 비밀번호를 입력해 주세요."],
