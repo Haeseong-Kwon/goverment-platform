@@ -15,9 +15,10 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
             <p style={{ marginTop: "12px", fontSize: "14px", lineHeight: 1.7, color: "#475569" }}>
               페이지를 새로 고쳐 주세요. 계속 같은 화면이 나오면 담당자에게 아래 코드를 알려주세요.
             </p>
-            {error.digest && (
-              <p style={{ marginTop: "12px", background: "#F8FAFC", borderRadius: "8px", padding: "8px 12px", fontFamily: "monospace", fontSize: "12px", color: "#475569" }}>
-                {error.digest}
+            {/* digest는 서버 오류에만 붙습니다. 없을 때 메시지라도 보여야 문의가 추적됩니다. */}
+            {(error.digest || error.message) && (
+              <p style={{ marginTop: "12px", background: "#F8FAFC", borderRadius: "8px", padding: "8px 12px", fontFamily: "monospace", fontSize: "12px", color: "#475569", textAlign: "left", wordBreak: "break-word" }}>
+                {error.digest ?? error.message.slice(0, 200)}
               </p>
             )}
             <button
