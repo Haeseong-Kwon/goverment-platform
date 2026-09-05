@@ -104,7 +104,7 @@ export function CourseWorkspace() {
   });
   const progress = getStudentProgress(steps);
 
-  // 로그인은 했지만 학교 메일 인증이 안 끝난 상태. 버튼을 눌러도 RLS가 거절하므로
+  // 로그인은 했지만 학교 메일 계정이 아닌 상태. 버튼을 눌러도 RLS가 거절하므로
   // 아예 띄우지 않고 이유를 먼저 말합니다.
   const canWrite = viewer.member;
 

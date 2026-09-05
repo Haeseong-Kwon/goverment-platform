@@ -1285,7 +1285,7 @@ export async function getViewerAccount(): Promise<{ id: string; email: string | 
 }
 
 /**
- * 이 계정이 과목 구성원인가 — 한양대 메일로 인증까지 마쳤는가.
+ * 이 계정이 과목 구성원인가 — 한양대 메일 주소인가(027 이후 별도 인증은 없습니다).
  *
  * 판정은 DB 함수 하나(`is_course_member()`, 016)가 합니다. 화면에서 이메일을 다시
  * 뜯어보지 않는 이유는, 두 곳이 각자 판단하면 언젠가 어긋나고 그때 화면은 "쓸 수

@@ -95,7 +95,7 @@ export function CourseMembers() {
       <header className="mb-6">
         <h1 className="text-[26px] font-bold leading-tight tracking-tight md:text-[32px]">수강생 명단</h1>
         <p className="mt-2 text-sm leading-6 text-[#475569]">
-          {COURSE.label} · 학교 메일 인증을 마친 계정 전체입니다. 자기소개를 쓰지 않은 학생도 포함됩니다.
+          {COURSE.label} · 학교 메일로 가입한 계정 전체입니다. 자기소개를 쓰지 않은 학생도 포함됩니다.
         </p>
       </header>
 

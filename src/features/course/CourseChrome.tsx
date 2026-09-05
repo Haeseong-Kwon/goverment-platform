@@ -25,8 +25,8 @@ import { cn } from "@/lib/utils";
  * 지금 보고 있는 사람.
  *
  * 과목 게시판은 로그인 없이 읽히고, 쓰기에는 두 가지가 필요합니다 —
- * 로그인(`id`)과 과목 자격(`member`: 한양대 메일 인증 완료). 둘을 따로 두는 이유는
- * 화면이 "로그인하세요"와 "학교 메일로 인증해 주세요"를 구분해 말해야 하기 때문입니다.
+ * 로그인(`id`)과 과목 자격(`member`: 한양대 메일 주소). 둘을 따로 두는 이유는
+ * 화면이 "로그인하세요"와 "학교 메일로 가입해 주세요"를 구분해 말해야 하기 때문입니다.
  *
  * 권한의 실제 경계는 RLS입니다(016). 이 값은 버튼과 안내 문구를 고르는 용도입니다.
  */
@@ -36,7 +36,7 @@ export interface Viewer {
   member: boolean;
   /** 과목 운영진(교수·조교). 공지 작성·수정 권한이 여기에 달립니다. */
   staff: boolean;
-  /** 운영진이 쓰기를 막은 계정. member는 false지만 이유가 "미인증"과 다릅니다. */
+  /** 운영진이 쓰기를 막은 계정. member는 false지만 이유가 "다른 메일"과 다릅니다. */
   banned: boolean;
   loading: boolean;
 }
@@ -232,7 +232,7 @@ export function CourseShell({ active, children }: { active: CourseTab; children:
             {COURSE.school} {COURSE.label} 수업 운영 게시판입니다. 게시글과 댓글은 작성자 본인만 수정·삭제할 수 있습니다.
           </p>
           <p className="mt-1">
-            글쓰기와 댓글은 @{COURSE_EMAIL_DOMAIN} 메일로 인증한 수강생만 가능합니다.
+            글쓰기와 댓글은 @{COURSE_EMAIL_DOMAIN} 메일로 가입한 수강생만 가능합니다.
           </p>
         </div>
       </footer>
@@ -310,8 +310,7 @@ export function SignInPrompt({ action }: { action: string }) {
  * 로그인은 했지만 과목 자격이 없을 때.
  *
  * 저장 단계에서 RLS가 거절하면 사용자는 "권한이 없습니다"만 보고 이유를 모릅니다.
- * 다른 메일로 가입한 것인지, 인증 링크를 아직 안 누른 것인지 두 경우를 함께 짚어
- * 다음 행동을 정할 수 있게 합니다.
+ * 학교 메일이 아닌 계정으로 들어왔다는 사실을 먼저 짚어 다음 행동을 정할 수 있게 합니다.
  */
 export function MembershipNotice({ action, banned = false }: { action: string; banned?: boolean }) {
   if (banned) {
@@ -332,10 +331,10 @@ export function MembershipNotice({ action, banned = false }: { action: string; b
     <div className="flex items-start gap-3 rounded-xl border border-[#FDE68A] bg-[#FFFBEB] p-4">
       <ShieldAlert size={17} className="mt-0.5 shrink-0 text-[#B45309]" />
       <div className="min-w-0 text-sm leading-6 text-[#B45309]">
-        <p className="font-bold">학교 메일 인증이 끝나야 {action} 수 있습니다</p>
+        <p className="font-bold">학교 메일 계정이어야 {action} 수 있습니다</p>
         <p className="mt-1 font-medium">
-          @{COURSE_EMAIL_DOMAIN} 주소로 가입한 뒤 받은 인증 메일의 링크를 눌러 주세요.
-          다른 메일로 가입하셨다면 학교 메일로 새로 가입해야 합니다.
+          지금 계정은 @{COURSE_EMAIL_DOMAIN} 주소가 아닙니다. 학교 메일로 새로 가입해 주세요 —
+          가입하면 별도 인증 없이 바로 쓸 수 있습니다.
         </p>
         <Link href={COURSE_SIGNUP_HREF} className={cn("mt-2 inline-block font-bold underline", focusRing)}>
           학교 메일로 가입하기
@@ -348,7 +347,7 @@ export function MembershipNotice({ action, banned = false }: { action: string; b
 /**
  * 글쓰기 자리 하나를 통째로 맡습니다.
  *
- * 비로그인 → 로그인 안내, 로그인했지만 자격 없음 → 인증 안내, 자격 있음 → 실제 버튼.
+ * 비로그인 → 로그인 안내, 로그인했지만 자격 없음 → 학교 메일 안내, 자격 있음 → 실제 버튼.
  * 게시판 넷과 워크스페이스가 각자 이 분기를 쓰면 문구가 제각각이 됩니다.
  */
 export function WriteGate({

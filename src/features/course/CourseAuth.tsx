@@ -222,7 +222,7 @@ function SignedInAsOther({ email, mode }: { email: string | null; mode: "signup"
         지금 {email ?? "다른 계정"}으로 로그인되어 있습니다
       </p>
       <p className="mt-1 font-medium">
-        이 계정은 @{COURSE_EMAIL_DOMAIN} 주소가 아니거나 메일 인증이 끝나지 않아 글을 쓸 수 없습니다.
+        이 계정은 @{COURSE_EMAIL_DOMAIN} 주소가 아니어서 글을 쓸 수 없습니다.
         {mode === "signup"
           ? " 아래에서 학교 메일로 새로 가입하면 지금 계정은 로그아웃됩니다."
           : " 학교 메일 계정으로 다시 로그인해 주세요."}
@@ -286,8 +286,8 @@ export function CourseSignupPage() {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    // 서버(RLS)가 최종 판단하지만, 인증 메일을 보내고 나서 거절하면 학생은
-    // 메일함만 들여다보게 됩니다. 누르는 순간 이유를 말해 줍니다.
+    // 서버(RLS)가 최종 판단하지만, 계정을 만든 뒤에 거절하면 학생은 로그인은 되는데
+    // 글은 못 쓰는 상태로 남습니다. 누르는 순간 이유를 말해 줍니다.
     if (!isCourseEmail(form.email)) {
       setError(`${COURSE_EMAIL_DOMAIN} 메일로만 가입할 수 있습니다. 학교 메일 주소를 입력해 주세요.`);
       return;
@@ -306,10 +306,11 @@ export function CourseSignupPage() {
       if (viewer.id) await signOutViewer().catch(() => undefined);
       const result = await signUpViewer(form.email, form.password, form.fullName);
       /*
-       * 이메일 확인이 켜져 있는지는 프로젝트 설정이라 코드가 알 수 없습니다.
-       * 응답에 세션이 실려 오면 확인 없이 가입이 끝난 것이므로 곧장 게시판으로 보냅니다
-       * — 그 경우에도 "메일을 확인하세요" 화면을 띄우면 오지 않을 메일을 기다리게 됩니다.
-       * 세션이 없으면 확인 메일이 나간 것이고, 그때만 안내 화면을 보여 줍니다.
+       * 이메일 확인은 꺼 두었습니다(027). 응답에 세션이 실려 오므로 곧장 게시판으로 보냅니다.
+       *
+       * 그래도 아래 분기를 남깁니다 — 설정은 대시보드에 있어 코드가 알 수 없고,
+       * 누군가 다시 켰을 때 이 분기가 없으면 학생은 오지도 않은 메일을 기다리는 대신
+       * 아무 일도 일어나지 않는 화면을 보게 됩니다.
        */
       if (result.session) {
         router.replace(courseHref());
@@ -410,7 +411,7 @@ export function CourseSignupPage() {
 
         {error && <AuthError>{error}</AuthError>}
 
-        <Button type="submit" size="lg" block loading={loading}>가입하고 인증 메일 받기</Button>
+        <Button type="submit" size="lg" block loading={loading}>가입하고 시작하기</Button>
       </form>
     </CourseAuthShell>
   );
